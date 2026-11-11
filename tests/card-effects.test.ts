@@ -36,7 +36,7 @@ test('damage and fire-rate upgrades are consumed by the same formulas as the liv
 test('conditional combat upgrades affect the actual combat calculations when triggered', () => {
   const build = newBuild();
   assert.equal(applyCard(build, 'afterglow'), true);
-  assert.equal(buildWeaponDamage(100, build, false, true, 0), 115);
+  assert.ok(Math.abs(buildWeaponDamage(100, build, false, true, 0) - 115) < 1e-8);
   assert.equal(buildWeaponDamage(100, build, false, false, 0), 100);
   assert.equal(applyCard(build, 'frenzy'), true);
   assert.ok(Math.abs(buildWeaponDamage(100, build, false, false, 20) - 145) < 1e-8);
