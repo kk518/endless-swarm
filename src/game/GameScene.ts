@@ -60,7 +60,7 @@ type Particle = {
 
 export interface RunResult {
   kills: number; survived: string; record: number;
-  victory: boolean; wave: number; weapons: WeaponId[]; cards: string[];
+  victory: boolean; wave: number; weapons: WeaponId[]; cards: string[]; bestStreak: number;
 }
 export interface RewardOffer { wave: number; options: CardDef[]; nextWave: number }
 
@@ -819,7 +819,7 @@ export class GameScene extends Phaser.Scene {
     const result: RunResult = {
       kills: this.kills, survived: formatTime(this.timeMs / 1000), record,
       victory, wave: this.waveNumber, weapons: [...this.build.weapons],
-      cards: [...this.build.selected],
+      cards: [...this.build.selected], bestStreak: this.bestStreak,
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
