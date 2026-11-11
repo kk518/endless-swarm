@@ -43,35 +43,55 @@ export function createArt(scene: Phaser.Scene): void {
 
   // Assault frame, photographed from above: offset hip plates, angular pauldrons,
   // tactical hazard stripe and powered back-cartridge. Facing local negative Y.
-  make('marine', 76, 82, g => {
-    g.fillStyle(0x0b171e); g.fillEllipse(38, 48, 46, 58);
-    plate(g, 22, 51, 14, 23, 0x334f57, 0x78918c);
-    plate(g, 41, 51, 14, 23, 0x334f57, 0x78918c);
-    g.fillStyle(0x12252d); g.fillTriangle(24, 64, 25, 79, 36, 75); g.fillTriangle(52, 64, 51, 79, 40, 75);
-    plate(g, 13, 29, 50, 32, 0x435f64, 0x9db0a8);
-    g.fillStyle(0x1b3039); g.fillTriangle(13, 33, 23, 22, 27, 50);
-    g.fillTriangle(63, 33, 53, 22, 49, 50);
-    plate(g, 3, 24, 20, 25, 0x647877, 0xb7bba7);
-    plate(g, 53, 24, 20, 25, 0x5b716f, 0xb7bba7);
-    g.fillStyle(0x1c3038); g.fillRect(4, 41, 17, 5); g.fillRect(55, 41, 17, 5);
-    g.fillStyle(ART.signal); g.fillRect(8, 31, 8, 3); g.fillRect(60, 31, 8, 3);
-    seam(g, 26, 28, 22, 49, 0x0b242a);
-    seam(g, 50, 28, 54, 49, 0x0b242a);
-    g.fillStyle(0x12232a); g.fillRoundedRect(26, 25, 24, 34, 6);
-    plate(g, 29, 34, 18, 20, 0x567879, 0xc6c9ae);
-    g.fillStyle(0x0a222a); g.fillCircle(38, 43, 9);
-    g.lineStyle(2, 0xb8c8b4); g.strokeCircle(38, 43, 8);
-    g.fillStyle(ART.screen, 0.28); g.fillCircle(38, 43, 7);
-    g.fillStyle(0xb1f4df); g.fillCircle(38, 43, 4);
-    g.fillStyle(0x13262e); g.fillTriangle(24, 25, 29, 7, 47, 7);
-    g.fillTriangle(24, 25, 47, 7, 52, 25);
-    g.fillStyle(0x6d8580); g.fillRoundedRect(26, 10, 24, 20, 6);
-    g.fillStyle(0x1b333d); g.fillRoundedRect(27, 17, 22, 9, 3);
-    g.fillStyle(0x7bfff0); g.fillRoundedRect(29, 18, 18, 3, 1);
-    g.fillStyle(0x17252a); g.fillRect(36, 8, 4, 10);
-    g.fillStyle(ART.signal); g.fillRect(29, 32, 7, 2);
-    seam(g, 13, 47, 5, 58, ART.edge, 0.5);
-    seam(g, 63, 47, 71, 58, ART.edge, 0.5);
+  // Agile bipedal exosuit, NOT a tank: compact torso, visible elbows, thigh gaps,
+  // narrow ankles and two rear thrust pods with a distinct humanoid silhouette.
+  make('marine', 76, 100, g => {
+    // Long articulated legs, separated by negative space.
+    g.fillStyle(0x0b151b); g.fillRoundedRect(19, 54, 16, 34, 4);
+    g.fillRoundedRect(42, 54, 16, 34, 4);
+    plate(g, 21, 60, 12, 20, 0x586e70, 0xa9b5aa);
+    plate(g, 44, 60, 12, 20, 0x586e70, 0xa9b5aa);
+    g.fillStyle(0x15252b); g.fillRoundedRect(20, 77, 13, 15, 3);
+    g.fillRoundedRect(44, 77, 13, 15, 3);
+    g.fillStyle(0x97a89e); g.fillRect(22, 84, 9, 3); g.fillRect(46, 84, 9, 3);
+    g.fillStyle(0x0b1219); g.fillTriangle(19, 91, 17, 98, 35, 98);
+    g.fillTriangle(42, 98, 59, 98, 56, 91);
+    // Slim hip harness and torso core: width no longer dominates the legs.
+    g.fillStyle(0x141e25); g.fillRoundedRect(25, 36, 27, 31, 5);
+    plate(g, 28, 48, 20, 15, 0x455f63, 0x9aaca5);
+    g.fillStyle(0x31454b); g.fillRect(27, 61, 7, 6); g.fillRect(43, 61, 7, 6);
+    // Open elbow joints and hand guards.
+    for (const sign of [-1, 1]) {
+      const x = 38 + sign * 21;
+      g.fillStyle(0x1b2c35); g.fillRoundedRect(x - 5, 30, 10, 18, 3);
+      g.fillStyle(0x6c8380); g.fillRoundedRect(x - 6, 37, 12, 14, 3);
+      g.fillStyle(0x14242d); g.fillRoundedRect(x - 5, 49, 10, 12, 3);
+      g.fillStyle(ART.signal); g.fillRect(x - 4, 46, 8, 2);
+      // The compact shoulder shells expose the elbow gap.
+      plate(g, x - 10, 21, 20, 17, 0x667d7b, 0xb8c8b4);
+    }
+    // Twin thruster pods sit behind the shoulders (bottom-right camera shadow).
+    plate(g, 20, 41, 7, 13, 0x2d454e, 0x88a4a4);
+    plate(g, 50, 41, 7, 13, 0x2d454e, 0x88a4a4);
+    g.fillStyle(0xf2a263); g.fillRect(22, 52, 3, 5); g.fillRect(52, 52, 3, 5);
+    g.fillStyle(0x172c35); g.fillRoundedRect(25, 29, 26, 23, 4);
+    plate(g, 27, 30, 22, 20, 0x506d70, 0xb9c6b4);
+    g.fillStyle(0x0b1f29); g.fillCircle(38, 41, 8);
+    g.lineStyle(2, 0xbdcbc1); g.strokeCircle(38, 41, 8);
+    g.fillStyle(ART.screen, 0.4); g.fillCircle(38, 41, 6);
+    g.fillStyle(0xb7ffed); g.fillCircle(38, 41, 3.5);
+    // Helmet, split visor and a respirator chin with visible neck.
+    g.fillStyle(0x0e1d25); g.fillRoundedRect(31, 23, 14, 7, 3);
+    g.fillStyle(0x7a9089); g.fillRoundedRect(27, 9, 22, 20, 7);
+    g.fillStyle(0x192b35); g.fillRoundedRect(28, 15, 20, 9, 3);
+    g.fillStyle(0x8ef9e9); g.fillRect(30, 16, 16, 3);
+    g.fillStyle(0x202e34); g.fillRect(36, 12, 4, 7);
+    g.fillStyle(0x4c6568); g.fillTriangle(33, 25, 43, 25, 38, 32);
+    seam(g, 28, 14, 33, 9, 0xbccabd);
+    // Strong asymmetrical orange tactical mark, not an all-over glow.
+    g.fillStyle(0xf2ab72); g.fillRect(13, 25, 6, 3);
+    g.fillRect(29, 34, 4, 8);
+    g.fillStyle(0xe2e7cf); g.fillRect(30, 35, 2, 4);
   });
 
   make('rifle', 66, 22, g => {
@@ -216,6 +236,48 @@ export function createArt(scene: Phaser.Scene): void {
     g.fillStyle(0xe7eee0); g.fillRect(24, 18, 6, 18); g.fillRect(18, 24, 18, 6);
     g.fillStyle(ART.signal); g.fillRect(11, 12, 7, 3); g.fillRect(36, 38, 7, 3);
     seam(g, 14, 17, 20, 17, 0xc3d4cd); seam(g, 33, 36, 40, 36, 0xc3d4cd);
+  });
+
+  // Distinct hardware module silhouettes. Oriented along local +X like the rifle.
+  make('mount-scatter', 58, 26, g => {
+    g.fillStyle(0x111a22); g.fillRoundedRect(2, 7, 40, 15, 3);
+    plate(g, 10, 4, 30, 16, 0x6a6662, 0xdab38a);
+    for (let row = 0; row < 3; row++) {
+      g.fillStyle(0x1b2029); g.fillRoundedRect(36, 5 + row * 7, 21, 5, 1);
+      g.fillStyle(0xf2bd84); g.fillRect(53, 6 + row * 7, 3, 2);
+    }
+    g.fillStyle(0xff9a56); g.fillRect(18, 10, 13, 3);
+    g.fillStyle(0xded8c5); g.fillRect(5, 10, 6, 4);
+  });
+
+  make('mount-arc', 56, 30, g => {
+    g.fillStyle(0x0b1723); g.fillRoundedRect(2, 8, 50, 17, 4);
+    plate(g, 7, 9, 38, 14, 0x495c71, 0xa7b6d4);
+    for (let i = 0; i < 4; i++) {
+      g.lineStyle(2, 0x91bdff, 0.92);
+      g.strokeEllipse(19 + i * 8, 15, 8, 20);
+    }
+    g.fillStyle(0x1b2432); g.fillRoundedRect(43, 11, 13, 9, 2);
+    g.fillStyle(0xc1dbff); g.fillRect(50, 12, 6, 3);
+  });
+
+  make('mount-flame', 62, 26, g => {
+    g.fillStyle(0x10151b); g.fillRoundedRect(2, 5, 50, 16, 3);
+    plate(g, 7, 6, 35, 15, 0x59504b, 0xd4a48a);
+    g.fillStyle(0x9d614c); g.fillRoundedRect(10, 9, 20, 9, 3);
+    for (let i = 0; i < 4; i++) {
+      seam(g, 32 + i * 6, 8, 32 + i * 6, 20, 0xf3ac72, 0.88);
+    }
+    g.fillStyle(0x222028); g.fillRoundedRect(45, 10, 17, 7, 1);
+    g.fillStyle(0xffbc6d); g.fillRect(57, 11, 4, 4);
+  });
+
+  make('muzzle-flash', 64, 52, g => {
+    g.fillStyle(0xff9653, 0.32); g.fillEllipse(28, 26, 60, 46);
+    g.fillStyle(0xffcf7b, 0.76); g.fillTriangle(10, 20, 62, 26, 9, 32);
+    g.fillStyle(0xffffff, 0.94); g.fillTriangle(3, 23, 50, 26, 3, 29);
+    g.fillStyle(0xf3d590); g.fillTriangle(13, 6, 25, 26, 13, 47);
+    g.fillStyle(0xfff4d7); g.fillEllipse(16, 26, 23, 9);
   });
 
   make('bolt', 34, 12, g => {

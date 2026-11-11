@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { createArt } from './Art';
 import { FACTION_COLORS, HIVE_GORE, HIVE_TEXTURE } from './artStyle';
+import { bodyOffset, visibleLoadout, visualPowerTier, WEAPON_LIGHT, WEAPON_MOUNTS, type MountedWeapon } from './weaponVisual';
 import { SoundFx } from './Sound';
 import {
   GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
@@ -51,6 +52,7 @@ type Bullet = {
   pierce: number;
   hitEnemies: Set<Enemy>;
   frost: boolean;
+  color: number;
   sprite: Phaser.GameObjects.Image;
 };
 
@@ -60,6 +62,12 @@ type SupplyDrop = {
   kind: SupplyKind; x: number; y: number; remainingMs: number;
   sprite: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Arc;
 };
+
+type CombatVisual = {
+  kind: 'beam' | 'ring' | 'cone'; x: number; y: number; x2: number; y2: number;
+  angle: number; size: number; color: number; ms: number; maxMs: number;
+};
+type MuzzleFlash = { sprite: Phaser.GameObjects.Image; ms: number; maxMs: number };
 
 type Particle = {
   x: number;
@@ -85,6 +93,16 @@ export class GameScene extends Phaser.Scene {
   private floorScars!: Phaser.GameObjects.Graphics;
   private scarCount = 0;
   private rifle!: Phaser.GameObjects.Image;
+  private mountedWeapons!: Record<MountedWeapon, Phaser.GameObjects.Image>;
+  private weaponGlows!: Record<WeaponId, Phaser.GameObjects.Arc>;
+  private reactorGlow!: Phaser.GameObjects.Arc;
+  private muzzlePoints!: Record<WeaponId, { x: number; y: number }>;
+  private combatGraphics!: Phaser.GameObjects.Graphics;
+  private combatVisuals: CombatVisual[] = [];
+  private muzzleFlashes: MuzzleFlash[] = [];
+  private recoilMs: Record<WeaponId, number> = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
+  private glowParticleMs = 0;
+  private hitStopMs = 0;
   private aura!: Phaser.GameObjects.Arc;
   private targetingLine!: Phaser.GameObjects.Graphics;
   private enemyList: Enemy[] = [];
@@ -161,6 +179,24 @@ export class GameScene extends Phaser.Scene {
     this.player = this.add.image(CENTER, CENTER, 'marine').setDepth(7);
     this.rifle = this.add.image(CENTER + 24, CENTER + 4, 'rifle')
       .setOrigin(0.23, 0.5).setDepth(8);
+    this.mountedWeapons = {
+      scatter: this.add.image(CENTER, CENTER, 'mount-scatter').setOrigin(0.19, 0.5).setDepth(8).setVisible(false),
+      arc: this.add.image(CENTER, CENTER, 'mount-arc').setOrigin(0.18, 0.5).setDepth(8).setVisible(false),
+      flame: this.add.image(CENTER, CENTER, 'mount-flame').setOrigin(0.15, 0.5).setDepth(8).setVisible(false),
+    };
+    this.reactorGlow = this.add.circle(CENTER, CENTER, 11, 0x70ffe6, 0)
+      .setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+    this.weaponGlows = {
+      rifle: this.add.circle(CENTER, CENTER, 10, WEAPON_LIGHT.rifle, 0).setDepth(9).setBlendMode(Phaser.BlendModes.ADD),
+      scatter: this.add.circle(CENTER, CENTER, 11, WEAPON_LIGHT.scatter, 0).setDepth(9).setBlendMode(Phaser.BlendModes.ADD),
+      arc: this.add.circle(CENTER, CENTER, 11, WEAPON_LIGHT.arc, 0).setDepth(9).setBlendMode(Phaser.BlendModes.ADD),
+      flame: this.add.circle(CENTER, CENTER, 11, WEAPON_LIGHT.flame, 0).setDepth(9).setBlendMode(Phaser.BlendModes.ADD),
+    };
+    this.muzzlePoints = {
+      rifle: { x: CENTER, y: CENTER }, scatter: { x: CENTER, y: CENTER },
+      arc: { x: CENTER, y: CENTER }, flame: { x: CENTER, y: CENTER },
+    };
+    this.combatGraphics = this.add.graphics().setDepth(10);
     this.targetingLine = this.add.graphics().setDepth(3);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
 
@@ -201,6 +237,9 @@ export class GameScene extends Phaser.Scene {
     this.floorScars.clear();
     this.scarCount = 0;
     this.rifle.setPosition(CENTER + 24, CENTER + 4).setRotation(0);
+    this.recoilMs = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
+    this.glowParticleMs = 0;
+    this.hitStopMs = 0;
     this.aura.setPosition(CENTER, CENTER).setAlpha(1);
     this.cameras.main.centerOn(CENTER, CENTER);
     this.timeMs = 0;
@@ -221,6 +260,7 @@ export class GameScene extends Phaser.Scene {
     this.awaitingReward = false;
     this.rewardOptions = [];
     this.build = newBuild();
+    this.refreshMountedWeapons();
     this.lastDeployedMs = -10000;
     this.overloadMs = 0;
     this.stillMs = 0;
@@ -248,6 +288,12 @@ export class GameScene extends Phaser.Scene {
     if (!this.awaitingReward || !chosen) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
+    this.refreshMountedWeapons();
+    if (cardId === 'scatter-kit' || cardId === 'arc-kit' || cardId === 'flame-kit') {
+      const color = WEAPON_LIGHT[chosen.weapon!];
+      this.spawnSparks(this.player.x, this.player.y, 20, color, 220);
+      this.addCombatVisual('ring', this.player.x, this.player.y, this.player.x, this.player.y, color, 74, 240);
+    }
     if (cardId === 'salvage') this.salvageKills = 0;
     this.streak = 0;
     this.lastKillMs = -10000;
@@ -472,6 +518,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private simulate(ms: number): void {
+    if (this.hitStopMs > 0) {
+      this.hitStopMs = Math.max(0, this.hitStopMs - ms);
+      this.updateCombatVisuals(ms);
+      return;
+    }
     const dt = ms / 1000;
     this.timeMs += ms;
     this.waveElapsedMs += ms;
@@ -522,12 +573,14 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.rifle.setPosition(this.player.x + 15, this.player.y + 4);
     }
+    this.updateWeaponRig(ms);
     this.updateWeapons(ms);
     this.updateBullets(dt, ms);
     if (!this.active) return;
     this.updateAcids(dt, ms);
     if (!this.active) return;
     this.updateParticles(dt, ms);
+    this.updateCombatVisuals(ms);
     this.updateSupplies(ms);
     this.supplyElapsedMs += ms;
     if (this.supplyElapsedMs >= SUPPLY_PERIOD_MS) {
@@ -1093,7 +1146,7 @@ export class GameScene extends Phaser.Scene {
     this.waveLabel.setText(this.waveNumber === 5
       ? `第 5 / 5 波 · ${this.bossKilled ? '虫巢已消灭' : `首领决战 ${remaining}s`}`
       : `第 ${this.waveNumber} / 5 波 · ${remaining}s`);
-    this.stateLabel.setText(this.deployed ? '火力展开  //  OVERDRIVE' : '机动射击  //  MOBILE');
+    this.stateLabel.setText(this.deployed ? `火力展开 // ${this.build.weapons.length} 门齐射` : `机动射击 // ${this.build.weapons.length} 门武装`);
     this.stateLabel.setColor(this.deployed ? '#ffcd86' : '#c1f7e7');
     this.buffLabel.setFontSize(12);
     this.buffLabel.setText(`${buildReadout(this.build)}  · ${this.build.selected.length}张卡`);
