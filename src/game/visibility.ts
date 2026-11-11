@@ -4,7 +4,8 @@ export interface Vec2 { x: number; y: number }
 
 export const MOBILE_WORLD_WIDTH = 600;
 export const HUD_DESIGN_WIDTH = 450;
-export const TARGET_INSET = 24;
+// Allow an on-screen approach before the first ordinary auto-lock (~0.4–0.6s).
+export const TARGET_INSET = 64;
 export const ARRIVAL_WARNING_MS = 700;
 
 /** A target must move into the readable inner part of the screen before normal auto-fire. */
