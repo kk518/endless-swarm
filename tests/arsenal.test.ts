@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   applyLevelChoice, evolutionEligible, grantExperience, installWeaponCalibration, killExperience,
   legalLevelChoices, MAX_RUN_LEVEL, MAX_WEAPON_LEVEL, newGrowth, rollLevelChoices,
@@ -173,4 +174,79 @@ test('M5 evolution recipes require explicit tactical cards, not generic XP damag
   assert.equal(evolutionEligible(build, growth, 'scatter'), false);
   assert.equal(applyCard(build, 'warhead'), true);
   assert.equal(evolutionEligible(build, growth, 'scatter'), true);
+});
+
+test('M5.1 arc evolution needs exact prerequisite card and applies actual chain/shock tuning', () => {
+  const build = newBuild(), growth = newGrowth();
+  assert.equal(applyCard(build, 'arc-kit'), true);
+  installWeaponCalibration(growth, 'arc');
+  growth.weaponLevels.arc = 5;
+  assert.equal(evolutionEligible(build, growth, 'arc'), false);
+  assert.equal(applyLevelChoice(build, growth, 'core:damage'), true);
+  assert.equal(evolutionEligible(build, growth, 'arc'), false);
+  assert.equal(applyCard(build, 'chain-blast'), true);
+  assert.equal(evolutionEligible(build, growth, 'arc'), true);
+  assert.ok(rollLevelChoices(build, growth, () => 0.9).some(choice => choice.id === 'evolve:arc'));
+  assert.equal(applyLevelChoice(build, growth, 'evolve:arc'), true);
+  const tuning = weaponTuning(growth, 'arc');
+  assert.equal(tuning.chains, 8);
+  assert.equal(tuning.chainRange, 218);
+  assert.equal(tuning.shockMs, 1600);
+  assert.ok(tuning.damage > 1.9);
+  assert.equal(applyLevelChoice(build, growth, 'evolve:arc'), false);
+});
+
+test('M5.1 flame evolution needs blueprint card and adds bounded burn with wider cone', () => {
+  const build = newBuild(), growth = newGrowth();
+  assert.equal(applyCard(build, 'flame-kit'), true);
+  installWeaponCalibration(growth, 'flame');
+  growth.weaponLevels.flame = 5;
+  assert.equal(evolutionEligible(build, growth, 'flame'), false);
+  assert.equal(applyCard(build, 'surge-cell'), true);
+  assert.equal(evolutionEligible(build, growth, 'flame'), false);
+  assert.equal(applyCard(build, 'overload'), true);
+  assert.equal(evolutionEligible(build, growth, 'flame'), true);
+  assert.equal(applyLevelChoice(build, growth, 'evolve:flame'), true);
+  const tuning = weaponTuning(growth, 'flame');
+  assert.ok(tuning.range > 1.5);
+  assert.equal(tuning.burnDurationMs, 1750);
+  assert.equal(tuning.burnTickDamage, 6);
+  assert.equal(tuning.coneHalfAngle, 0.58);
+  assert.equal(applyLevelChoice(build, growth, 'evolve:flame'), false);
+  const fresh = weaponTuning(newGrowth(), 'flame');
+  assert.equal(fresh.burnDurationMs, 0);
+  assert.equal(fresh.burnTickDamage, 0);
+  assert.equal(fresh.shockMs, 0);
+});
+
+test('M5.1 two ready evolutions appear reliably rather than competing in one random pool', () => {
+  const build = newBuild(), growth = newGrowth();
+  assert.equal(applyCard(build, 'scatter-kit'), true);
+  assert.equal(applyCard(build, 'arc-kit'), true);
+  growth.weaponLevels.scatter = 5;
+  growth.weaponLevels.arc = 5;
+  assert.equal(applyCard(build, 'radius'), true);
+  assert.equal(applyCard(build, 'cryogenic'), true);
+  for (const rng of [() => 0, () => 0.3, () => 0.99, () => 1]) {
+    const options = rollLevelChoices(build, growth, rng);
+    assert.ok(options.some(x => x.id === 'evolve:scatter'));
+    assert.ok(options.some(x => x.id === 'evolve:arc'));
+    assert.equal(options.length, 3);
+    assert.equal(new Set(options.map(x => x.id)).size, 3);
+  }
+  const newlyStarted = newGrowth();
+  assert.deepEqual(newlyStarted.evolved, { rifle: false, scatter: false, arc: false, flame: false });
+});
+
+test('M5.1 combat consumes shock range, cone width and burn ticks without a timer per enemy', () => {
+  const source = readFileSync(new URL('../src/game/GameScene.ts', import.meta.url), 'utf8');
+  for (const marker of [
+    'tuning.chainRange * this.build.range',
+    'tuning.shockMs',
+    'tuning.coneHalfAngle',
+    'tuning.burnDurationMs',
+    'tuning.burnTickDamage',
+    'enemy.burnTickMs += 250',
+    "this.damageEnemy(enemy, enemy.burnDamage)",
+  ]) assert.ok(source.includes(marker), `missing live combat integration: ${marker}`);
 });
