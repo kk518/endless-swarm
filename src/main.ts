@@ -1,23 +1,30 @@
 import Phaser from 'phaser';
 import { GameScene, type RewardOffer, type RunResult, type LevelOffer } from './game/GameScene';
+import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
 const portraitPhone = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+// Widen the world canvas rather than camera.zoom: HUD and joystick keep their
+// physical size through the independently scaled HUD container in GameScene.
+const logicalWidth = (): number => {
+  const portrait = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+  return portrait ? MOBILE_WORLD_WIDTH : HUD_DESIGN_WIDTH;
+};
 const viewportHeight = (): number => {
   const portrait = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
-  return portrait ? Math.round(450 * window.innerHeight / window.innerWidth) : 800;
+  return portrait ? Math.round(logicalWidth() * window.innerHeight / window.innerWidth) : 800;
 };
 const logicalHeight = portraitPhone ? viewportHeight() : 800;
 const scene = new GameScene();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 450,
+  width: logicalWidth(),
   height: logicalHeight,
   backgroundColor: '#0c141a',
   render: { antialias: true, pixelArt: false },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 450, height: logicalHeight },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: logicalWidth(), height: logicalHeight },
   scene: [scene],
   fps: { target: 60, forceSetTimeOut: false },
 });
@@ -184,6 +191,6 @@ window.addEventListener('pointercancel', () => scene.pauseControls());
 
 /** Address-bar changes / phone rotation must not strand HUD labels off-screen. */
 window.addEventListener('resize', () => {
-  const height = viewportHeight();
-  if (game.scale.height !== height) game.scale.resize(450, height);
+  const width = logicalWidth(), height = viewportHeight();
+  if (game.scale.width !== width || game.scale.height !== height) game.scale.resize(width, height);
 });
