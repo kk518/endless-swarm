@@ -6,17 +6,17 @@ import type { RunBuild, WeaponId } from './progression.ts';
  */
 export const MAX_RUN_LEVEL = 25;
 export const MAX_WEAPON_LEVEL = 5;
-export type EvolutionId = 'railgun' | 'annihilator';
+export type EvolutionId = 'railgun' | 'annihilator' | 'tempest' | 'inferno';
 export type LevelChoiceId =
   | 'weapon:rifle' | 'weapon:scatter' | 'weapon:arc' | 'weapon:flame'
-  | 'evolve:rifle' | 'evolve:scatter'
+  | 'evolve:rifle' | 'evolve:scatter' | 'evolve:arc' | 'evolve:flame'
   | 'core:damage' | 'core:rate' | 'core:speed' | 'core:repair';
 
 export interface GrowthState {
   level: number;
   xp: number;
   weaponLevels: Record<WeaponId, number>;
-  evolved: { rifle: boolean; scatter: boolean };
+  evolved: Record<WeaponId, boolean>;
 }
 export interface LevelChoice {
   id: LevelChoiceId;
@@ -29,13 +29,14 @@ export interface ExperienceGain { state: GrowthState; gainedLevels: number }
 export interface WeaponTuning {
   damage: number; interval: number; range: number;
   pellets: number; chains: number; pierce: number; knockback: number;
+  chainRange: number; shockMs: number; burnDurationMs: number; burnTickDamage: number; coneHalfAngle: number;
 }
 
 export function newGrowth(): GrowthState {
   return {
     level: 1, xp: 0,
     weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
-    evolved: { rifle: false, scatter: false },
+    evolved: { rifle: false, scatter: false, arc: false, flame: false },
   };
 }
 
@@ -73,13 +74,16 @@ const WEAPON_NAMES: Record<WeaponId, string> = {
   rifle: '电磁步枪', scatter: '散射炮', arc: '电弧线圈', flame: '喷火器',
 };
 
-export function evolutionEligible(build: RunBuild, growth: GrowthState, weapon: 'rifle' | 'scatter'): boolean {
+export function evolutionEligible(build: RunBuild, growth: GrowthState, weapon: WeaponId): boolean {
   if (!build.weapons.includes(weapon) || growth.weaponLevels[weapon] < MAX_WEAPON_LEVEL || growth.evolved[weapon]) return false;
   // Evolution needs a specific tactical blueprint card. Generic XP stat bonuses
   // or supply passives must not accidentally bypass that recipe.
-  return weapon === 'rifle'
-    ? build.selected.includes('pierce') || build.selected.includes('critical-core')
-    : build.selected.includes('radius') || build.selected.includes('warhead');
+  switch (weapon) {
+    case 'rifle': return build.selected.includes('pierce') || build.selected.includes('critical-core');
+    case 'scatter': return build.selected.includes('radius') || build.selected.includes('warhead');
+    case 'arc': return build.selected.includes('cryogenic') || build.selected.includes('chain-blast');
+    case 'flame': return build.selected.includes('radius') || build.selected.includes('overload');
+  }
 }
 
 const CORES: readonly LevelChoice[] = [
@@ -96,6 +100,12 @@ export function legalLevelChoices(build: RunBuild, growth: GrowthState): LevelCh
   }
   if (evolutionEligible(build, growth, 'scatter')) {
     choices.push({ id: 'evolve:scatter', name: '毁灭者霰弹炮', description: '散射进化：增加 3 枚弹丸，强力击退', icon: '✷', category: 'evolution' });
+  }
+  if (evolutionEligible(build, growth, 'arc')) {
+    choices.push({ id: 'evolve:arc', name: '雷暴矩阵', description: '电弧进化：最多八段跳链，传导更远并强制减速', icon: 'ϟ', category: 'evolution' });
+  }
+  if (evolutionEligible(build, growth, 'flame')) {
+    choices.push({ id: 'evolve:flame', name: '炼狱焚化器', description: '火焰进化：扩大火幕并点燃敌人，造成持续灼烧', icon: '♨', category: 'evolution' });
   }
   for (const id of build.weapons) {
     const level = growth.weaponLevels[id];
@@ -119,10 +129,11 @@ export function rollLevelChoices(
 ): LevelChoice[] {
   const pool = legalLevelChoices(build, growth);
   const chosen: LevelChoice[] = [];
-  // Guaranteed evolution when its prerequisites have been earned.
-  const evolution = pool.find(item => item.category === 'evolution');
-  if (evolution) chosen.push(evolution);
-  else {
+  // Multiple ready recipes are intentionally prioritized rather than hidden
+  // behind randomness. Keep one slot for a normal upgrade when two are ready.
+  const evolution = pool.filter(item => item.category === 'evolution');
+  chosen.push(...evolution.slice(0, 2));
+  if (chosen.length === 0) {
     const weapons = pool.filter(item => item.category === 'weapon');
     if (weapons.length) {
       const value = random();
@@ -146,6 +157,8 @@ export function applyLevelChoice(build: RunBuild, growth: GrowthState, id: Level
     growth.weaponLevels[weapon] = Math.min(MAX_WEAPON_LEVEL, growth.weaponLevels[weapon] + 1);
   } else if (id === 'evolve:rifle') growth.evolved.rifle = true;
   else if (id === 'evolve:scatter') growth.evolved.scatter = true;
+  else if (id === 'evolve:arc') growth.evolved.arc = true;
+  else if (id === 'evolve:flame') growth.evolved.flame = true;
   else if (id === 'core:damage') build.damage *= 1.08;
   else if (id === 'core:rate') build.rate *= 1.08;
   else if (id === 'core:speed') build.speed *= 1.07;
@@ -160,13 +173,20 @@ export function weaponTuning(growth: GrowthState, weapon: WeaponId): WeaponTunin
   const interval = 1 - steps * 0.06;
   const scatterEvolved = weapon === 'scatter' && growth.evolved.scatter;
   const rifleEvolved = weapon === 'rifle' && growth.evolved.rifle;
+  const arcEvolved = weapon === 'arc' && growth.evolved.arc;
+  const flameEvolved = weapon === 'flame' && growth.evolved.flame;
   return {
-    damage: damage * (rifleEvolved ? 1.3 : 1),
+    damage: damage * (rifleEvolved ? 1.3 : arcEvolved ? 1.2 : flameEvolved ? 1.22 : 1),
     interval,
-    range: weapon === 'flame' ? 1 + steps * 0.08 : 1,
+    range: weapon === 'flame' ? (1 + steps * 0.08) * (flameEvolved ? 1.2 : 1) : 1,
     pellets: weapon === 'scatter' ? 5 + (level >= 3 ? 2 : 0) + (level >= 5 ? 2 : 0) + (scatterEvolved ? 3 : 0) : 1,
-    chains: weapon === 'arc' ? 4 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) : 1,
+    chains: weapon === 'arc' ? 4 + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) + (arcEvolved ? 2 : 0) : 1,
     pierce: rifleEvolved ? 2 : 0,
     knockback: scatterEvolved ? 32 : 0,
+    chainRange: arcEvolved ? 218 : 160,
+    shockMs: arcEvolved ? 1600 : 0,
+    burnDurationMs: flameEvolved ? 1750 : 0,
+    burnTickDamage: flameEvolved ? 6 : 0,
+    coneHalfAngle: flameEvolved ? 0.58 : 0.45,
   };
 }
