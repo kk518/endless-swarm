@@ -76,7 +76,6 @@ export class GameScene extends Phaser.Scene {
   private keyboardArrows?: Phaser.Types.Input.Keyboard.CursorKeys;
   private hudGraphics!: Phaser.GameObjects.Graphics;
   private crosshair!: Phaser.GameObjects.Arc;
-  private hpLabel!: Phaser.GameObjects.Text;
   private clockLabel!: Phaser.GameObjects.Text;
   private killLabel!: Phaser.GameObjects.Text;
   private stateLabel!: Phaser.GameObjects.Text;
@@ -184,7 +183,7 @@ export class GameScene extends Phaser.Scene {
 
   private buildHUD(): void {
     this.hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.hpLabel = this.hudText(30, 24, '装甲完整度', '14px', '#a5c1c8');
+    this.hudText(30, 24, '装甲完整度', '14px', '#a5c1c8');
     this.clockLabel = this.hudText(VIEW_W - 27, 21, '00:00', '26px', '#f3faf5').setOrigin(1, 0);
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
     this.stateLabel = this.hudText(VIEW_W / 2, VIEW_H - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
