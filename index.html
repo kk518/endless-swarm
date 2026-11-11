@@ -14,7 +14,7 @@
       <section class="game-panel" aria-label="无尽虫潮战斗区域">
         <div class="panel-chamfer" aria-hidden="true"></div>
         <div id="game" tabindex="-1" aria-label="战斗画面"></div>
-        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M4.1 / MECH OVERDRIVE</span></div>
+        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M5 / BATTLEFIELD EVOLUTION</span></div>
         <div id="overlay" class="overlay">
           <div class="overlay-pattern" aria-hidden="true"></div>
           <div class="briefing">
@@ -25,18 +25,26 @@
             <p id="overlay-subtitle" class="subtitle">防线已溃。弹药尚存。</p>
             <div id="overlay-instructions" class="instruction-list">
               <div><span class="instruction-icon">01</span><span><strong>保持机动</strong><small>单指滑动改变行进方向，武器自动开火</small></span></div>
-              <div><span class="instruction-icon">02</span><span><strong>自动武装</strong><small>四套挂载武器可解锁，火力叠加更炫酷</small></span></div>
+              <div><span class="instruction-icon">02</span><span><strong>自动武装</strong><small>战斗中获取经验升级，解锁四种挂载武器</small></span></div>
               <div><span class="instruction-icon">03</span><span><strong>过载模式</strong><small>静止 0.8 秒展开机甲支架，强化枪口能量光芒</small></span></div>
             </div>
             <div id="run-stats" class="run-stats is-hidden" aria-live="polite"></div>
             <button id="play-button" class="action-button" type="button">执行登陆行动 <span>›</span></button>
-            <div class="bottom-note"><span class="status-light"></span> M4.1 过载武装 <span class="note-sep">/</span> 手机竖屏体验</div>
+            <div class="bottom-note"><span class="status-light"></span> M5 战地进化 <span class="note-sep">/</span> 手机竖屏体验</div>
           </div>
         </div>
         <section id="reward-overlay" class="reward-overlay is-hidden" aria-label="波后卡牌选择" aria-live="polite">
-          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / MODULAR UPGRADE</span><h2 id="reward-title">战术模块授权</h2><p>战线暂稳。指挥官，请选择下一阶段火力配置。</p></div>
+          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / STRATEGIC MODULE</span><h2 id="reward-title">战术模块授权</h2><p>波后强力模块 · 每波免费选择一张。</p></div>
           <div id="reward-cards" class="reward-cards" role="group" aria-label="选择一张强化卡"></div>
           <div class="reward-footer"><span class="footer-line"></span> 选取一项装备模块 / 立即生效 <span class="footer-line"></span></div>
+        </section>
+        <section id="level-overlay" class="reward-overlay level-overlay is-hidden" aria-label="战斗经验等级升级" aria-live="polite">
+          <div class="reward-header"><span class="reward-kicker">/ LEGION COMMAND / BATTLEFIELD EVOLUTION</span>
+            <h2 id="level-title">战地升级 LV.2</h2>
+            <p>战斗暂停 · 三选一 · 武器最高 5 级，满足条件后可进化</p>
+          </div>
+          <div id="level-cards" class="reward-cards" role="group" aria-label="选择一项经验强化"></div>
+          <div class="reward-footer"><span class="footer-line"></span> 选择后立即恢复作战 <span class="footer-line"></span></div>
         </section>
         <button id="mute-button" class="mute-button" type="button" aria-pressed="false">关闭音效</button>
       </section>
@@ -47,7 +55,7 @@
         <div class="aside-rule"></div>
         <p class="micro-label">操作方式</p>
         <p class="aside-control"><strong>手机：</strong>手指滑动移动，松手进入火力展开。<br /><strong>电脑：</strong>WASD 或方向键移动，停止后自动展开。</p>
-        <div class="aside-tag">FOUR HARDPOINTS <span>•</span> M4.1</div>
+        <div class="aside-tag">FIELD EVOLUTION <span>•</span> M5</div>
       </aside>
     </main>
     <div class="rotate-note">建议使用竖屏游玩以获得最佳体验</div>
