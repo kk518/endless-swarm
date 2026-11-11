@@ -1,4 +1,4 @@
-import type { RunBuild, WeaponId } from './progression.ts';
+import type { CardId, RunBuild, WeaponId } from './progression.ts';
 
 /**
  * M5 deterministic growth rules, intentionally free of Phaser/DOM dependencies.
@@ -86,6 +86,40 @@ export function evolutionEligible(build: RunBuild, growth: GrowthState, weapon: 
   }
 }
 
+/** Visible in upgrade descriptions and used to bias wave-end offers toward a playable build. */
+export const EVOLUTION_RECIPES: Readonly<Record<WeaponId, readonly [CardId, CardId]>> = {
+  rifle: ['pierce', 'critical-core'],
+  scatter: ['radius', 'warhead'],
+  arc: ['cryogenic', 'chain-blast'],
+  flame: ['radius', 'overload'],
+};
+
+const RECIPE_CARD_NAMES: Readonly<Partial<Record<CardId, string>>> = {
+  pierce: '穿甲弹', 'critical-core': '弱点扫描',
+  radius: '扩散核心', warhead: '强化弹头',
+  cryogenic: '冰霜弹头', 'chain-blast': '连环爆裂', overload: '超载反应堆',
+};
+
+export const EVOLUTION_NAMES: Readonly<Record<WeaponId, string>> = {
+  rifle: '轨道歼灭炮', scatter: '毁灭者霰弹炮',
+  arc: '雷暴矩阵', flame: '炼狱焚化器',
+};
+
+/**
+ * When an owned weapon is Lv3+, wave-end rewards should actively make its
+ * recipe available. These are normal tactical cards, not free unlocks.
+ */
+export function evolutionRecipeTargets(build: RunBuild, growth: GrowthState): CardId[] {
+  const owned = [...build.weapons]
+    .filter(weapon => growth.weaponLevels[weapon] >= 3 && !growth.evolved[weapon])
+    .sort((a, b) => growth.weaponLevels[b] - growth.weaponLevels[a]);
+  for (const weapon of owned) {
+    const recipe = EVOLUTION_RECIPES[weapon];
+    if (!recipe.some(id => build.selected.includes(id))) return [...recipe];
+  }
+  return [];
+}
+
 const CORES: readonly LevelChoice[] = [
   { id: 'core:damage', name: '战斗校准', description: '全武器伤害 +8%（可叠加）', icon: '◆', category: 'core' },
   { id: 'core:rate', name: '快速供能', description: '全武器射速 +8%（可叠加）', icon: 'ϟ', category: 'core' },
@@ -112,10 +146,12 @@ export function legalLevelChoices(build: RunBuild, growth: GrowthState): LevelCh
     if (level < MAX_WEAPON_LEVEL) choices.push({
       id: `weapon:${id}`,
       name: `${WEAPON_NAMES[id]} Lv.${level + 1}`,
-      description: id === 'scatter' ? '提高伤害、射速；Lv.3/5 增加弹丸'
+      description: (id === 'scatter' ? '提高伤害、射速；Lv.3/5 增加弹丸'
         : id === 'arc' ? '提高伤害、射速；Lv.3/5 增加跳链'
           : id === 'flame' ? '提高伤害、射速和喷射距离'
-            : '提高伤害、射速和穿透作战效率',
+            : '提高伤害、射速和穿透作战效率')
+        + (level >= 3 && !growth.evolved[id]
+          ? `。进化：Lv.5 + ${EVOLUTION_RECIPES[id].map(x => RECIPE_CARD_NAMES[x]).join(' / ')}` : ''),
       icon: id === 'rifle' ? '⇢' : id === 'scatter' ? '✦' : id === 'arc' ? 'ϟ' : '♨',
       category: 'weapon',
     });
