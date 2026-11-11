@@ -4,9 +4,9 @@ import { FACTION_COLORS, HIVE_GORE, HIVE_TEXTURE } from './artStyle';
 import { bodyOffset, visibleLoadout, visualPowerTier, WEAPON_LIGHT, WEAPON_MOUNTS, type MountedWeapon } from './weaponVisual';
 import { SoundFx } from './Sound';
 import {
-  applyLevelChoice, evolutionRecipeTargets, grantExperience, installWeaponCalibration, killExperience, newGrowth,
-  rollLevelChoices, weaponTuning, xpToNext, MAX_RUN_LEVEL,
-  type GrowthState, type LevelChoice, type LevelChoiceId,
+  evolutionRecipeTargets, grantExperience, installWeaponCalibration, killExperience, newGrowth,
+  weaponTuning, xpToNext, MAX_RUN_LEVEL,
+  type GrowthState,
 } from './arsenal';
 import {
   GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
@@ -23,6 +23,10 @@ import {
 } from './supplies';
 import { pressurePlan, spawnOffset, SURGE_PERIOD_MS, SURGE_WARNING_MS } from './pressure';
 import { ARRIVAL_WARNING_MS, HUD_DESIGN_WIDTH, insideReadableView, visibleEdgeSpawn, type ViewRect } from './visibility';
+import {
+  applyAutomaticLevels, applyAutomaticEvolutions, summarizeGrowth,
+  DEFAULT_TRAINING, TRAINING_LABELS, type TrainingPlan, type TrainingFocus,
+} from './autoGrowth';
 
 const VIEW_W = HUD_DESIGN_WIDTH;
 const WORLD = 2300;
@@ -95,8 +99,10 @@ export interface RunResult {
   victory: boolean; wave: number; weapons: WeaponId[]; cards: string[]; bestStreak: number;
   level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
 }
-export interface RewardOffer { wave: number; options: CardDef[]; nextWave: number }
-export interface LevelOffer { level: number; pending: number; options: LevelChoice[] }
+export interface RewardOffer {
+  wave: number; options: CardDef[]; nextWave: number; equipped: WeaponId[];
+  training: TrainingPlan;
+}
 
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
@@ -141,9 +147,9 @@ export class GameScene extends Phaser.Scene {
   private bossKilled = false;
   private build: RunBuild = newBuild();
   private growth: GrowthState = newGrowth();
-  private queuedLevels = 0;
-  private awaitingLevel = false;
-  private levelOptions: LevelChoice[] = [];
+  private training: TrainingPlan = { ...DEFAULT_TRAINING };
+  private growthNotice = '';
+  private growthNoticeMs = 0;
   private weaponCooldowns: Record<WeaponId, number> = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
   private lastDeployedMs = -10000;
   private overloadMs = 0;
@@ -179,6 +185,7 @@ export class GameScene extends Phaser.Scene {
   private waveLabel!: Phaser.GameObjects.Text;
   private xpLabel!: Phaser.GameObjects.Text;
   private modeHint!: Phaser.GameObjects.Text;
+  private growthLabel!: Phaser.GameObjects.Text;
   private buffLabel!: Phaser.GameObjects.Text;
   private introHint!: Phaser.GameObjects.Text;
   private introFadeMs = 0;
@@ -253,8 +260,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Called by the HTML start/retry button; safe for repeated sessions. */
-  startRun(): void {
+  startRun(training: TrainingPlan = DEFAULT_TRAINING): void {
     if (!this.ready) return;
+    this.training = { ...DEFAULT_TRAINING };
+    this.setTraining(training.weapon, training.focus);
     this.removeProjectilesAndEnemies();
     this.player.setPosition(CENTER, CENTER).setRotation(0).clearTint();
     this.playerShadow.setPosition(CENTER + 4, CENTER + 13);
@@ -287,9 +296,8 @@ export class GameScene extends Phaser.Scene {
     this.rewardOptions = [];
     this.build = newBuild();
     this.growth = newGrowth();
-    this.queuedLevels = 0;
-    this.awaitingLevel = false;
-    this.levelOptions = [];
+    this.growthNotice = '';
+    this.growthNoticeMs = 0;
     this.refreshMountedWeapons();
     this.lastDeployedMs = -10000;
     this.overloadMs = 0;
@@ -304,13 +312,23 @@ export class GameScene extends Phaser.Scene {
     this.hp = this.build.hp;
     this.lockedTarget = null;
     this.introFadeMs = 4600;
-    this.introHint.setText('移动射击 · 松手展开 · 连杀增伤').setAlpha(1);
+    this.introHint.setText('经验自动升级 · 松手展开火力 · 波末选择构筑').setAlpha(1);
     this.stateLabel.setText('机动射击');
     this.releaseJoystick();
     this.soundFx.unlock();
     this.active = true;
     this.updateHUD();
   }
+
+  /** Configure deterministic automatic training. The next rank always follows this plan. */
+  setTraining(weapon: WeaponId, focus: TrainingFocus): void {
+    const allowedFocus: readonly string[] = ['damage', 'rate', 'speed'];
+    if (!allowedFocus.includes(focus)) return;
+    this.training.focus = focus;
+    if (this.build.weapons.includes(weapon)) this.training.weapon = weapon;
+  }
+
+  currentTraining(): TrainingPlan { return { ...this.training }; }
 
   /** The DOM reward UI is the only allowed path to resume a completed wave. */
   chooseCard(cardId: string): boolean {
@@ -319,6 +337,11 @@ export class GameScene extends Phaser.Scene {
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
     if (chosen.weapon) installWeaponCalibration(this.growth, chosen.weapon);
+    const newEvolutions = applyAutomaticEvolutions(this.build, this.growth);
+    if (newEvolutions.length) {
+      this.growthNotice = summarizeGrowth({ upgrades: [], evolutions: newEvolutions }, this.growth);
+      this.growthNoticeMs = 2100;
+    }
     this.refreshMountedWeapons();
     if (cardId === 'scatter-kit' || cardId === 'arc-kit' || cardId === 'flame-kit') {
       const color = WEAPON_LIGHT[chosen.weapon!];
@@ -351,41 +374,6 @@ export class GameScene extends Phaser.Scene {
     this.active = true;
     this.updateHUD();
     return true;
-  }
-
-  /** Accept only the currently offered upgrade. World simulation stays paused until selected. */
-  chooseLevelUpgrade(id: string): boolean {
-    if (!this.awaitingLevel || !this.levelOptions.some(option => option.id === id)) return false;
-    this.build.hp = this.hp;
-    if (!applyLevelChoice(this.build, this.growth, id as LevelChoiceId)) return false;
-    this.hp = this.build.hp;
-    this.levelOptions = [];
-    this.awaitingLevel = false;
-    this.queuedLevels = Math.max(0, this.queuedLevels - 1);
-    const evolved = id.startsWith('evolve:');
-    this.introHint.setText(evolved ? '武器进化完成！高能系统已上线' : '战斗升级完成 · 战力提升').setAlpha(1);
-    this.introFadeMs = 1650;
-    this.spawnSparks(this.player.x, this.player.y, evolved ? 24 : 10, evolved ? 0xffc67a : 0x7cebd2, 170);
-    this.soundFx.deploy();
-    if (this.queuedLevels > 0) this.presentLevelChoice();
-    else {
-      this.active = true;
-      this.simAccumulatorMs = 0;
-    }
-    this.updateHUD();
-    return true;
-  }
-
-  private presentLevelChoice(): void {
-    if (this.awaitingReward || this.awaitingLevel || this.queuedLevels <= 0) return;
-    this.active = false;
-    this.awaitingLevel = true;
-    this.simAccumulatorMs = 0;
-    this.releaseJoystick();
-    this.levelOptions = rollLevelChoices(this.build, this.growth);
-    window.dispatchEvent(new CustomEvent<LevelOffer>('swarm:levelup', {
-      detail: { level: this.growth.level, pending: this.queuedLevels, options: this.levelOptions },
-    }));
   }
 
   setMuted(muted: boolean): void { this.soundFx.setMuted(muted); }
@@ -516,6 +504,7 @@ export class GameScene extends Phaser.Scene {
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
     this.waveLabel = this.hudText(VIEW_W / 2, 94, '第 1 / 5 波', '17px', '#ffbd78').setOrigin(0.5, 0);
     this.xpLabel = this.hudText(31, 140, 'LV.1 | 0/8 XP', '12px', '#a9f1d9');
+    this.growthLabel = this.hudText(VIEW_W / 2, 179, '', '12px', '#f6d08a').setOrigin(0.5, 0);
     this.stateLabel = this.hudText(VIEW_W / 2, this.hudHeight - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
     this.modeHint = this.hudText(VIEW_W / 2, this.hudHeight - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
     this.buffLabel = this.hudText(VIEW_W / 2, this.hudHeight - 158, '', '16px', '#91eaf8').setOrigin(0.5, 0.5);
@@ -604,6 +593,7 @@ export class GameScene extends Phaser.Scene {
     this.waveElapsedMs += ms;
     this.overclockMs = Math.max(0, this.overclockMs - ms);
     if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
+    this.growthNoticeMs = Math.max(0, this.growthNoticeMs - ms);
     this.introFadeMs -= ms;
     if (this.introFadeMs < 1200) this.introHint.setAlpha(Phaser.Math.Clamp(this.introFadeMs / 1200, 0, 1));
 
@@ -707,7 +697,6 @@ export class GameScene extends Phaser.Scene {
     const phase = nextPhase(this.waveNumber, this.bossKilled, this.waveElapsedMs);
     if (phase === 'victory') this.finishRun(true);
     else if (phase === 'timeout') this.finishRun(false);
-    else if (this.queuedLevels > 0) this.presentLevelChoice();
     else if (phase === 'reward') this.endWave();
     this.updateHUD();
   }
@@ -721,6 +710,7 @@ export class GameScene extends Phaser.Scene {
     this.rewardOptions = rollCards(this.build, this.waveNumber, Math.random, evolutionRecipeTargets(this.build, this.growth));
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
+      equipped: [...this.build.weapons], training: this.currentTraining(),
     };
     window.dispatchEvent(new CustomEvent<RewardOffer>('swarm:reward', { detail }));
   }
@@ -1439,7 +1429,15 @@ export class GameScene extends Phaser.Scene {
     this.kills++;
     const reward = grantExperience(this.growth, killExperience(kind, elite));
     this.growth = reward.state;
-    this.queuedLevels += reward.gainedLevels;
+    if (reward.gainedLevels > 0) {
+      const result = applyAutomaticLevels(this.build, this.growth, reward.gainedLevels, this.training);
+      const text = summarizeGrowth(result, this.growth);
+      if (text) {
+        this.growthNotice = text;
+        this.growthNoticeMs = result.evolutions.length ? 2000 : 1050;
+      }
+      if (result.evolutions.length) this.spawnSparks(this.player.x, this.player.y, 19, 0xffc67a, 170);
+    }
     this.streak = advanceStreak(this.streak, this.lastKillMs, this.timeMs);
     this.lastKillMs = this.timeMs;
     this.bestStreak = Math.max(this.bestStreak, this.streak);
@@ -1534,6 +1532,8 @@ export class GameScene extends Phaser.Scene {
       ? ` · ${this.streak}连杀 ×${streakDamageMultiplier(this.streak, this.build.frenzy).toFixed(2)}`
       : this.streak >= 2 ? ` · ${this.streak}连杀` : '';
     this.killLabel.setText(`击杀 ${String(this.kills).padStart(3, '0')}${combo}`);
+    this.growthLabel.setText(this.growthNoticeMs > 0 ? this.growthNotice : `专精 ${this.training.weapon === 'rifle' ? '步枪' : this.training.weapon === 'scatter' ? '散射' : this.training.weapon === 'arc' ? '电弧' : '喷焰'} · ${TRAINING_LABELS[this.training.focus]}`);
+    this.growthLabel.setAlpha(this.growthNoticeMs > 0 ? Math.min(1, this.growthNoticeMs / 350) : 0.72);
     const wave = WAVES[this.waveNumber - 1];
     const remaining = Math.max(0, Math.ceil((wave.durationMs - this.waveElapsedMs) / 1000));
     this.waveLabel.setText(this.waveNumber === 5
