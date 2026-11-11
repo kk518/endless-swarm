@@ -65,3 +65,18 @@ export function formatTime(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
+
+/** A bounded fixed-step clock: smooth at 30/60/120 FPS, safe after a long tab suspension. */
+export const FIXED_STEP_MS = 1000 / 60;
+
+export function fixedStepBatch(
+  remainderMs: number, deltaMs: number, maxSteps = 5,
+): { steps: number; remainderMs: number } {
+  const safeDelta = Number.isFinite(deltaMs) ? Math.max(0, Math.min(deltaMs, 250)) : 0;
+  const carry = Number.isFinite(remainderMs) ? Math.max(0, Math.min(remainderMs, FIXED_STEP_MS)) : 0;
+  const pending = carry + safeDelta;
+  const steps = Math.min(maxSteps, Math.floor((pending + 1e-7) / FIXED_STEP_MS));
+  const left = Math.max(0, pending - steps * FIXED_STEP_MS);
+  // Deliberately drop old backlog after a serious frame stall: never simulate a lethal catch-up burst.
+  return { steps, remainderMs: steps >= maxSteps ? Math.min(left, FIXED_STEP_MS - 1e-6) : left };
+}
