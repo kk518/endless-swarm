@@ -37,12 +37,12 @@ export const CARDS: readonly CardDef[] = [
   { id: 'scatter-kit', name: '散射炮组件', description: '解锁近距离扇形散射炮', icon: '✦', category: 'weapon', weapon: 'scatter' },
   { id: 'arc-kit', name: '电弧线圈', description: '解锁连续跳跃的闪电链', icon: 'ϟ', category: 'weapon', weapon: 'arc' },
   { id: 'flame-kit', name: '喷火模块', description: '解锁前方持续范围火焰', icon: '♨', category: 'weapon', weapon: 'flame' },
-  { id: 'feed', name: '高速供弹', description: '所有武器攻击频率 +20%', icon: '➟', category: 'assault' },
-  { id: 'warhead', name: '强化弹头', description: '所有武器伤害 +18%', icon: '◆', category: 'assault' },
+  { id: 'feed', name: '高速供弹', description: '所有武器攻击频率 +25%（叠加生效）', icon: '➟', category: 'assault' },
+  { id: 'warhead', name: '强化弹头', description: '所有武器伤害 +25%（叠加生效）', icon: '◆', category: 'assault' },
   { id: 'pierce', name: '穿甲弹', description: '电磁步枪与散射炮子弹额外穿透 1 只虫', icon: '⇢', category: 'assault' },
   { id: 'chain-blast', name: '连环爆裂', description: '击杀时有 22% 概率引发范围爆炸', icon: '✹', category: 'assault' },
-  { id: 'radius', name: '扩散核心', description: '火焰、散射和电弧覆盖范围 +18%', icon: '◎', category: 'assault' },
-  { id: 'thrusters', name: '磁悬浮推进', description: '移动速度 +18%', icon: '⟫', category: 'mobile' },
+  { id: 'radius', name: '扩散核心', description: '火焰、散射和电弧有效覆盖 +25%', icon: '◎', category: 'assault' },
+  { id: 'thrusters', name: '磁悬浮推进', description: '移动速度 +22%', icon: '⟫', category: 'mobile' },
   { id: 'cryogenic', name: '冰霜弹头', description: '命中让虫族减速 30%，持续 1 秒', icon: '❄', category: 'mobile' },
   { id: 'afterglow', name: '战术余热', description: '离开展开后 1.2 秒内伤害仍 +15%', icon: '◐', category: 'mobile' },
   { id: 'fast-braces', name: '快速支架', description: '火力展开所需时间 -30%', icon: '⌁', category: 'deploy' },
@@ -53,9 +53,9 @@ export const CARDS: readonly CardDef[] = [
   { id: 'frenzy', name: '战斗狂热', description: '连杀伤害增幅每档从 10% 提升至 15%', icon: '✷', category: 'assault' },
   { id: 'salvage', name: '战地回收', description: '获得后每击杀 20 只虫恢复 1 点装甲', icon: '⚒', category: 'survival' },
   { id: 'critical-core', name: '弱点扫描', description: '每级增加 14% 双倍暴击概率，最高 42%', icon: '◈', category: 'assault' },
-  { id: 'supply-magnet', name: '磁力回收臂', description: '补给品拾取范围扩大至 1.8 倍', icon: '⊕', category: 'mobile' },
-  { id: 'surge-cell', name: '聚变蓄能器', description: '超频补给持续时间从 8.5 秒提升至 13 秒', icon: '⚡', category: 'assault' },
-  { id: 'emp-array', name: '脉冲阵列', description: 'EMP 补给的伤害和影响范围显著提升', icon: '✺', category: 'assault' },
+  { id: 'supply-magnet', name: '磁力回收臂', description: '移动速度 +10%，补给拾取范围 ×1.8', icon: '⊕', category: 'mobile' },
+  { id: 'surge-cell', name: '聚变蓄能器', description: '常驻射速 +10%，超频持续时间延长至 13 秒', icon: '⚡', category: 'assault' },
+  { id: 'emp-array', name: '脉冲阵列', description: '常驻伤害 +10%，EMP 伤害与半径提升', icon: '✺', category: 'assault' },
 ];
 
 export interface RunBuild {
@@ -123,6 +123,17 @@ export function rollCards(build: RunBuild, rewardNumber: number, random: () => n
     }
   }
   const remaining = pool.filter(card => !chosen.includes(card));
+  if (rewardNumber <= 2) {
+    // Early offers include at least one immediately visible and unconditional improvement.
+    const reliable = remaining.filter(card =>
+      ['feed', 'warhead', 'thrusters', 'plating', 'critical-core'].includes(card.id));
+    if (reliable.length) {
+      const index = Math.min(reliable.length - 1, Math.floor(Math.max(0, random()) * reliable.length));
+      const card = reliable[index];
+      chosen.push(card);
+      remaining.splice(remaining.indexOf(card), 1);
+    }
+  }
   while (chosen.length < 3 && remaining.length) {
     const index = Math.min(remaining.length - 1, Math.floor(Math.max(0, random()) * remaining.length));
     chosen.push(remaining.splice(index, 1)[0]);
@@ -136,12 +147,12 @@ export function applyCard(build: RunBuild, cardId: CardId): boolean {
   if (!card || !eligibleCards(build).some(c => c.id === cardId)) return false;
   if (card.weapon) build.weapons.push(card.weapon);
   switch (card.id) {
-    case 'feed': build.rate *= 1.2; break;
-    case 'warhead': build.damage *= 1.18; break;
+    case 'feed': build.rate *= 1.25; break;
+    case 'warhead': build.damage *= 1.25; break;
     case 'pierce': build.pierce++; break;
     case 'chain-blast': build.explosionChance = Math.min(0.66, build.explosionChance + 0.22); break;
-    case 'radius': build.range *= 1.18; break;
-    case 'thrusters': build.speed *= 1.18; break;
+    case 'radius': build.range *= 1.25; break;
+    case 'thrusters': build.speed *= 1.22; break;
     case 'cryogenic': build.frost = true; break;
     case 'afterglow': build.afterglow = true; break;
     case 'fast-braces': build.deployDelay *= 0.7; break;
@@ -152,9 +163,9 @@ export function applyCard(build: RunBuild, cardId: CardId): boolean {
     case 'frenzy': build.frenzy = true; break;
     case 'salvage': build.salvage = true; break;
     case 'critical-core': build.criticalChance = Math.min(0.42, build.criticalChance + 0.14); break;
-    case 'supply-magnet': build.supplyMagnet = true; break;
-    case 'surge-cell': build.surgeCell = true; break;
-    case 'emp-array': build.empArray = true; break;
+    case 'supply-magnet': build.supplyMagnet = true; build.speed *= 1.1; break;
+    case 'surge-cell': build.surgeCell = true; build.rate *= 1.1; break;
+    case 'emp-array': build.empArray = true; build.damage *= 1.1; break;
   }
   build.selected.push(cardId);
   return true;

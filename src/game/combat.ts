@@ -1,3 +1,6 @@
+import { streakDamageMultiplier } from './streak.ts';
+import type { RunBuild } from './progression.ts';
+
 /** Deterministic rules shared by the game and tests. No renderer dependency. */
 export const GAMEPLAY = {
   moveSpeed: 230,
@@ -79,4 +82,27 @@ export function fixedStepBatch(
   const left = Math.max(0, pending - steps * FIXED_STEP_MS);
   // Deliberately drop old backlog after a serious frame stall: never simulate a lethal catch-up burst.
   return { steps, remainderMs: steps >= maxSteps ? Math.min(left, FIXED_STEP_MS - 1e-6) : left };
+}
+
+/** Math used by the actual weapon loop; pure functions make card effects regression-testable. */
+export function buildWeaponDamage(
+  base: number, build: RunBuild, deployed: boolean, afterglowActive: boolean, streak: number,
+): number {
+  const stanceMultiplier = deployed ? GAMEPLAY.deployDamageMultiplier
+    : build.afterglow && afterglowActive ? 1.15 : 1;
+  return base * build.damage * streakDamageMultiplier(streak, build.frenzy) * stanceMultiplier;
+}
+
+export function buildWeaponInterval(
+  base: number, build: RunBuild, deployed: boolean, overloadActive: boolean, overclockActive: boolean,
+): number {
+  const stanceRate = deployed ? GAMEPLAY.deployRateMultiplier : 1;
+  const overloadRate = deployed && build.overload && overloadActive ? 1.4 : 1;
+  return base / (build.rate * stanceRate * overloadRate * (overclockActive ? 1.45 : 1));
+}
+
+/** UI uses this same authoritative run state instead of estimating effects from selected card text. */
+export function buildReadout(build: RunBuild): string {
+  const percent = (n: number) => `+${Math.round((n - 1) * 100)}%`;
+  return `火力${percent(build.damage)}  射速${percent(build.rate)}  移速${percent(build.speed)}  暴击${Math.round(build.criticalChance * 100)}%`;
 }

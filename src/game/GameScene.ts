@@ -2,8 +2,8 @@ import Phaser from 'phaser';
 import { createArt } from './Art';
 import { SoundFx } from './Sound';
 import {
-  GAMEPLAY, fireIntervalMs, formatTime,
-  FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget, spawnIntervalMs,
+  GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
+  FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget,
 } from './combat';
 import {
   applyCard, newBuild, nextPhase, pickEnemyKind, rollCards, WAVES,
@@ -14,6 +14,7 @@ import {
   canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
   SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
 } from './supplies';
+import { pressurePlan, spawnOffset, SURGE_PERIOD_MS, SURGE_WARNING_MS } from './pressure';
 
 const VIEW_W = 450;
 const WORLD = 2300;
@@ -106,6 +107,10 @@ export class GameScene extends Phaser.Scene {
   private timeMs = 0;
   private simAccumulatorMs = 0;
   private spawnAccumulator = 0;
+  private nextSurgeAtMs = SURGE_PERIOD_MS;
+  private surgeWarningMs = 0;
+  private surgePending = 0;
+  private movementHeading = Number.NaN;
   private stillMs = 0;
   private deployed = false;
   private hp: number = GAMEPLAY.playerMaxHealth;
@@ -189,6 +194,10 @@ export class GameScene extends Phaser.Scene {
     this.timeMs = 0;
     this.simAccumulatorMs = 0;
     this.spawnAccumulator = 500;
+    this.nextSurgeAtMs = SURGE_PERIOD_MS;
+    this.surgeWarningMs = 0;
+    this.surgePending = 0;
+    this.movementHeading = Number.NaN;
     this.supplyElapsedMs = 0;
     this.overclockMs = 0;
     this.suppliesCollected = 0;
@@ -223,7 +232,8 @@ export class GameScene extends Phaser.Scene {
 
   /** The DOM reward UI is the only allowed path to resume a completed wave. */
   chooseCard(cardId: string): boolean {
-    if (!this.awaitingReward || !this.rewardOptions.some(card => card.id === cardId)) return false;
+    const chosen = this.rewardOptions.find(card => card.id === cardId);
+    if (!this.awaitingReward || !chosen) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
     if (cardId === 'salvage') this.salvageKills = 0;
@@ -233,6 +243,9 @@ export class GameScene extends Phaser.Scene {
     this.build.hp = this.hp;
     this.waveNumber++;
     this.waveElapsedMs = 0;
+    this.nextSurgeAtMs = SURGE_PERIOD_MS;
+    this.surgeWarningMs = 0;
+    this.surgePending = 0;
     this.supplyElapsedMs = 0;
     this.overclockMs = 0;
     this.spawnAccumulator = 800;
@@ -243,8 +256,9 @@ export class GameScene extends Phaser.Scene {
     this.rewardOptions = [];
     this.simAccumulatorMs = 0;
     this.releaseJoystick();
-    this.introFadeMs = 2200;
-    this.introHint.setText(`第 ${this.waveNumber} 波虫潮来袭`).setAlpha(1);
+    this.introFadeMs = 3500;
+    this.introHint.setText(`强化生效：${chosen.name} · 第 ${this.waveNumber} 波`).setAlpha(1);
+    this.spawnSparks(this.player.x, this.player.y, 18, 0x79f8dc, 170);
     this.active = true;
     this.updateHUD();
     return true;
@@ -394,6 +408,7 @@ export class GameScene extends Phaser.Scene {
     const move = this.movement();
     const moving = Math.hypot(move.x, move.y) > 0.07;
     if (moving) {
+      this.movementHeading = Math.atan2(move.y, move.x);
       this.player.x = Phaser.Math.Clamp(this.player.x + move.x * GAMEPLAY.moveSpeed * this.build.speed * dt, 60, WORLD - 60);
       this.player.y = Phaser.Math.Clamp(this.player.y + move.y * GAMEPLAY.moveSpeed * this.build.speed * dt, 60, WORLD - 60);
       this.stillMs = 0;
@@ -415,7 +430,7 @@ export class GameScene extends Phaser.Scene {
 
     this.updateEnemies(dt, ms);
     if (!this.active) return; // Contact damage can end a run before the rest of this step.
-    this.lockedTarget = selectTarget(this.player, this.enemyList, GAMEPLAY.fireRange, this.lockedTarget);
+    this.lockedTarget = selectTarget(this.player, this.enemyList, GAMEPLAY.fireRange * this.build.range, this.lockedTarget);
     this.crosshair.setVisible(Boolean(this.lockedTarget));
     this.targetingLine.clear();
     if (this.lockedTarget) {
@@ -439,15 +454,26 @@ export class GameScene extends Phaser.Scene {
       this.supplyElapsedMs -= SUPPLY_PERIOD_MS;
       this.spawnSupplyNearPlayer();
     }
-    this.spawnAccumulator += ms;
     const wave = WAVES[this.waveNumber - 1];
-    const spawnEvery = this.waveNumber === 1 ? Math.min(spawnIntervalMs(this.timeMs / 1000), wave.spawnIntervalMs) : wave.spawnIntervalMs;
-    if (this.spawnAccumulator >= spawnEvery) {
-      this.spawnAccumulator = 0;
-      if (this.enemyList.length < wave.maxEnemies) {
-        const kind = pickEnemyKind(wave);
-        const eliteCount = this.enemyList.reduce((count, enemy) => count + Number(enemy.elite && enemy.alive), 0);
-        this.spawnEnemy(kind, canSpawnElite(this.waveNumber, kind, eliteCount));
+    const pressure = pressurePlan(this.waveNumber, this.waveElapsedMs, wave.durationMs);
+    this.spawnAccumulator += ms;
+    if (this.spawnAccumulator >= pressure.intervalMs) {
+      this.spawnAccumulator -= pressure.intervalMs;
+      this.spawnPack(pressure.groupSize, pressure.spawnRadius);
+    }
+    if (this.waveElapsedMs >= this.nextSurgeAtMs && this.surgePending === 0) {
+      this.surgePending = pressure.surgeSize;
+      this.surgeWarningMs = SURGE_WARNING_MS;
+      this.nextSurgeAtMs += SURGE_PERIOD_MS;
+      this.introHint.setText('⚠ 虫潮集结！注意两侧包围').setAlpha(1);
+      this.introFadeMs = SURGE_WARNING_MS + 1100;
+    }
+    if (this.surgePending > 0) {
+      this.surgeWarningMs -= ms;
+      if (this.surgeWarningMs <= 0) {
+        this.spawnPack(this.surgePending, pressure.spawnRadius);
+        this.surgePending = 0;
+        this.spawnSparks(this.player.x, this.player.y, 10, 0xffa564, 130);
       }
     }
     if (this.waveNumber === 5 && !this.bossSpawned && this.waveElapsedMs > 2500) {
@@ -477,19 +503,40 @@ export class GameScene extends Phaser.Scene {
     window.dispatchEvent(new CustomEvent<RewardOffer>('swarm:reward', { detail }));
   }
 
-  private spawnEnemy(kind: EnemyKind, elite = false): boolean {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = kind === 'boss' ? 315 : 430 + Math.random() * 140;
-    const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * radius, 40, WORLD - 40);
-    const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * radius, 40, WORLD - 40);
-    if (Math.hypot(x - this.player.x, y - this.player.y) < 260) return false;
+  private spawnPack(count: number, radius: number): void {
+    const wave = WAVES[this.waveNumber - 1];
+    const heading = Number.isFinite(this.movementHeading) ? this.movementHeading
+      : Math.random() * Math.PI * 2;
+    const sector = heading + (Math.random() - 0.5) * 0.55;
+    let eliteCount = this.enemyList.reduce((count, enemy) => count + Number(enemy.elite && enemy.alive), 0);
+    for (let i = 0; i < count && this.enemyList.length < wave.maxEnemies; i++) {
+      const kind = pickEnemyKind(wave);
+      const elite = canSpawnElite(this.waveNumber, kind, eliteCount);
+      if (this.spawnEnemy(kind, elite, sector + spawnOffset(i), radius) && elite) eliteCount++;
+    }
+  }
+
+  private spawnEnemy(kind: EnemyKind, elite = false, preferredAngle?: number, baseRadius?: number): boolean {
+    const radius = kind === 'boss' ? 315 : (baseRadius ?? 410) + Math.random() * 65;
+    let x = this.player.x;
+    let y = this.player.y;
+    let valid = false;
+    // If close to arena edge, try other sectors instead of silently losing spawns.
+    const angle = preferredAngle ?? Math.random() * Math.PI * 2;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const trial = angle + attempt * Math.PI * 0.75;
+      x = Phaser.Math.Clamp(this.player.x + Math.cos(trial) * radius, 40, WORLD - 40);
+      y = Phaser.Math.Clamp(this.player.y + Math.sin(trial) * radius, 40, WORLD - 40);
+      if (Math.hypot(x - this.player.x, y - this.player.y) >= 275) { valid = true; break; }
+    }
+    if (!valid) return false;
     const def: Record<EnemyKind, { hp: number; speed: number; size: number; color: number }> = {
-      grunt: { hp: 42, speed: 62, size: 0.92, color: 0xffffff },
-      leaper: { hp: 45, speed: 105, size: 0.84, color: 0xf2a867 },
-      armored: { hp: 132, speed: 41, size: 1.38, color: 0xa0b8e0 },
-      bomber: { hp: 56, speed: 88, size: 1.02, color: 0xffffff },
-      spitter: { hp: 65, speed: 47, size: 1.05, color: 0xb3ee83 },
-      boss: { hp: 1500, speed: 46, size: 3.0, color: 0xe99578 },
+      grunt: { hp: 42, speed: 83, size: 0.92, color: 0xffffff },
+      leaper: { hp: 45, speed: 125, size: 0.84, color: 0xf2a867 },
+      armored: { hp: 132, speed: 54, size: 1.38, color: 0xa0b8e0 },
+      bomber: { hp: 56, speed: 102, size: 1.02, color: 0xffffff },
+      spitter: { hp: 65, speed: 62, size: 1.05, color: 0xb3ee83 },
+      boss: { hp: 1500, speed: 55, size: 3.0, color: 0xe99578 },
     };
     const base = def[kind];
     const stats = elite
@@ -509,8 +556,9 @@ export class GameScene extends Phaser.Scene {
         kind === 'bomber' ? 0xff537e : 0xff745c, kind === 'bomber' ? 0.17 : 0.13)
         .setStrokeStyle(2, kind === 'bomber' ? 0xff7596 : 0xffa271, 0.7).setDepth(2).setVisible(false)
       : null;
+    const pressure = pressurePlan(this.waveNumber, this.waveElapsedMs, WAVES[this.waveNumber - 1].durationMs);
     this.enemyList.push({
-      kind, elite, eliteAura, x, y, alive: true, hp: stats.hp, speed: stats.speed, size: stats.size,
+      kind, elite, eliteAura, x, y, alive: true, hp: stats.hp, speed: stats.speed * pressure.speedMultiplier, size: stats.size,
       sprite, shadow, warning, flashTime: 0, slowMs: 0, attackCooldownMs: 1900 + Math.random() * 1500, windupMs: 0,
     });
     return true;
@@ -568,7 +616,7 @@ export class GameScene extends Phaser.Scene {
       if (enemy.flashTime > 0) {
         enemy.flashTime -= ms;
         if (enemy.flashTime <= 0) {
-          const tint = enemy.elite ? 0xffdf9b : enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
+          const tint = enemy.slowMs > 0 ? 0x8fdfff : enemy.elite ? 0xffdf9b : enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
           enemy.sprite.setTint(tint);
         }
       }
@@ -595,15 +643,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private weaponDamage(base: number): number {
-    const mobileAfterglow = this.build.afterglow && !this.deployed && this.timeMs - this.lastDeployedMs < 1200;
-    return base * this.build.damage * streakDamageMultiplier(this.streak, this.build.frenzy)
-      * (this.deployed ? GAMEPLAY.deployDamageMultiplier : mobileAfterglow ? 1.15 : 1);
+    return buildWeaponDamage(base, this.build, this.deployed, this.timeMs - this.lastDeployedMs < 1200, this.streak);
   }
 
   private weaponInterval(base: number): number {
-    const overdriveBonus = this.deployed && this.build.overload && this.overloadMs < 3000 ? 1.4 : 1;
-    return base / (this.build.rate * (this.deployed ? GAMEPLAY.deployRateMultiplier : 1) * overdriveBonus
-      * (this.overclockMs > 0 ? 1.45 : 1));
+    return buildWeaponInterval(base, this.build, this.deployed, this.overloadMs < 3000, this.overclockMs > 0);
   }
 
   private updateWeapons(ms: number): void {
@@ -642,7 +686,8 @@ export class GameScene extends Phaser.Scene {
 
   private fireScatter(angle: number): void {
     for (let i = -2; i <= 2; i++) {
-      const spread = i * 0.14 * this.build.range;
+      // Range upgrades must not widen the shot cone and reduce hit probability.
+      const spread = i * 0.14;
       this.fire(angle + spread, this.weaponDamage(19), this.build.pierce, 0.8, 0xffc88c);
     }
   }
@@ -964,12 +1009,13 @@ export class GameScene extends Phaser.Scene {
       : `第 ${this.waveNumber} / 5 波 · ${remaining}s`);
     this.stateLabel.setText(this.deployed ? '火力展开  //  OVERDRIVE' : '机动射击  //  MOBILE');
     this.stateLabel.setColor(this.deployed ? '#ffcd86' : '#c1f7e7');
-    this.buffLabel.setText(this.overclockMs > 0
-      ? `⚡ 超频射击 ${Math.ceil(this.overclockMs / 1000)} 秒`
-      : this.supplies.length > 0 ? '战场补给已投放 · 移动拾取' : '');
-    this.modeHint.setText(this.deployed
-      ? this.build.overload && this.overloadMs < 3000 ? '超载中：高射速！' : '伤害 +35% · 射速 +25%'
-      : this.stillMs > 0 ? '停止移动以展开火力' : `已装备 ${this.build.weapons.length} / 4 把武器`);
+    this.buffLabel.setFontSize(12);
+    this.buffLabel.setText(`${buildReadout(this.build)}  · ${this.build.selected.length}张卡`);
+    this.modeHint.setText(this.overclockMs > 0
+      ? `超频射击 +45% · 剩余 ${Math.ceil(this.overclockMs / 1000)} 秒`
+      : this.deployed
+        ? this.build.overload && this.overloadMs < 3000 ? '超载生效 · 额外射速 +40%' : '火力展开 · 伤害 +35% 射速 +25%'
+        : this.stillMs > 0 ? '停止移动以展开火力' : `已装备 ${this.build.weapons.length}/4 武器 · 连杀持续强化`);
 
     const g = this.hudGraphics;
     g.clear();
