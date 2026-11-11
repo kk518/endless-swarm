@@ -109,6 +109,7 @@ CI 在 PR / feature 分支和 main 上运行测试、类型检查与构建，成
 - **[完整 Roguelite 核心循环 PRD](docs/PRD_ROGUELITE_CORE_LOOP.md)**：三幕九段、受控随机、跨武器融合流派、失败结算、安全节点恢复及分期验收。
 - **[英雄与武器系统 PRD](docs/PRD_HERO_WEAPON_SYSTEM.md)**：六位英雄被动、六把英雄专属武器、十二种普通武器目标池、模组稀有度、主融合与分期方案。
 - **[M5.2 无打断升级 PRD](docs/PRD_M5_2_NONBLOCKING.md)**：战斗 XP 自动小升级，重要武器/模组选择保留在波末/幕间。
+- **[M5.3 手机视野与虫潮可见性 PRD](docs/PRD_MOBILE_VISIBILITY.md)**：针对手机画面窄导致敌人屏外被击杀，规划镜头横向扩容、可见索敌与虫群登场预告。
 - **[M5.2–M8 路线图 v2](docs/ROADMAP_M6_M8.md)**：先移除频繁升级弹窗；再扩三幕长局 + **失败可得首笔资源/装备升级**；之后分期实现两战区、协同 Build、完整工坊/科技/机甲。
 - **[战区资源与装备工坊 PRD](docs/PRD_BATTLEFIELDS_EQUIPMENT.md)**：钢铁遗迹/感染巢穴/雷暴前哨的不同素材、四装备槽、失败收益与工坊消耗（规划）。
 - **[局外成长详细 PRD · 星际军械库](docs/PRD_META_PROGRESSION.md)**：战备数据、永久科技、机甲解锁与出战配置、存档/经济规则（规划）。
