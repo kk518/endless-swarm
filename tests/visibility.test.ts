@@ -17,11 +17,11 @@ test('portrait expands horizontal world view without shrinking the fixed HUD des
 });
 
 test('regular weapons only acquire targets inside the readable camera rectangle', () => {
-  assert.equal(TARGET_INSET, 24);
+  assert.equal(TARGET_INSET, 64);
   assert.equal(insideReadableView({ x: 1200, y: 1160 }, view), true);
   assert.equal(insideReadableView({ x: view.right - 20, y: 1160 }, view), false);
   assert.equal(insideReadableView({ x: view.left - 50, y: 1160 }, view), false);
-  assert.equal(insideReadableView({ x: 1200, y: view.top + 24 }, view), true);
+  assert.equal(insideReadableView({ x: 1200, y: view.top + 64 }, view), true);
   assert.equal(insideReadableView({ x: 1200, y: view.bottom + 1 }, view), false);
 });
 
