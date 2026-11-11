@@ -1,0 +1,92 @@
+name: Deploy Endless Swarm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: endless-swarm-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The repository does not contain package-lock.json yet.
+      # Switch to npm ci once the lockfile is committed.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Check deployment secrets
+        id: deploy_config
+        shell: bash
+        run: |
+          if [[ -n "$SERVER_HOST" && -n "$SERVER_USER" && -n "$SERVER_SSH_KEY" && -n "$SERVER_KNOWN_HOSTS" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::warning::Build passed. Deployment SKIPPED: configure SERVER_HOST, SERVER_USER, SERVER_SSH_KEY, SERVER_KNOWN_HOSTS in this repository.'
+            echo '### Deployment skipped — repository SSH secrets are missing.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Configure SSH
+        if: steps.deploy_config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Check isolated deployment directory
+        if: steps.deploy_config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            'set -eu; target=/var/www/endless-swarm; test -d "$target"; test ! -L "$target"; test -f "$target/.endless-swarm-deploy"; test -w "$target"'
+
+      - name: Deploy static assets
+        if: steps.deploy_config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          rsync -az --delete --delay-updates \
+            --exclude='/.endless-swarm-deploy' \
+            -e "ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            dist/ "$SERVER_USER@$SERVER_HOST:/var/www/endless-swarm/"
+          echo '### Deployed to /var/www/endless-swarm/' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify public URL
+        if: steps.deploy_config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          page="$(curl -fsSL --retry 2 --max-time 20 https://kk518.top/swarm/)"
+          if ! grep -q 'Endless Swarm' <<< "$page"; then
+            echo '::error::Public URL does not appear to serve Endless Swarm. Verify Nginx location /swarm/.'
+            exit 1
+          fi
+          echo '### Public smoke check passed: https://kk518.top/swarm/' >> "$GITHUB_STEP_SUMMARY"
