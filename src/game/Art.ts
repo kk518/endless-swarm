@@ -56,6 +56,31 @@ export function createArt(scene: Phaser.Scene): void {
     g.fillStyle(0x4beacb); g.fillRoundedRect(0, 3, 15, 3, 2);
   });
 
+  make('acid', 22, 22, (g) => {
+    g.fillStyle(0xc5fa67, 0.25); g.fillCircle(11, 11, 11);
+    g.fillStyle(0x69c846); g.fillCircle(11, 11, 7);
+    g.fillStyle(0xe2ff9a); g.fillCircle(8, 8, 3);
+    g.lineStyle(2, 0x9cff80, 0.8); g.strokeCircle(11, 11, 9);
+  });
+
+  // Original horned hive creature used only as the fifth-wave boss.
+  make('broodlord', 96, 96, (g) => {
+    g.lineStyle(5, 0x754b46);
+    for (const sign of [-1, 1]) {
+      g.lineBetween(48 + 22 * sign, 36, 48 + 43 * sign, 12);
+      g.lineBetween(48 + 25 * sign, 54, 48 + 45 * sign, 50);
+      g.lineBetween(48 + 20 * sign, 65, 48 + 39 * sign, 85);
+    }
+    g.fillStyle(0x39262a); g.fillEllipse(48, 48, 61, 80);
+    g.fillStyle(0x9c5f59); g.fillEllipse(48, 50, 47, 65);
+    g.fillStyle(0xe5a177); g.fillEllipse(48, 27, 43, 35);
+    g.fillStyle(0x39252a); g.fillEllipse(48, 58, 30, 34);
+    g.lineStyle(3, 0xffbb87); g.strokeEllipse(48, 49, 47, 66);
+    g.fillStyle(0xffdf7a); g.fillCircle(37, 24, 5); g.fillCircle(59, 24, 5);
+    g.fillStyle(0x40282a); g.fillCircle(37, 24, 2); g.fillCircle(59, 24, 2);
+    g.lineStyle(4, 0x63383b); g.lineBetween(27, 13, 12, 1); g.lineBetween(69, 13, 84, 1);
+  });
+
   make('dust', 64, 64, (g) => {
     g.fillStyle(0x101e28); g.fillRect(0, 0, 64, 64);
     g.lineStyle(1, 0x203641, 0.45);

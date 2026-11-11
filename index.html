@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#08121c" />
-    <meta name="description" content="《无尽虫潮》：单指移动，自动射击，停止移动展开装甲火力。科幻虫潮生存射击游戏 M0 原型。" />
+    <meta name="description" content="《无尽虫潮》：单指移动、自动射击、火力展开，五波虫潮与波后抽卡的科幻生存射击游戏。" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <title>无尽虫潮 · Endless Swarm</title>
   </head>
@@ -12,7 +12,7 @@
     <main class="app-shell">
       <section class="game-panel" aria-label="无尽虫潮战斗区域">
         <div id="game" tabindex="-1" aria-label="战斗画面"></div>
-        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M0 / FIELD TEST</span></div>
+        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M1 / WAVE TEST</span></div>
         <div id="overlay" class="overlay">
           <div class="overlay-pattern" aria-hidden="true"></div>
           <div class="briefing">
@@ -28,9 +28,14 @@
             </div>
             <div id="run-stats" class="run-stats is-hidden" aria-live="polite"></div>
             <button id="play-button" class="action-button" type="button">进入战场 <span>↗</span></button>
-            <div class="bottom-note"><span class="status-light"></span> M0 战斗原型 <span class="note-sep">/</span> 手机竖屏体验</div>
+            <div class="bottom-note"><span class="status-light"></span> M1 五波战斗 <span class="note-sep">/</span> 手机竖屏体验</div>
           </div>
         </div>
+        <section id="reward-overlay" class="reward-overlay is-hidden" aria-label="波后卡牌选择" aria-live="polite">
+          <div class="reward-header"><span class="reward-kicker">WAVE CLEAR · 战术补给</span><h2 id="reward-title">选择一项强化</h2><p>每波免费选一张，立即改变接下来的战斗</p></div>
+          <div id="reward-cards" class="reward-cards" role="group" aria-label="选择一张强化卡"></div>
+          <div class="reward-footer">点选 1 张卡牌 · 下一波自动开始</div>
+        </section>
         <button id="mute-button" class="mute-button" type="button" aria-pressed="false">关闭音效</button>
       </section>
       <aside class="desktop-aside" aria-label="游戏介绍">
@@ -40,7 +45,7 @@
         <div class="aside-rule"></div>
         <p class="micro-label">操作方式</p>
         <p class="aside-control"><strong>手机：</strong>手指滑动移动，松手进入火力展开。<br /><strong>电脑：</strong>WASD 或方向键移动，停止后自动展开。</p>
-        <div class="aside-tag">EARLY PROTOTYPE <span>•</span> M0</div>
+        <div class="aside-tag">PLAYABLE PROTOTYPE <span>•</span> M1</div>
       </aside>
     </main>
     <div class="rotate-note">建议使用竖屏游玩以获得最佳体验</div>
