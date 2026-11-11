@@ -148,3 +148,29 @@ test('fresh run clears XP, weapon rank and evolution flags', () => {
   assert.equal(b.weaponLevels.rifle, 1); assert.equal(b.weaponLevels.scatter, 0);
   assert.equal(b.evolved.rifle, false);
 });
+
+test('M5 unowned weapons have no run level and are only calibrated when equipped', () => {
+  const build = newBuild(), growth = newGrowth();
+  assert.deepEqual(growth.weaponLevels, { rifle: 1, scatter: 0, arc: 0, flame: 0 });
+  assert.ok(!legalLevelChoices(build, growth).some(x => x.id === 'weapon:arc'));
+  assert.equal(applyCard(build, 'arc-kit'), true);
+  installWeaponCalibration(growth, 'arc');
+  assert.equal(growth.weaponLevels.arc, 2);
+  assert.ok(legalLevelChoices(build, growth).some(x => x.id === 'weapon:arc'));
+});
+
+test('M5 evolution recipes require explicit tactical cards, not generic XP damage bonuses', () => {
+  const build = newBuild(), growth = newGrowth();
+  growth.weaponLevels.rifle = 5;
+  assert.equal(applyLevelChoice(build, growth, 'core:damage'), true);
+  assert.equal(evolutionEligible(build, growth, 'rifle'), false);
+  assert.equal(applyCard(build, 'critical-core'), true);
+  assert.equal(evolutionEligible(build, growth, 'rifle'), true);
+  assert.equal(applyCard(build, 'scatter-kit'), true);
+  growth.weaponLevels.scatter = 5;
+  assert.equal(evolutionEligible(build, growth, 'scatter'), false);
+  assert.equal(applyLevelChoice(build, growth, 'core:damage'), true);
+  assert.equal(evolutionEligible(build, growth, 'scatter'), false);
+  assert.equal(applyCard(build, 'warhead'), true);
+  assert.equal(evolutionEligible(build, growth, 'scatter'), true);
+});
