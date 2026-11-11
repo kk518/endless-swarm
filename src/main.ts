@@ -86,7 +86,11 @@ window.addEventListener('swarm:levelup', (event) => {
         levelOverlay.classList.remove('is-hidden');
         return;
       }
-      document.querySelector<HTMLElement>('#game')?.focus();
+      // A queued second level has already opened the next dialog synchronously.
+      // Don't steal its keyboard focus back to the game canvas.
+      if (levelOverlay.classList.contains('is-hidden')) {
+        document.querySelector<HTMLElement>('#game')?.focus();
+      }
     });
     levelCards.append(button);
   }
