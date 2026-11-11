@@ -9,6 +9,7 @@ import {
   applyCard, newBuild, nextPhase, pickEnemyKind, rollCards, WAVES,
   type CardDef, type CardId, type EnemyKind, type RunBuild, type WeaponId,
 } from './progression';
+import { advanceStreak, streakActive, streakDamageMultiplier } from './streak';
 
 const VIEW_W = 450;
 const WORLD = 2300;
@@ -95,6 +96,10 @@ export class GameScene extends Phaser.Scene {
   private hp: number = GAMEPLAY.playerMaxHealth;
   private lastHurtMs = -10000;
   private kills = 0;
+  private streak = 0;
+  private bestStreak = 0;
+  private lastKillMs = -10000;
+  private salvageKills = 0;
   private joystickPointer: number | null = null;
   private joystickOrigin = { x: 90, y: 685 };
   private joystickValue = { x: 0, y: 0 };
@@ -182,10 +187,14 @@ export class GameScene extends Phaser.Scene {
     this.deployed = false;
     this.lastHurtMs = -10000;
     this.kills = 0;
+    this.streak = 0;
+    this.bestStreak = 0;
+    this.lastKillMs = -10000;
+    this.salvageKills = 0;
     this.hp = this.build.hp;
     this.lockedTarget = null;
     this.introFadeMs = 4600;
-    this.introHint.setText('拖动屏幕移动  ·  松手展开火力').setAlpha(1);
+    this.introHint.setText('移动射击 · 松手展开 · 连杀增伤').setAlpha(1);
     this.stateLabel.setText('机动射击');
     this.releaseJoystick();
     this.soundFx.unlock();
@@ -198,6 +207,9 @@ export class GameScene extends Phaser.Scene {
     if (!this.awaitingReward || !this.rewardOptions.some(card => card.id === cardId)) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
+    if (cardId === 'salvage') this.salvageKills = 0;
+    this.streak = 0;
+    this.lastKillMs = -10000;
     this.hp = Math.min(this.build.maxHp, this.build.hp + 1); // field repair between waves
     this.build.hp = this.hp;
     this.waveNumber++;
@@ -351,6 +363,7 @@ export class GameScene extends Phaser.Scene {
     const dt = ms / 1000;
     this.timeMs += ms;
     this.waveElapsedMs += ms;
+    if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
     this.introFadeMs -= ms;
     if (this.introFadeMs < 1200) this.introHint.setAlpha(Phaser.Math.Clamp(this.introFadeMs / 1200, 0, 1));
 
@@ -440,17 +453,19 @@ export class GameScene extends Phaser.Scene {
       grunt: { hp: 42, speed: 62, size: 0.92, color: 0xffffff },
       leaper: { hp: 45, speed: 105, size: 0.84, color: 0xf2a867 },
       armored: { hp: 132, speed: 41, size: 1.38, color: 0xa0b8e0 },
+      bomber: { hp: 56, speed: 88, size: 1.02, color: 0xffffff },
       spitter: { hp: 65, speed: 47, size: 1.05, color: 0xb3ee83 },
       boss: { hp: 1500, speed: 46, size: 3.0, color: 0xe99578 },
     };
     const stats = def[kind];
     const shadow = this.add.circle(x, y + 13, 17 * stats.size, 0x020e12, 0.35).setScale(1, 0.4).setDepth(0);
-    const sprite = this.add.image(x, y, kind === 'boss' ? 'broodlord' : 'crawler')
+    const sprite = this.add.image(x, y, kind === 'boss' ? 'broodlord' : kind === 'bomber' ? 'bomber' : 'crawler')
       .setScale(stats.size).setDepth(kind === 'boss' ? 6 : 5);
     if (stats.color !== 0xffffff) sprite.setTint(stats.color);
-    const warning = kind === 'leaper' || kind === 'spitter' || kind === 'boss'
-      ? this.add.circle(x, y, kind === 'boss' ? 65 : 26, 0xff745c, 0.13)
-        .setStrokeStyle(2, 0xffa271, 0.7).setDepth(2).setVisible(false)
+    const warning = kind === 'leaper' || kind === 'spitter' || kind === 'boss' || kind === 'bomber'
+      ? this.add.circle(x, y, kind === 'boss' ? 65 : kind === 'bomber' ? 105 : 26,
+        kind === 'bomber' ? 0xff537e : 0xff745c, kind === 'bomber' ? 0.17 : 0.13)
+        .setStrokeStyle(2, kind === 'bomber' ? 0xff7596 : 0xffa271, 0.7).setDepth(2).setVisible(false)
       : null;
     this.enemyList.push({
       kind, x, y, alive: true, hp: stats.hp, speed: stats.speed, size: stats.size,
@@ -460,7 +475,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateEnemies(dt: number, ms: number): void {
-    for (const enemy of this.enemyList) {
+    for (let i = this.enemyList.length - 1; i >= 0; i--) {
+      const enemy = this.enemyList[i];
       if (!enemy.alive) continue;
       const dx = this.player.x - enemy.x;
       const dy = this.player.y - enemy.y;
@@ -468,6 +484,10 @@ export class GameScene extends Phaser.Scene {
       enemy.slowMs = Math.max(0, enemy.slowMs - ms);
       enemy.attackCooldownMs -= ms;
       const special = enemy.kind === 'leaper' || enemy.kind === 'spitter' || enemy.kind === 'boss';
+      if (enemy.kind === 'bomber' && distance < 110 && enemy.windupMs <= 0) {
+        enemy.windupMs = 850; // visible blast radius; moving out or killing it prevents damage
+        enemy.warning?.setVisible(true);
+      }
       if (special && enemy.attackCooldownMs <= 0 && enemy.windupMs <= 0) {
         enemy.windupMs = enemy.kind === 'boss' ? 900 : enemy.kind === 'spitter' ? 700 : 530;
         enemy.warning?.setVisible(true);
@@ -477,6 +497,11 @@ export class GameScene extends Phaser.Scene {
         enemy.warning?.setPosition(enemy.x, enemy.y);
         if (enemy.windupMs <= 0) {
           enemy.warning?.setVisible(false);
+          if (enemy.kind === 'bomber') {
+            this.detonateBomber(enemy);
+            if (!this.active) return;
+            continue;
+          }
           if (enemy.kind === 'spitter') this.spitAcid(enemy);
           if (enemy.kind === 'leaper' || enemy.kind === 'boss') {
             const leap = enemy.kind === 'boss' ? 125 : 102;
@@ -500,20 +525,35 @@ export class GameScene extends Phaser.Scene {
       if (enemy.flashTime > 0) {
         enemy.flashTime -= ms;
         if (enemy.flashTime <= 0) {
-          const tint = enemy.kind === 'grunt' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
+          const tint = enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
           enemy.sprite.setTint(tint);
         }
       }
-      if (distance < 19 + enemy.size * 14 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) {
+      if (enemy.kind !== 'bomber' && distance < 19 + enemy.size * 14 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) {
         this.hurt(enemy.kind === 'boss' ? 2 : 1);
         if (!this.active) return;
       }
     }
   }
 
+  /** The red warning zone is dangerous only when its 850ms fuse expires. */
+  private detonateBomber(enemy: Enemy): void {
+    enemy.alive = false;
+    enemy.sprite.destroy();
+    enemy.shadow.destroy();
+    enemy.warning?.destroy();
+    const index = this.enemyList.indexOf(enemy);
+    if (index >= 0) this.enemyList.splice(index, 1);
+    this.spawnSparks(enemy.x, enemy.y, 20, 0xff6489, 230);
+    const distance = Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y);
+    if (distance < 260) this.cameras.main.shake(100, 0.002);
+    if (distance <= 105 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) this.hurt(2);
+  }
+
   private weaponDamage(base: number): number {
     const mobileAfterglow = this.build.afterglow && !this.deployed && this.timeMs - this.lastDeployedMs < 1200;
-    return base * this.build.damage * (this.deployed ? GAMEPLAY.deployDamageMultiplier : mobileAfterglow ? 1.15 : 1);
+    return base * this.build.damage * streakDamageMultiplier(this.streak, this.build.frenzy)
+      * (this.deployed ? GAMEPLAY.deployDamageMultiplier : mobileAfterglow ? 1.15 : 1);
   }
 
   private weaponInterval(base: number): number {
@@ -659,7 +699,9 @@ export class GameScene extends Phaser.Scene {
 
   private damageEnemy(enemy: Enemy, damage: number): void {
     if (!enemy.alive) return;
-    enemy.hp -= damage;
+    const critical = this.build.criticalChance > 0 && Math.random() < this.build.criticalChance;
+    enemy.hp -= critical ? damage * 2 : damage;
+    if (critical) this.spawnSparks(enemy.x, enemy.y, 4, 0xffed92, 145);
     if (enemy.hp > 0) {
       enemy.flashTime = 78;
       enemy.sprite.setTint(0xf5fff6);
@@ -670,7 +712,7 @@ export class GameScene extends Phaser.Scene {
     enemy.shadow.destroy();
     enemy.warning?.destroy();
     this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : 7, 0x9ce281, 190);
-    this.kills++;
+    this.registerKill();
     if (this.kills % 3 === 0) this.soundFx.kill();
     if (this.lockedTarget === enemy) this.lockedTarget = null;
     const index = this.enemyList.indexOf(enemy);
@@ -689,11 +731,31 @@ export class GameScene extends Phaser.Scene {
           other.sprite.destroy(); other.shadow.destroy(); other.warning?.destroy();
           this.enemyList.splice(this.enemyList.indexOf(other), 1);
           if (other.kind === 'boss') this.bossKilled = true;
-          this.kills++;
+          this.registerKill();
           this.spawnSparks(other.x, other.y, 5, 0xffbb6b, 180);
         }
       }
       this.spawnSparks(enemy.x, enemy.y, 13, 0xffad62, 220);
+    }
+  }
+
+  private registerKill(): void {
+    this.kills++;
+    this.streak = advanceStreak(this.streak, this.lastKillMs, this.timeMs);
+    this.lastKillMs = this.timeMs;
+    this.bestStreak = Math.max(this.bestStreak, this.streak);
+    if (this.streak === 5 || this.streak === 10 || this.streak === 20) {
+      this.spawnSparks(this.player.x, this.player.y, 13, 0xffd075, 180);
+      this.introHint.setText(`${this.streak} 连杀 · 火力增幅！`).setAlpha(1);
+      this.introFadeMs = 1500;
+    }
+    if (this.build.salvage && ++this.salvageKills >= 20) {
+      this.salvageKills = 0;
+      if (this.hp < this.build.maxHp) {
+        this.hp++;
+        this.build.hp = this.hp;
+        this.spawnSparks(this.player.x, this.player.y, 9, 0x75ffe0, 155);
+      }
     }
   }
 
@@ -730,6 +792,7 @@ export class GameScene extends Phaser.Scene {
 
   private hurt(amount = 1): void {
     this.lastHurtMs = this.timeMs;
+    this.streak = 0; // losing armor also breaks the combo, even if Bulwark absorbs it
     if (this.deployed && this.build.bulwark && Math.random() < 0.4) {
       this.spawnSparks(this.player.x, this.player.y, 7, 0x9cdaff, 130);
       return;
@@ -763,7 +826,10 @@ export class GameScene extends Phaser.Scene {
 
   private updateHUD(): void {
     this.clockLabel.setText(formatTime(this.timeMs / 1000));
-    this.killLabel.setText(`击杀 ${String(this.kills).padStart(3, '0')}`);
+    const combo = this.streak >= 5
+      ? ` · ${this.streak}连杀 ×${streakDamageMultiplier(this.streak, this.build.frenzy).toFixed(2)}`
+      : this.streak >= 2 ? ` · ${this.streak}连杀` : '';
+    this.killLabel.setText(`击杀 ${String(this.kills).padStart(3, '0')}${combo}`);
     const wave = WAVES[this.waveNumber - 1];
     const remaining = Math.max(0, Math.ceil((wave.durationMs - this.waveElapsedMs) / 1000));
     this.waveLabel.setText(this.waveNumber === 5
