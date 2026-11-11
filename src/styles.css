@@ -308,3 +308,14 @@ h1{
   .level-overlay .reward-card-name{font-size:12px}
   .level-overlay .reward-card-description{font-size:10px}
 }
+
+/* M5.2 — lightweight training choices are made outside combat, never mid-wave. */
+.training-controls{display:grid;gap:7px;text-align:left;margin:8px 0 14px;padding:11px 13px;border:1px solid #4b817d66;border-radius:10px;background:#102c347a}
+.training-controls label,.wave-training>span{font-size:11px;font-weight:800;letter-spacing:.08em;color:#d5eddf}
+.training-controls small{font-size:10px;color:#8dafb1;line-height:1.5}
+.training-controls select,.wave-training select{display:block;width:100%;min-width:0;border:1px solid #537977;border-radius:7px;background:#142e37;color:#e6f7e8;font:inherit;font-size:12px;padding:8px}
+.training-controls select:focus-visible,.wave-training select:focus-visible{outline:2px solid #e7be78;outline-offset:2px}
+.wave-training{width:min(100%,420px);display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-top:12px;padding:10px 12px;border:1px solid #4d74706b;border-radius:9px;background:#0d2730a9}
+.wave-training>span{grid-column:1/-1;text-align:center;padding-bottom:3px}
+.wave-training label{font-size:10px;color:#97b9b4}
+@media(max-height:690px){.training-controls{margin:4px 0 8px;padding:7px 10px}.wave-training{margin-top:7px;padding:7px 10px}}
