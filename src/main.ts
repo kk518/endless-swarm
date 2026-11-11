@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameScene, type RewardOffer, type RunResult } from './game/GameScene';
+import { GameScene, type RewardOffer, type RunResult, type LevelOffer } from './game/GameScene';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
@@ -32,6 +32,9 @@ const muteButton = document.querySelector<HTMLButtonElement>('#mute-button')!;
 const rewardOverlay = document.querySelector<HTMLElement>('#reward-overlay')!;
 const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
 const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
+const levelOverlay = document.querySelector<HTMLElement>('#level-overlay')!;
+const levelTitle = document.querySelector<HTMLElement>('#level-title')!;
+const levelCards = document.querySelector<HTMLElement>('#level-cards')!;
 const cardCategory: Record<string, string> = {
   weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
 };
@@ -45,15 +48,56 @@ function beginRun(): void {
   }
   scene.startRun();
   rewardOverlay.classList.add('is-hidden');
+  levelOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
   document.querySelector<HTMLElement>('#game')?.focus();
 }
 
 startButton.addEventListener('click', beginRun);
 
+window.addEventListener('swarm:levelup', (event) => {
+  const offer = (event as CustomEvent<LevelOffer>).detail;
+  rewardOverlay.classList.add('is-hidden');
+  levelTitle.textContent = `战地升级 · LV.${offer.level}`;
+  levelCards.replaceChildren();
+  for (const [index, choice] of offer.options.entries()) {
+    const button = document.createElement('button');
+    button.className = 'reward-card';
+    button.dataset.category = choice.category;
+    button.type = 'button';
+    const serial = document.createElement('span');
+    serial.className = 'reward-card-serial';
+    serial.textContent = `TACTIC / 0${index + 1}`;
+    const icon = document.createElement('span');
+    icon.className = 'reward-card-icon'; icon.textContent = choice.icon;
+    const name = document.createElement('strong');
+    name.className = 'reward-card-name'; name.textContent = choice.name;
+    const description = document.createElement('span');
+    description.className = 'reward-card-description'; description.textContent = choice.description;
+    const category = document.createElement('span');
+    category.className = 'reward-card-category';
+    category.textContent = choice.category === 'evolution' ? '武器进化' : choice.category === 'weapon' ? '武器等级' : '战术校准';
+    button.append(serial, icon, name, description, category);
+    button.addEventListener('click', () => {
+      // If multiple levels are queued, chooseLevelUpgrade synchronously emits the next offer.
+      // Hide the old selection *before* that event to keep the next modal visible.
+      levelOverlay.classList.add('is-hidden');
+      if (!scene.chooseLevelUpgrade(choice.id)) {
+        levelOverlay.classList.remove('is-hidden');
+        return;
+      }
+      document.querySelector<HTMLElement>('#game')?.focus();
+    });
+    levelCards.append(button);
+  }
+  levelOverlay.classList.remove('is-hidden');
+  levelCards.querySelector('button')?.focus();
+});
+
 window.addEventListener('swarm:reward', (event) => {
   const offer = (event as CustomEvent<RewardOffer>).detail;
-  rewardTitle.textContent = `第 ${offer.wave} 波完成 · 三选一`;
+  levelOverlay.classList.add('is-hidden');
+  rewardTitle.textContent = `第 ${offer.wave} 波完成 · 战术模块三选一`;
   rewardCards.replaceChildren();
   for (const [i, card] of offer.options.entries()) {
     const button = document.createElement('button');
@@ -84,7 +128,7 @@ window.addEventListener('swarm:reward', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, weapons, bestStreak } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, weapons, bestStreak, level, evolutions } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
   subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
@@ -95,11 +139,12 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
+  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
   rewardOverlay.classList.add('is-hidden');
+  levelOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
 });
 
