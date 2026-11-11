@@ -4,7 +4,7 @@ import { FACTION_COLORS, HIVE_GORE, HIVE_TEXTURE } from './artStyle';
 import { bodyOffset, visibleLoadout, visualPowerTier, WEAPON_LIGHT, WEAPON_MOUNTS, type MountedWeapon } from './weaponVisual';
 import { SoundFx } from './Sound';
 import {
-  applyLevelChoice, grantExperience, installWeaponCalibration, killExperience, newGrowth,
+  applyLevelChoice, evolutionRecipeTargets, grantExperience, installWeaponCalibration, killExperience, newGrowth,
   rollLevelChoices, weaponTuning, xpToNext, MAX_RUN_LEVEL,
   type GrowthState, type LevelChoice, type LevelChoiceId,
 } from './arsenal';
@@ -686,7 +686,7 @@ export class GameScene extends Phaser.Scene {
     this.releaseJoystick();
     this.removeProjectilesAndEnemies();
     this.lockedTarget = null;
-    this.rewardOptions = rollCards(this.build, this.waveNumber);
+    this.rewardOptions = rollCards(this.build, this.waveNumber, Math.random, evolutionRecipeTargets(this.build, this.growth));
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
     };
