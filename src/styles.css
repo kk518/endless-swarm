@@ -270,3 +270,41 @@ h1{
   .reward-card-name{font-size:12px}
   .reward-card-icon{width:38px;height:42px;font-size:25px}
 }
+
+
+/* M5: XP progression uses the existing tactical terminal vocabulary.
+   Selection is a full pause; short screens can scroll to reach all three cards. */
+.level-overlay {
+  z-index: 9;
+  background:
+    radial-gradient(ellipse at 25% 12%,rgba(91,179,163,.16),transparent 52%),
+    radial-gradient(ellipse at 82% 80%,rgba(241,168,94,.10),transparent 54%),
+    linear-gradient(160deg,#0c1b24 0%,#152c34 65%,#09141c 100%);
+}
+.level-overlay .reward-header { border-left-color:#79d9ce }
+.level-overlay .reward-kicker { color:#8ae8d8 }
+.level-overlay .reward-header p { color:#c9d7ca }
+.level-overlay .reward-card { min-height:195px }
+.level-overlay .reward-card[data-category="core"] { border-color:#689c9b }
+.level-overlay .reward-card[data-category="evolution"] {
+  border-color:#f5ae70;
+  border-top:4px solid #ffd491;
+  background:linear-gradient(155deg,#65422e,#23343a 75%);
+  box-shadow:inset 0 2px #ffd39038,0 8px 0 #08141c;
+}
+.level-overlay .reward-card[data-category="evolution"] .reward-card-icon { color:#ffe2a4 }
+.level-overlay .reward-card[data-category="evolution"] .reward-card-name { color:#ffe4bd }
+.level-overlay .reward-footer { color:#91c8be }
+.run-stats { grid-template-columns:repeat(3,minmax(0,1fr)) }
+@media(max-height:720px) {
+  .level-overlay { justify-content:flex-start; padding-top:20px;padding-bottom:30px }
+  .level-overlay .reward-card{ min-height:158px;gap:5px }
+  .level-overlay .reward-card-icon{width:40px;height:40px;font-size:27px}
+  .level-overlay .reward-header{margin-bottom:12px}
+  .level-overlay .reward-footer{margin-top:12px}
+}
+@media(max-width:375px) {
+  .level-overlay .reward-card{padding:10px 5px}
+  .level-overlay .reward-card-name{font-size:12px}
+  .level-overlay .reward-card-description{font-size:10px}
+}
