@@ -56,3 +56,7 @@ M0 稳定性改动位于 `feature/m0-stability-fixes`（PR #3）。M1 基于该�
 ## 版权与部署
 
 原创画面为代码生成的几何纹理，无第三方游戏素材。请勿直接使用其他作品的角色名称、纹理或商标素材。静态产物可以使用 Nginx 子路径部署；**不会自动改动旧游戏的地址**。
+
+## 自动部署
+
+复用旧项目 GitHub Actions → SSH/rsync 的 CI/CD：仅在 `main` 更新或手动触发时，构建并发布到独立的 `/var/www/endless-swarm/`，建议公开地址 `https://kk518.top/swarm/`。配置需要新仓库的 SSH Secrets 和服务器 Nginx 路由；缺少配置时自动跳过发布，不影响旧游戏。详见 [部署说明](docs/DEPLOYMENT.md)。
