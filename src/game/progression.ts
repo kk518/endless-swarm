@@ -34,9 +34,9 @@ export interface CardDef {
 }
 
 export const CARDS: readonly CardDef[] = [
-  { id: 'scatter-kit', name: '散射炮组件', description: '解锁近距离扇形散射炮', icon: '✦', category: 'weapon', weapon: 'scatter' },
-  { id: 'arc-kit', name: '电弧线圈', description: '解锁连续跳跃的闪电链', icon: 'ϟ', category: 'weapon', weapon: 'arc' },
-  { id: 'flame-kit', name: '喷火模块', description: '解锁前方持续范围火焰', icon: '♨', category: 'weapon', weapon: 'flame' },
+  { id: 'scatter-kit', name: '散射炮组件', description: '安装左肩散射炮 · 五发近距离轰击', icon: '✦', category: 'weapon', weapon: 'scatter' },
+  { id: 'arc-kit', name: '电弧线圈', description: '安装右肩电弧线圈 · 连锁闪电', icon: 'ϟ', category: 'weapon', weapon: 'arc' },
+  { id: 'flame-kit', name: '喷火模块', description: '安装背部喷焰器 · 扇形燃烧', icon: '♨', category: 'weapon', weapon: 'flame' },
   { id: 'feed', name: '高速供弹', description: '所有武器攻击频率 +25%（叠加生效）', icon: '➟', category: 'assault' },
   { id: 'warhead', name: '强化弹头', description: '所有武器伤害 +25%（叠加生效）', icon: '◆', category: 'assault' },
   { id: 'pierce', name: '穿甲弹', description: '电磁步枪与散射炮子弹额外穿透 1 只虫', icon: '⇢', category: 'assault' },
@@ -115,7 +115,8 @@ export function eligibleCards(build: RunBuild): CardDef[] {
 export function rollCards(build: RunBuild, rewardNumber: number, random: () => number = Math.random): CardDef[] {
   const pool = eligibleCards(build);
   const chosen: CardDef[] = [];
-  if (rewardNumber <= 2) {
+  if (rewardNumber <= 4) {
+    // Every reward can present a new visible hardpoint, not only the first two.
     const newWeapons = pool.filter(card => card.weapon);
     if (newWeapons.length > 0) {
       const index = Math.min(newWeapons.length - 1, Math.floor(Math.max(0, random()) * newWeapons.length));
