@@ -80,7 +80,7 @@ export interface RewardOffer { wave: number; options: CardDef[]; nextWave: numbe
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Image;
-  private playerShadow!: Phaser.GameObjects.Arc;
+  private playerShadow!: Phaser.GameObjects.Ellipse;
   private deploymentBraces!: Phaser.GameObjects.Graphics;
   private floorScars!: Phaser.GameObjects.Graphics;
   private scarCount = 0;
