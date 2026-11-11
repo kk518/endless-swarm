@@ -5,9 +5,9 @@ import {
   pickEnemyKind, rollCards, WAVES,
 } from '../src/game/progression.ts';
 
-test('M2 retains five waves, adds three unique cards, and keeps the boss finale', () => {
+test('M3 retains five waves, expands to 22 cards, and keeps the boss finale', () => {
   assert.equal(WAVES.length, 5);
-  assert.equal(CARDS.length, 19);
+  assert.equal(CARDS.length, 22);
   assert.equal(new Set(CARDS.map(card => card.id)).size, CARDS.length);
   for (const wave of WAVES) {
     assert.ok(wave.durationMs > 0);
@@ -113,4 +113,21 @@ test('M2 frenzy, salvage and critical cards honor eligibility and cap', () => {
   ));
   assert.equal(newBuild().criticalChance, 0);
   assert.equal(newBuild().salvage, false);
+});
+
+test('M3 supply synergies unlock once and reset with a fresh run', () => {
+  const build = newBuild();
+  for (const [id, flag] of [
+    ['supply-magnet', 'supplyMagnet'], ['surge-cell', 'surgeCell'], ['emp-array', 'empArray'],
+  ] as const) {
+    assert.equal(applyCard(build, id), true);
+    assert.equal(build[flag], true);
+    assert.equal(applyCard(build, id), false);
+    assert.ok(!eligibleCards(build).some(card => card.id === id));
+  }
+  const clean = newBuild();
+  assert.equal(clean.supplyMagnet, false);
+  assert.equal(clean.surgeCell, false);
+  assert.equal(clean.empArray, false);
+  assert.ok(rollCards(clean, 1, () => 0.5).some(card => card.weapon));
 });

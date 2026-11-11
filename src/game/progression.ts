@@ -5,7 +5,8 @@ export type CardId =
   | 'scatter-kit' | 'arc-kit' | 'flame-kit' | 'feed' | 'warhead' | 'pierce'
   | 'chain-blast' | 'radius' | 'thrusters' | 'cryogenic' | 'afterglow'
   | 'fast-braces' | 'overload' | 'bulwark' | 'repair' | 'plating'
-  | 'frenzy' | 'salvage' | 'critical-core';
+  | 'frenzy' | 'salvage' | 'critical-core'
+  | 'supply-magnet' | 'surge-cell' | 'emp-array';
 
 export interface WaveDef {
   number: number;
@@ -52,6 +53,9 @@ export const CARDS: readonly CardDef[] = [
   { id: 'frenzy', name: '战斗狂热', description: '连杀伤害增幅每档从 10% 提升至 15%', icon: '✷', category: 'assault' },
   { id: 'salvage', name: '战地回收', description: '获得后每击杀 20 只虫恢复 1 点装甲', icon: '⚒', category: 'survival' },
   { id: 'critical-core', name: '弱点扫描', description: '每级增加 14% 双倍暴击概率，最高 42%', icon: '◈', category: 'assault' },
+  { id: 'supply-magnet', name: '磁力回收臂', description: '补给品拾取范围扩大至 1.8 倍', icon: '⊕', category: 'mobile' },
+  { id: 'surge-cell', name: '聚变蓄能器', description: '超频补给持续时间从 8.5 秒提升至 13 秒', icon: '⚡', category: 'assault' },
+  { id: 'emp-array', name: '脉冲阵列', description: 'EMP 补给的伤害和影响范围显著提升', icon: '✺', category: 'assault' },
 ];
 
 export interface RunBuild {
@@ -70,6 +74,9 @@ export interface RunBuild {
   frenzy: boolean;
   salvage: boolean;
   criticalChance: number;
+  supplyMagnet: boolean;
+  surgeCell: boolean;
+  empArray: boolean;
   maxHp: number;
   hp: number;
   selected: CardId[];
@@ -80,7 +87,8 @@ export function newBuild(): RunBuild {
     weapons: ['rifle'], damage: 1, rate: 1, speed: 1, range: 1, pierce: 0,
     explosionChance: 0, frost: false, afterglow: false, deployDelay: 1,
     overload: false, bulwark: false, frenzy: false, salvage: false,
-    criticalChance: 0, maxHp: 6, hp: 6, selected: [],
+    criticalChance: 0, supplyMagnet: false, surgeCell: false, empArray: false,
+    maxHp: 6, hp: 6, selected: [],
   };
 }
 
@@ -93,6 +101,9 @@ export function eligibleCards(build: RunBuild): CardDef[] {
     if (card.id === 'overload' && build.overload) return false;
     if (card.id === 'bulwark' && build.bulwark) return false;
     if (card.id === 'frenzy' && build.frenzy) return false;
+    if (card.id === 'supply-magnet' && build.supplyMagnet) return false;
+    if (card.id === 'surge-cell' && build.surgeCell) return false;
+    if (card.id === 'emp-array' && build.empArray) return false;
     if (card.id === 'salvage' && build.salvage) return false;
     if (card.id === 'critical-core' && build.criticalChance >= 0.42 - 1e-6) return false;
     if (card.id === 'chain-blast' && build.explosionChance >= 0.66) return false;
@@ -141,6 +152,9 @@ export function applyCard(build: RunBuild, cardId: CardId): boolean {
     case 'frenzy': build.frenzy = true; break;
     case 'salvage': build.salvage = true; break;
     case 'critical-core': build.criticalChance = Math.min(0.42, build.criticalChance + 0.14); break;
+    case 'supply-magnet': build.supplyMagnet = true; break;
+    case 'surge-cell': build.surgeCell = true; break;
+    case 'emp-array': build.empArray = true; break;
   }
   build.selected.push(cardId);
   return true;

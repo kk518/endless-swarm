@@ -10,6 +10,10 @@ import {
   type CardDef, type CardId, type EnemyKind, type RunBuild, type WeaponId,
 } from './progression';
 import { advanceStreak, streakActive, streakDamageMultiplier } from './streak';
+import {
+  canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
+  SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
+} from './supplies';
 
 const VIEW_W = 450;
 const WORLD = 2300;
@@ -18,6 +22,8 @@ const JOYSTICK_RANGE = 57;
 
 type Enemy = {
   kind: EnemyKind;
+  elite: boolean;
+  eliteAura: Phaser.GameObjects.Arc | null;
   x: number;
   y: number;
   alive: boolean;
@@ -48,6 +54,11 @@ type Bullet = {
 
 type Acid = { x: number; y: number; vx: number; vy: number; remainingMs: number; sprite: Phaser.GameObjects.Image };
 
+type SupplyDrop = {
+  kind: SupplyKind; x: number; y: number; remainingMs: number;
+  sprite: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Arc;
+};
+
 type Particle = {
   x: number;
   y: number;
@@ -74,6 +85,10 @@ export class GameScene extends Phaser.Scene {
   private bullets: Bullet[] = [];
   private acids: Acid[] = [];
   private particles: Particle[] = [];
+  private supplies: SupplyDrop[] = [];
+  private supplyElapsedMs = 0;
+  private overclockMs = 0;
+  private suppliesCollected = 0;
   private lockedTarget: Enemy | null = null;
   private soundFx = new SoundFx();
   private active = false;
@@ -114,6 +129,7 @@ export class GameScene extends Phaser.Scene {
   private stateLabel!: Phaser.GameObjects.Text;
   private waveLabel!: Phaser.GameObjects.Text;
   private modeHint!: Phaser.GameObjects.Text;
+  private buffLabel!: Phaser.GameObjects.Text;
   private introHint!: Phaser.GameObjects.Text;
   private introFadeMs = 0;
 
@@ -173,6 +189,9 @@ export class GameScene extends Phaser.Scene {
     this.timeMs = 0;
     this.simAccumulatorMs = 0;
     this.spawnAccumulator = 500;
+    this.supplyElapsedMs = 0;
+    this.overclockMs = 0;
+    this.suppliesCollected = 0;
     this.weaponCooldowns = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
     this.waveNumber = 1;
     this.waveElapsedMs = 0;
@@ -214,6 +233,8 @@ export class GameScene extends Phaser.Scene {
     this.build.hp = this.hp;
     this.waveNumber++;
     this.waveElapsedMs = 0;
+    this.supplyElapsedMs = 0;
+    this.overclockMs = 0;
     this.spawnAccumulator = 800;
     this.weaponCooldowns = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
     this.bossSpawned = false;
@@ -241,6 +262,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.ready) return;
     this.stateLabel.setY(this.scale.height - 123);
     this.modeHint.setY(this.scale.height - 99);
+    this.buffLabel.setY(this.scale.height - 158);
     this.introHint.setY(this.scale.height - 195);
     this.releaseJoystick();
     this.updateHUD();
@@ -287,6 +309,7 @@ export class GameScene extends Phaser.Scene {
     this.waveLabel = this.hudText(VIEW_W / 2, 90, '第 1 / 5 波', '16px', '#ffcd91').setOrigin(0.5, 0);
     this.stateLabel = this.hudText(VIEW_W / 2, this.scale.height - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
     this.modeHint = this.hudText(VIEW_W / 2, this.scale.height - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
+    this.buffLabel = this.hudText(VIEW_W / 2, this.scale.height - 158, '', '16px', '#91eaf8').setOrigin(0.5, 0.5);
     this.introHint = this.hudText(VIEW_W / 2, this.scale.height - 195, '', '16px', '#fcdb9b').setOrigin(0.5, 0.5);
     this.crosshair = this.add.circle(0, 0, 13, 0x79ffe9, 0).setStrokeStyle(1.4, 0x70ffe2, 0.6)
       .setDepth(5).setVisible(false);
@@ -363,6 +386,7 @@ export class GameScene extends Phaser.Scene {
     const dt = ms / 1000;
     this.timeMs += ms;
     this.waveElapsedMs += ms;
+    this.overclockMs = Math.max(0, this.overclockMs - ms);
     if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
     this.introFadeMs -= ms;
     if (this.introFadeMs < 1200) this.introHint.setAlpha(Phaser.Math.Clamp(this.introFadeMs / 1200, 0, 1));
@@ -409,12 +433,22 @@ export class GameScene extends Phaser.Scene {
     this.updateAcids(dt, ms);
     if (!this.active) return;
     this.updateParticles(dt, ms);
+    this.updateSupplies(ms);
+    this.supplyElapsedMs += ms;
+    if (this.supplyElapsedMs >= SUPPLY_PERIOD_MS) {
+      this.supplyElapsedMs -= SUPPLY_PERIOD_MS;
+      this.spawnSupplyNearPlayer();
+    }
     this.spawnAccumulator += ms;
     const wave = WAVES[this.waveNumber - 1];
     const spawnEvery = this.waveNumber === 1 ? Math.min(spawnIntervalMs(this.timeMs / 1000), wave.spawnIntervalMs) : wave.spawnIntervalMs;
     if (this.spawnAccumulator >= spawnEvery) {
       this.spawnAccumulator = 0;
-      if (this.enemyList.length < wave.maxEnemies) this.spawnEnemy(pickEnemyKind(wave));
+      if (this.enemyList.length < wave.maxEnemies) {
+        const kind = pickEnemyKind(wave);
+        const eliteCount = this.enemyList.reduce((count, enemy) => count + Number(enemy.elite && enemy.alive), 0);
+        this.spawnEnemy(kind, canSpawnElite(this.waveNumber, kind, eliteCount));
+      }
     }
     if (this.waveNumber === 5 && !this.bossSpawned && this.waveElapsedMs > 2500) {
       this.bossSpawned = this.spawnEnemy('boss');
@@ -443,7 +477,7 @@ export class GameScene extends Phaser.Scene {
     window.dispatchEvent(new CustomEvent<RewardOffer>('swarm:reward', { detail }));
   }
 
-  private spawnEnemy(kind: EnemyKind): boolean {
+  private spawnEnemy(kind: EnemyKind, elite = false): boolean {
     const angle = Math.random() * Math.PI * 2;
     const radius = kind === 'boss' ? 315 : 430 + Math.random() * 140;
     const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * radius, 40, WORLD - 40);
@@ -457,18 +491,26 @@ export class GameScene extends Phaser.Scene {
       spitter: { hp: 65, speed: 47, size: 1.05, color: 0xb3ee83 },
       boss: { hp: 1500, speed: 46, size: 3.0, color: 0xe99578 },
     };
-    const stats = def[kind];
+    const base = def[kind];
+    const stats = elite
+      ? { ...base, hp: Math.round(base.hp * 2.3), speed: base.speed * 1.12, size: base.size * 1.2 }
+      : base;
     const shadow = this.add.circle(x, y + 13, 17 * stats.size, 0x020e12, 0.35).setScale(1, 0.4).setDepth(0);
+    const eliteAura = elite
+      ? this.add.circle(x, y, 27 * stats.size, 0xffc166, 0.07)
+          .setStrokeStyle(3, 0xffc978, 0.8).setDepth(3)
+      : null;
     const sprite = this.add.image(x, y, kind === 'boss' ? 'broodlord' : kind === 'bomber' ? 'bomber' : 'crawler')
       .setScale(stats.size).setDepth(kind === 'boss' ? 6 : 5);
-    if (stats.color !== 0xffffff) sprite.setTint(stats.color);
+    if (elite) sprite.setTint(0xffdf9b);
+    else if (stats.color !== 0xffffff) sprite.setTint(stats.color);
     const warning = kind === 'leaper' || kind === 'spitter' || kind === 'boss' || kind === 'bomber'
       ? this.add.circle(x, y, kind === 'boss' ? 65 : kind === 'bomber' ? 105 : 26,
         kind === 'bomber' ? 0xff537e : 0xff745c, kind === 'bomber' ? 0.17 : 0.13)
         .setStrokeStyle(2, kind === 'bomber' ? 0xff7596 : 0xffa271, 0.7).setDepth(2).setVisible(false)
       : null;
     this.enemyList.push({
-      kind, x, y, alive: true, hp: stats.hp, speed: stats.speed, size: stats.size,
+      kind, elite, eliteAura, x, y, alive: true, hp: stats.hp, speed: stats.speed, size: stats.size,
       sprite, shadow, warning, flashTime: 0, slowMs: 0, attackCooldownMs: 1900 + Math.random() * 1500, windupMs: 0,
     });
     return true;
@@ -521,16 +563,17 @@ export class GameScene extends Phaser.Scene {
       }
       enemy.sprite.setPosition(enemy.x, enemy.y);
       enemy.shadow.setPosition(enemy.x, enemy.y + 14 * enemy.size);
+      enemy.eliteAura?.setPosition(enemy.x, enemy.y).setAlpha(0.65 + Math.sin(this.timeMs / 260) * 0.25);
       enemy.sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
       if (enemy.flashTime > 0) {
         enemy.flashTime -= ms;
         if (enemy.flashTime <= 0) {
-          const tint = enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
+          const tint = enemy.elite ? 0xffdf9b : enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
           enemy.sprite.setTint(tint);
         }
       }
       if (enemy.kind !== 'bomber' && distance < 19 + enemy.size * 14 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) {
-        this.hurt(enemy.kind === 'boss' ? 2 : 1);
+        this.hurt(enemy.kind === 'boss' || enemy.elite ? 2 : 1);
         if (!this.active) return;
       }
     }
@@ -542,6 +585,7 @@ export class GameScene extends Phaser.Scene {
     enemy.sprite.destroy();
     enemy.shadow.destroy();
     enemy.warning?.destroy();
+    enemy.eliteAura?.destroy();
     const index = this.enemyList.indexOf(enemy);
     if (index >= 0) this.enemyList.splice(index, 1);
     this.spawnSparks(enemy.x, enemy.y, 20, 0xff6489, 230);
@@ -558,7 +602,8 @@ export class GameScene extends Phaser.Scene {
 
   private weaponInterval(base: number): number {
     const overdriveBonus = this.deployed && this.build.overload && this.overloadMs < 3000 ? 1.4 : 1;
-    return base / (this.build.rate * (this.deployed ? GAMEPLAY.deployRateMultiplier : 1) * overdriveBonus);
+    return base / (this.build.rate * (this.deployed ? GAMEPLAY.deployRateMultiplier : 1) * overdriveBonus
+      * (this.overclockMs > 0 ? 1.45 : 1));
   }
 
   private updateWeapons(ms: number): void {
@@ -711,6 +756,8 @@ export class GameScene extends Phaser.Scene {
     enemy.sprite.destroy();
     enemy.shadow.destroy();
     enemy.warning?.destroy();
+    enemy.eliteAura?.destroy();
+    if (enemy.elite) this.spawnSupply(enemy.x, enemy.y);
     this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : 7, 0x9ce281, 190);
     this.registerKill();
     if (this.kills % 3 === 0) this.soundFx.kill();
@@ -728,7 +775,8 @@ export class GameScene extends Phaser.Scene {
         if (other.hp <= 0) {
           // Explosive kills cannot trigger additional explosions.
           other.alive = false;
-          other.sprite.destroy(); other.shadow.destroy(); other.warning?.destroy();
+          other.sprite.destroy(); other.shadow.destroy(); other.warning?.destroy(); other.eliteAura?.destroy();
+          if (other.elite) this.spawnSupply(other.x, other.y);
           this.enemyList.splice(this.enemyList.indexOf(other), 1);
           if (other.kind === 'boss') this.bossKilled = true;
           this.registerKill();
@@ -737,6 +785,85 @@ export class GameScene extends Phaser.Scene {
       }
       this.spawnSparks(enemy.x, enemy.y, 13, 0xffad62, 220);
     }
+  }
+
+  /** Elite kills drop supplies; periodic drops also reward moving around the arena. */
+  private spawnSupplyNearPlayer(): void {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 145 + Math.random() * 90;
+    const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * radius, 65, WORLD - 65);
+    const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * radius, 65, WORLD - 65);
+    this.spawnSupply(x, y);
+  }
+
+  private spawnSupply(x: number, y: number): void {
+    if (this.supplies.length >= MAX_SUPPLIES) return;
+    const kind = rollSupplyKind(this.hp < this.build.maxHp);
+    const color = kind === 'repair' ? 0x77f5a9 : kind === 'overclock' ? 0xffd073 : 0x88baff;
+    const glow = this.add.circle(x, y, 30, color, 0.10).setStrokeStyle(2, color, 0.65).setDepth(2);
+    const sprite = this.add.image(x, y, 'supply').setTint(color).setDepth(4);
+    this.supplies.push({ x, y, kind, remainingMs: SUPPLY_TTL_MS, sprite, glow });
+    this.spawnSparks(x, y, 5, color, 85);
+  }
+
+  private updateSupplies(ms: number): void {
+    for (let i = this.supplies.length - 1; i >= 0; i--) {
+      const item = this.supplies[i];
+      item.remainingMs -= ms;
+      const dx = item.x - this.player.x;
+      const dy = item.y - this.player.y;
+      if (withinPickupReach(dx * dx + dy * dy, this.build.supplyMagnet)) {
+        this.supplies.splice(i, 1);
+        item.glow.destroy();
+        item.sprite.destroy();
+        this.activateSupply(item.kind);
+      } else if (item.remainingMs <= 0) {
+        this.supplies.splice(i, 1);
+        item.glow.destroy();
+        item.sprite.destroy();
+      } else {
+        const fade = Math.min(1, item.remainingMs / 2400);
+        item.glow.setAlpha((0.55 + Math.sin(this.timeMs / 250) * 0.25) * fade);
+        item.sprite.setAlpha(fade);
+        item.sprite.setRotation(this.timeMs / 1800);
+      }
+    }
+  }
+
+  private activateSupply(kind: SupplyKind): void {
+    this.suppliesCollected++;
+    let message = '';
+    let color = 0xffffff;
+    if (kind === 'repair') {
+      this.hp = Math.min(this.build.maxHp, this.hp + 2);
+      this.build.hp = this.hp;
+      message = '装甲修复 +2';
+      color = 0x79ffd0;
+    } else if (kind === 'overclock') {
+      this.overclockMs = Math.max(this.overclockMs, overclockDurationMs(this.build.surgeCell));
+      message = '超频加速 · 射速 +45%';
+      color = 0xffda79;
+    } else {
+      const stats = empStats(this.build.empArray);
+      const pulse = this.add.circle(this.player.x, this.player.y, stats.radius, 0x8aafff, 0.12)
+        .setStrokeStyle(4, 0xa6cbff, 0.8).setDepth(4).setScale(0.4);
+      this.tweens.add({
+        targets: pulse, scaleX: 1, scaleY: 1, alpha: 0,
+        duration: 320, onComplete: () => pulse.destroy(),
+      });
+      // Snapshot avoids iterator invalidation when EMP triggers weapon explosions.
+      for (const enemy of [...this.enemyList]) {
+        if (!enemy.alive || Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y) > stats.radius) continue;
+        enemy.slowMs = Math.max(enemy.slowMs, 1500);
+        this.damageEnemy(enemy, stats.damage);
+      }
+      message = 'EMP 脉冲 · 虫群瘫痪';
+      color = 0x9cbcff;
+    }
+    this.spawnSparks(this.player.x, this.player.y, 12, color, 170);
+    this.introHint.setText(message).setAlpha(1);
+    this.introFadeMs = 1600;
+    this.soundFx.deploy();
   }
 
   private registerKill(): void {
@@ -837,6 +964,9 @@ export class GameScene extends Phaser.Scene {
       : `第 ${this.waveNumber} / 5 波 · ${remaining}s`);
     this.stateLabel.setText(this.deployed ? '火力展开  //  OVERDRIVE' : '机动射击  //  MOBILE');
     this.stateLabel.setColor(this.deployed ? '#ffcd86' : '#c1f7e7');
+    this.buffLabel.setText(this.overclockMs > 0
+      ? `⚡ 超频射击 ${Math.ceil(this.overclockMs / 1000)} 秒`
+      : this.supplies.length > 0 ? '战场补给已投放 · 移动拾取' : '');
     this.modeHint.setText(this.deployed
       ? this.build.overload && this.overloadMs < 3000 ? '超载中：高射速！' : '伤害 +35% · 射速 +25%'
       : this.stillMs > 0 ? '停止移动以展开火力' : `已装备 ${this.build.weapons.length} / 4 把武器`);
@@ -872,7 +1002,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private removeProjectilesAndEnemies(): void {
-    this.enemyList.forEach((e) => { e.sprite.destroy(); e.shadow.destroy(); e.warning?.destroy(); });
+    this.enemyList.forEach((e) => { e.sprite.destroy(); e.shadow.destroy(); e.warning?.destroy(); e.eliteAura?.destroy(); });
+    this.supplies.forEach(item => { item.sprite.destroy(); item.glow.destroy(); });
+    this.supplies = [];
     this.enemyList = [];
     this.bullets.forEach((b) => b.sprite.destroy());
     this.bullets = [];

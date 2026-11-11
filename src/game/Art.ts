@@ -67,6 +67,17 @@ export function createArt(scene: Phaser.Scene): void {
     g.fillStyle(0xffd8a3); g.fillCircle(19, 15, 3); g.fillCircle(37, 15, 3);
   });
 
+  // Recoverable battlefield module: cyan casework with an illuminated power cell.
+  make('supply', 50, 50, (g) => {
+    g.fillStyle(0x091d2d); g.fillRoundedRect(8, 7, 34, 36, 7);
+    g.lineStyle(3, 0xd8f7ed, 0.9); g.strokeRoundedRect(8, 7, 34, 36, 7);
+    g.fillStyle(0x2c6473); g.fillRoundedRect(12, 11, 26, 28, 5);
+    g.fillStyle(0xbdfdf4); g.fillRoundedRect(22, 14, 6, 21, 2);
+    g.fillRoundedRect(15, 21, 20, 7, 2);
+    g.lineStyle(2, 0x80b9bb, 0.8); g.strokeRoundedRect(15, 14, 20, 21, 4);
+    g.fillStyle(0xe6ffed); g.fillCircle(25, 25, 3);
+  });
+
   make('bolt', 24, 9, (g) => {
     g.fillStyle(0x55ffe0, 0.35); g.fillEllipse(11, 4.5, 23, 9);
     g.fillStyle(0xe9fff0); g.fillRoundedRect(6, 3, 17, 3, 2);
