@@ -109,6 +109,7 @@ CI 在 PR / feature 分支和 main 上运行测试、类型检查与构建，成
 - **[M5.2–M8 详细路线图](docs/ROADMAP_M6_M8.md)**：先试玩诊断，再验证虫巢目标、战场事件、Boss 双阶段；M7 包含局外成长与挑战，M8 研究发行可行性。
 - **[局外成长详细 PRD · 星际军械库](docs/PRD_META_PROGRESSION.md)**：战备数据、永久科技树、机甲解锁与出战配置、存档规则、经济平衡和验收标准（尚未开发）。
 - **[M5.2 试玩与验收计划](docs/PLAYTEST_PLAN.md)**：真机/新手测试流程、记录模板、指标口径和 Go/No-Go 标准。
+- **[M5.2 玩法现状审查](docs/DESIGN_AUDIT_M5_2.md)**：基于现有代码核对五波时长与 XP 阈值，列出待验证风险、测试任务和下一阶段门槛；[实际试玩追踪 Issue #8](https://github.com/kk518/endless-swarm/issues/8)。
 - [历史 MVP PRD v0.1](docs/PRD.md) · [M5 成长系统](docs/PRD_M5.md) · [M5.1 四武器进化](docs/PRD_M5_1.md)
 - [技术设计（TDD）](docs/TECH_DESIGN.md) · [美术规范](docs/ART_DIRECTION.md)
 
