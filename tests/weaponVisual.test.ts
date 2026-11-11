@@ -72,5 +72,5 @@ test('visual effects are wired to actual weapon attacks, not only the card picke
     "this.addCombatVisual('beam'",
     'this.updateCombatVisuals(ms)',
   ]) assert.ok(scene.includes(marker), `missing combat wiring: ${marker}`);
-  assert.match(scene, /this\\.addCombatVisual\\(\\s*'cone'/, 'flame/scatter cone should be drawn');
+  assert.ok(scene.includes("'cone', point.x"), 'flame/scatter cone should be drawn');
 });
