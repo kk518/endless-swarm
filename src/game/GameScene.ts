@@ -7,7 +7,6 @@ import {
 } from './combat';
 
 const VIEW_W = 450;
-const VIEW_H = 800;
 const WORLD = 2300;
 const CENTER = WORLD / 2;
 const JOYSTICK_RANGE = 57;
@@ -186,9 +185,9 @@ export class GameScene extends Phaser.Scene {
     this.hudText(30, 24, '装甲完整度', '14px', '#a5c1c8');
     this.clockLabel = this.hudText(VIEW_W - 27, 21, '00:00', '26px', '#f3faf5').setOrigin(1, 0);
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
-    this.stateLabel = this.hudText(VIEW_W / 2, VIEW_H - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
-    this.modeHint = this.hudText(VIEW_W / 2, VIEW_H - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
-    this.introHint = this.hudText(VIEW_W / 2, VIEW_H - 195, '', '16px', '#fcdb9b').setOrigin(0.5, 0.5);
+    this.stateLabel = this.hudText(VIEW_W / 2, this.scale.height - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
+    this.modeHint = this.hudText(VIEW_W / 2, this.scale.height - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
+    this.introHint = this.hudText(VIEW_W / 2, this.scale.height - 195, '', '16px', '#fcdb9b').setOrigin(0.5, 0.5);
     this.crosshair = this.add.circle(0, 0, 13, 0x79ffe9, 0).setStrokeStyle(1.4, 0x70ffe2, 0.6)
       .setDepth(5).setVisible(false);
   }
@@ -495,11 +494,11 @@ export class GameScene extends Phaser.Scene {
     // Explicit progress towards deployment; turns letting go into an intentional decision.
     const progress = Phaser.Math.Clamp(this.stillMs / GAMEPLAY.deployDelayMs, 0, 1);
     g.fillStyle(0x06151f, 0.78);
-    g.fillRoundedRect(112, VIEW_H - 83, VIEW_W - 224, 15, 7);
+    g.fillRoundedRect(112, this.scale.height - 83, VIEW_W - 224, 15, 7);
     g.fillStyle(this.deployed ? 0xffc077 : 0x62ebd0, 0.95);
-    g.fillRoundedRect(115, VIEW_H - 80, (VIEW_W - 230) * progress, 9, 4);
+    g.fillRoundedRect(115, this.scale.height - 80, (VIEW_W - 230) * progress, 9, 4);
     g.lineStyle(1, 0x72989b, 0.5);
-    g.strokeRoundedRect(112, VIEW_H - 83, VIEW_W - 224, 15, 7);
+    g.strokeRoundedRect(112, this.scale.height - 83, VIEW_W - 224, 15, 7);
   }
 
   private removeProjectilesAndEnemies(): void {
