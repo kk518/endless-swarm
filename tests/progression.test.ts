@@ -5,9 +5,9 @@ import {
   pickEnemyKind, rollCards, WAVES,
 } from '../src/game/progression.ts';
 
-test('M1 defines five waves, 16 unique cards, and a fifth-wave boss finale', () => {
+test('M2 retains five waves, adds three unique cards, and keeps the boss finale', () => {
   assert.equal(WAVES.length, 5);
-  assert.equal(CARDS.length, 16);
+  assert.equal(CARDS.length, 19);
   assert.equal(new Set(CARDS.map(card => card.id)).size, CARDS.length);
   for (const wave of WAVES) {
     assert.ok(wave.durationMs > 0);
@@ -89,4 +89,28 @@ test('reward options always filter out one-off cards that were already taken', (
   for (const id of ['cryogenic', 'afterglow', 'bulwark'] as const) assert.equal(applyCard(build, id), true);
   const pool = eligibleCards(build);
   for (const id of ['cryogenic', 'afterglow', 'bulwark'] as const) assert.ok(!pool.some(card => card.id === id));
+});
+
+test('bombers join the enemy mix from wave three, never the tutorial wave', () => {
+  assert.ok(!WAVES[0].mix.some(entry => entry.kind === 'bomber'));
+  assert.ok(!WAVES[1].mix.some(entry => entry.kind === 'bomber'));
+  for (const wave of WAVES.slice(2)) assert.ok(wave.mix.some(entry => entry.kind === 'bomber'));
+});
+
+test('M2 frenzy, salvage and critical cards honor eligibility and cap', () => {
+  const build = newBuild();
+  assert.equal(applyCard(build, 'frenzy'), true);
+  assert.equal(build.frenzy, true);
+  assert.equal(applyCard(build, 'frenzy'), false);
+  assert.equal(applyCard(build, 'salvage'), true);
+  assert.equal(build.salvage, true);
+  assert.equal(applyCard(build, 'salvage'), false);
+  for (let i = 0; i < 3; i++) assert.equal(applyCard(build, 'critical-core'), true);
+  assert.ok(Math.abs(build.criticalChance - 0.42) < 1e-6);
+  assert.equal(applyCard(build, 'critical-core'), false);
+  assert.ok(!eligibleCards(build).some(card =>
+    card.id === 'frenzy' || card.id === 'salvage' || card.id === 'critical-core'
+  ));
+  assert.equal(newBuild().criticalChance, 0);
+  assert.equal(newBuild().salvage, false);
 });
