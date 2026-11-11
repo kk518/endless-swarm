@@ -3,49 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#08121c" />
+    <meta name="theme-color" content="#0c151d" />
     <meta name="description" content="《无尽虫潮》：单指移动、自动射击、火力展开，五波虫潮与波后抽卡的科幻生存射击游戏。" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <title>无尽虫潮 · Endless Swarm</title>
   </head>
   <body>
     <main class="app-shell">
+      <div class="ambient-mark" aria-hidden="true">K-09 / QUARANTINE ZONE</div>
       <section class="game-panel" aria-label="无尽虫潮战斗区域">
+        <div class="panel-chamfer" aria-hidden="true"></div>
         <div id="game" tabindex="-1" aria-label="战斗画面"></div>
-        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M3.1 / SWARM RUSH</span></div>
+        <div class="top-brand" aria-hidden="true"><span class="brand-mark">✳</span> ENDLESS SWARM <span class="top-brand-version">M4 / IRON VEIL</span></div>
         <div id="overlay" class="overlay">
           <div class="overlay-pattern" aria-hidden="true"></div>
           <div class="briefing">
-            <div class="badge">PLANET K-09 <span class="badge-dot"></span> EMERGENCY BROADCAST</div>
-            <div class="insignia" aria-hidden="true"><span class="insignia-inner">✳</span></div>
-            <div class="title-en">ENDLESS SWARM</div>
+            <div class="badge"><span class="badge-dot"></span> K-09 失联战区 // LEVEL: OMEGA</div>
+            <div class="insignia" aria-hidden="true"><div class="insignia-inner"><i></i><i></i><i></i></div></div>
+            <div class="title-en">LEGION / LAST TRANSMISSION</div>
             <h1 id="overlay-title">无尽虫潮</h1>
-            <p id="overlay-subtitle" class="subtitle">一人，一甲，万千虫潮。</p>
+            <p id="overlay-subtitle" class="subtitle">防线已溃。弹药尚存。</p>
             <div id="overlay-instructions" class="instruction-list">
-              <div><span class="instruction-icon">◈</span><span><strong>单指移动</strong><small>按住屏幕并拖动，控制战士走位</small></span></div>
-              <div><span class="instruction-icon">◎</span><span><strong>自动攻击</strong><small>武器自动锁定最近的虫族并开火</small></span></div>
-              <div><span class="instruction-icon">✳</span><span><strong>停止 · 火力展开</strong><small>静止 0.8 秒火力强化；移动拾取战场补给</small></span></div>
+              <div><span class="instruction-icon">01</span><span><strong>保持机动</strong><small>单指滑动改变行进方向，武器自动开火</small></span></div>
+              <div><span class="instruction-icon">02</span><span><strong>火力系统</strong><small>自动锁定虫族目标，连杀累积增伤</small></span></div>
+              <div><span class="instruction-icon">03</span><span><strong>部署装甲</strong><small>静止 0.8 秒展开火力支架，突围时撤收</small></span></div>
             </div>
             <div id="run-stats" class="run-stats is-hidden" aria-live="polite"></div>
-            <button id="play-button" class="action-button" type="button">进入战场 <span>↗</span></button>
-            <div class="bottom-note"><span class="status-light"></span> M3.1 虫潮集结 <span class="note-sep">/</span> 手机竖屏体验</div>
+            <button id="play-button" class="action-button" type="button">执行登陆行动 <span>›</span></button>
+            <div class="bottom-note"><span class="status-light"></span> M4 铁幕战线 <span class="note-sep">/</span> 手机竖屏体验</div>
           </div>
         </div>
         <section id="reward-overlay" class="reward-overlay is-hidden" aria-label="波后卡牌选择" aria-live="polite">
-          <div class="reward-header"><span class="reward-kicker">WAVE CLEAR · 战术补给</span><h2 id="reward-title">选择一项强化</h2><p>每波免费选一张，立即改变接下来的战斗</p></div>
+          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / MODULAR UPGRADE</span><h2 id="reward-title">战术模块授权</h2><p>战线暂稳。指挥官，请选择下一阶段火力配置。</p></div>
           <div id="reward-cards" class="reward-cards" role="group" aria-label="选择一张强化卡"></div>
-          <div class="reward-footer">点选 1 张卡牌 · 下一波自动开始</div>
+          <div class="reward-footer"><span class="footer-line"></span> 选取一项装备模块 / 立即生效 <span class="footer-line"></span></div>
         </section>
         <button id="mute-button" class="mute-button" type="button" aria-pressed="false">关闭音效</button>
       </section>
       <aside class="desktop-aside" aria-label="游戏介绍">
-        <p class="micro-label">FIELD TEST // 001</p>
-        <h2>立刻投入<br /><em>虫潮战场</em></h2>
-        <p>强化卡现在会显示实际战斗数值，并提供即时生效提示。虫潮逐波提速、成组出现并尝试从两侧包抄；留意屏幕上的集中虫潮预警！</p>
+        <p class="micro-label">RESTRICTED // 09-OMEGA</p>
+        <h2>最后一条<br /><em>星际防线</em></h2>
+        <p>工业装甲，对抗无尽增殖的虫巢。感知警戒扇区、寻找散落的补给，依靠自动武器与火力展开撑过五轮封锁。你的任务不是守住阵地，而是从虫潮里活下来。</p>
         <div class="aside-rule"></div>
         <p class="micro-label">操作方式</p>
         <p class="aside-control"><strong>手机：</strong>手指滑动移动，松手进入火力展开。<br /><strong>电脑：</strong>WASD 或方向键移动，停止后自动展开。</p>
-        <div class="aside-tag">PLAYABLE PROTOTYPE <span>•</span> M3.1</div>
+        <div class="aside-tag">ORIGINAL GAME ASSETS <span>•</span> M4</div>
       </aside>
     </main>
     <div class="rotate-note">建议使用竖屏游玩以获得最佳体验</div>

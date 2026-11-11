@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { createArt } from './Art';
+import { FACTION_COLORS, HIVE_GORE, HIVE_TEXTURE } from './artStyle';
 import { SoundFx } from './Sound';
 import {
   GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
@@ -79,6 +80,10 @@ export interface RewardOffer { wave: number; options: CardDef[]; nextWave: numbe
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Image;
+  private playerShadow!: Phaser.GameObjects.Arc;
+  private deploymentBraces!: Phaser.GameObjects.Graphics;
+  private floorScars!: Phaser.GameObjects.Graphics;
+  private scarCount = 0;
   private rifle!: Phaser.GameObjects.Image;
   private aura!: Phaser.GameObjects.Arc;
   private targetingLine!: Phaser.GameObjects.Graphics;
@@ -142,17 +147,20 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     createArt(this);
-    this.cameras.main.setBackgroundColor('#08121c');
+    this.cameras.main.setBackgroundColor('#0c141a');
     this.cameras.main.setBounds(0, 0, WORLD, WORLD);
 
     this.add.tileSprite(CENTER, CENTER, WORLD, WORLD, 'dust').setDepth(-50);
     this.drawWorldDecorations();
-
-    this.aura = this.add.circle(CENTER, CENTER, 37, 0x49f5cb, 0.075)
-      .setStrokeStyle(2, 0x60ffdc, 0.2).setDepth(1);
+    this.floorScars = this.add.graphics().setDepth(-12);
+    this.playerShadow = this.add.ellipse(CENTER + 4, CENTER + 13, 61, 30, 0x03080d, 0.64).setDepth(0);
+    this.aura = this.add.circle(CENTER, CENTER, 43, 0x72e2d0, 0.04)
+      .setStrokeStyle(2, 0x73ddc8, 0.32).setDepth(1);
+    this.deploymentBraces = this.add.graphics().setDepth(6).setVisible(false);
+    this.drawDeploymentBraces();
     this.player = this.add.image(CENTER, CENTER, 'marine').setDepth(7);
-    this.rifle = this.add.image(CENTER + 22, CENTER + 4, 'rifle')
-      .setOrigin(0.28, 0.5).setDepth(8);
+    this.rifle = this.add.image(CENTER + 24, CENTER + 4, 'rifle')
+      .setOrigin(0.23, 0.5).setDepth(8);
     this.targetingLine = this.add.graphics().setDepth(3);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
 
@@ -187,8 +195,12 @@ export class GameScene extends Phaser.Scene {
   startRun(): void {
     if (!this.ready) return;
     this.removeProjectilesAndEnemies();
-    this.player.setPosition(CENTER, CENTER).setTint(0xffffff);
-    this.rifle.setPosition(CENTER + 22, CENTER + 4).setRotation(0);
+    this.player.setPosition(CENTER, CENTER).setRotation(0).clearTint();
+    this.playerShadow.setPosition(CENTER + 4, CENTER + 13);
+    this.deploymentBraces.setVisible(false).setPosition(CENTER, CENTER);
+    this.floorScars.clear();
+    this.scarCount = 0;
+    this.rifle.setPosition(CENTER + 24, CENTER + 4).setRotation(0);
     this.aura.setPosition(CENTER, CENTER).setAlpha(1);
     this.cameras.main.centerOn(CENTER, CENTER);
     this.timeMs = 0;
@@ -284,32 +296,95 @@ export class GameScene extends Phaser.Scene {
 
   private drawWorldDecorations(): void {
     const g = this.add.graphics().setDepth(-40);
-    // Concentric facility rings signal position without adding collisions.
-    g.lineStyle(4, 0x3d6366, 0.20);
-    g.strokeCircle(CENTER, CENTER, 450);
-    g.strokeCircle(CENTER, CENTER, 720);
-    g.lineStyle(2, 0x58aaa9, 0.21);
-    g.strokeCircle(CENTER, CENTER, 590);
-    g.lineStyle(1, 0x3c777d, 0.20);
-    for (let i = 0; i < 36; i++) {
-      const t = (i * Math.PI * 2) / 36;
-      const x = CENTER + Math.cos(t) * 585;
-      const y = CENTER + Math.sin(t) * 585;
-      g.lineBetween(x, y, x + Math.cos(t) * 20, y + Math.sin(t) * 20);
+    // Ruined forward operating base: hazard paint, grates and broken service plating.
+    // These are drawn once as one Graphics object, never recreated each frame.
+    g.lineStyle(7, 0x070f16, 0.6); g.strokeCircle(CENTER, CENTER, 455);
+    g.lineStyle(2, 0x637377, 0.42); g.strokeCircle(CENTER, CENTER, 455);
+    g.lineStyle(8, 0x182b33, 0.53); g.strokeCircle(CENTER, CENTER, 730);
+    g.lineStyle(2, 0xf4aa65, 0.4); g.strokeCircle(CENTER, CENTER, 738);
+    for (let i = 0; i < 40; i++) {
+      const angle = i * Math.PI / 20;
+      const ca = Math.cos(angle), sa = Math.sin(angle);
+      const x = CENTER + ca * 450, y = CENTER + sa * 450;
+      g.lineStyle(4, i % 5 === 0 ? 0xf3af70 : 0x5a7275, i % 5 === 0 ? 0.7 : 0.35);
+      g.lineBetween(x - ca * 11, y - sa * 11, x + ca * 17, y + sa * 17);
     }
-    for (let i = 0; i < 32; i++) {
-      const x = (i * 379 + 167) % WORLD;
-      const y = (i * 521 + 357) % WORLD;
-      if (Math.hypot(x - CENTER, y - CENTER) < 220) continue;
-      g.fillStyle(i % 3 === 0 ? 0x3f8790 : 0x365264, 0.20);
-      g.fillRoundedRect(x, y, 28 + (i % 3) * 17, 8, 3);
-      g.fillStyle(0x69a3a4, 0.20); g.fillCircle(x + 4, y + 4, 2);
+    // Four large broken installation plates with panel seams and rivet clusters.
+    for (let i = 0; i < 36; i++) {
+      const x = 110 + (i * 357) % (WORLD - 220);
+      const y = 115 + (i * 601) % (WORLD - 230);
+      if (Math.hypot(x - CENTER, y - CENTER) < 260) continue;
+      const w = 65 + (i % 4) * 25;
+      g.fillStyle(0x050b11, 0.46); g.fillRoundedRect(x + 6, y + 7, w, 36, 3);
+      g.fillStyle(0x27353d, 0.54); g.fillRoundedRect(x, y, w, 34, 2);
+      g.lineStyle(1.4, 0x748285, 0.38); g.strokeRoundedRect(x, y, w, 34, 2);
+      g.lineStyle(1, 0x111e26, 0.8); g.lineBetween(x + 23, y + 2, x + 23, y + 32);
+      g.fillStyle(0xa4ada2, 0.45); g.fillCircle(x + 7, y + 6, 1.5);
+      g.fillCircle(x + w - 6, y + 28, 1.5);
+      if (i % 3 === 0) {
+        for (let t = 0; t < 4; t++) {
+          g.fillStyle(0xc38a56, 0.44);
+          g.fillTriangle(x + 31 + t * 11, y + 24, x + 36 + t * 11, y + 15, x + 41 + t * 11, y + 24);
+        }
+      }
+    }
+    // Chitinous veins press inward from the perimeter; the hive is consuming the base.
+    for (let i = 0; i < 46; i++) {
+      const t = i * 2.39996;
+      const radius = 560 + (i * 181) % 500;
+      const x = CENTER + Math.cos(t) * radius, y = CENTER + Math.sin(t) * radius;
+      const size = 19 + i % 5 * 9;
+      g.fillStyle(0x532d3b, 0.18); g.fillEllipse(x, y, size * 2, size * 1.2);
+      g.lineStyle(2, 0x8d4e57, 0.31);
+      g.lineBetween(x - size, y + 4, x, y - size);
+      g.lineBetween(x, y - size, x + size * 0.8, y + size * 0.3);
+      g.lineBetween(x, y - size, x + size * 0.2, y - size * 1.5);
+      g.fillStyle(0xb77a69, 0.32); g.fillCircle(x, y - size, 2.5);
+    }
+    // The deployment center remains navigationally clear but feels manufactured.
+    g.lineStyle(2, 0xf0ac64, 0.4);
+    for (const x of [-1, 1]) for (const y of [-1, 1]) {
+      const px = CENTER + x * 150, py = CENTER + y * 150;
+      g.lineBetween(px, py, px - x * 26, py);
+      g.lineBetween(px, py, px, py - y * 26);
+    }
+  }
+
+  private drawDeploymentBraces(): void {
+    const g = this.deploymentBraces;
+    g.lineStyle(8, 0x0e1b21, 0.86);
+    for (const sign of [-1, 1]) {
+      g.lineBetween(sign * 20, -17, sign * 49, -39);
+      g.lineBetween(sign * 20, 20, sign * 49, 41);
+      g.lineStyle(4, 0x748b85, 0.95);
+      g.lineBetween(sign * 22, -17, sign * 45, -36);
+      g.lineBetween(sign * 22, 20, sign * 45, 38);
+      g.fillStyle(0x1c3037); g.fillRoundedRect(sign * 45 - 6, -44, 12, 13, 2);
+      g.fillRoundedRect(sign * 45 - 6, 35, 12, 13, 2);
+      g.fillStyle(0xf9b66a); g.fillRect(sign * 45 - 3, -41, 6, 3);
+      g.fillRect(sign * 45 - 3, 38, 6, 3);
+      g.lineStyle(8, 0x0e1b21, 0.86);
+    }
+  }
+
+  private stampSplat(x: number, y: number, kind: EnemyKind): void {
+    if (++this.scarCount > 180) { this.floorScars.clear(); this.scarCount = 1; }
+    const g = this.floorScars;
+    const tint = HIVE_GORE[kind];
+    const seed = this.scarCount * 1.61;
+    const radius = kind === 'boss' ? 28 : 7 + (this.scarCount % 4) * 2;
+    g.fillStyle(0x120f17, 0.18); g.fillEllipse(x + 3, y + 5, radius * 3, radius * 1.9);
+    g.fillStyle(tint, 0.24); g.fillEllipse(x, y, radius * 2.3, radius * 1.3);
+    for (let i = 0; i < 5; i++) {
+      const angle = seed + i * 2.1;
+      g.fillStyle(tint, 0.24);
+      g.fillCircle(x + Math.cos(angle) * radius * 1.2, y + Math.sin(angle) * radius * 0.9, 1 + i % 3);
     }
   }
 
   private hudText(x: number, y: number, value: string, size: string, color: string): Phaser.GameObjects.Text {
     return this.add.text(x, y, value, {
-      fontFamily: 'Trebuchet MS, Arial, sans-serif',
+      fontFamily: 'Bahnschrift, DIN Alternate, Arial Narrow, Arial, sans-serif',
       fontSize: size, color, fontStyle: 'bold',
       stroke: '#07171e', strokeThickness: 3,
     }).setScrollFactor(0).setDepth(110);
@@ -317,23 +392,23 @@ export class GameScene extends Phaser.Scene {
 
   private buildHUD(): void {
     this.hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.hudText(30, 24, '装甲完整度', '14px', '#a5c1c8');
+    this.hudText(30, 21, 'A R M O R  /  装甲', '12px', '#bed1c5');
     this.clockLabel = this.hudText(VIEW_W - 27, 21, '00:00', '26px', '#f3faf5').setOrigin(1, 0);
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
-    this.waveLabel = this.hudText(VIEW_W / 2, 90, '第 1 / 5 波', '16px', '#ffcd91').setOrigin(0.5, 0);
+    this.waveLabel = this.hudText(VIEW_W / 2, 94, '第 1 / 5 波', '17px', '#ffbd78').setOrigin(0.5, 0);
     this.stateLabel = this.hudText(VIEW_W / 2, this.scale.height - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
     this.modeHint = this.hudText(VIEW_W / 2, this.scale.height - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
     this.buffLabel = this.hudText(VIEW_W / 2, this.scale.height - 158, '', '16px', '#91eaf8').setOrigin(0.5, 0.5);
     this.introHint = this.hudText(VIEW_W / 2, this.scale.height - 195, '', '16px', '#fcdb9b').setOrigin(0.5, 0.5);
-    this.crosshair = this.add.circle(0, 0, 13, 0x79ffe9, 0).setStrokeStyle(1.4, 0x70ffe2, 0.6)
+    this.crosshair = this.add.circle(0, 0, 17, 0x79ffe9, 0).setStrokeStyle(1.6, 0xf5c180, 0.85)
       .setDepth(5).setVisible(false);
   }
 
   private buildJoystick(): void {
-    this.joystickBase = this.add.circle(90, 680, JOYSTICK_RANGE, 0xa0dcd1, 0.07)
-      .setStrokeStyle(2, 0x8bf9db, 0.42).setScrollFactor(0).setDepth(120).setVisible(false);
-    this.joystickKnob = this.add.circle(90, 680, 24, 0x92ffde, 0.36)
-      .setStrokeStyle(2, 0xdefdef, 0.9).setScrollFactor(0).setDepth(121).setVisible(false);
+    this.joystickBase = this.add.circle(90, 680, JOYSTICK_RANGE, 0x4b8185, 0.09)
+      .setStrokeStyle(2, 0xb4c7b8, 0.58).setScrollFactor(0).setDepth(120).setVisible(false);
+    this.joystickKnob = this.add.circle(90, 680, 24, 0x6b9d9e, 0.49)
+      .setStrokeStyle(2, 0xeff1d7, 0.84).setScrollFactor(0).setDepth(121).setVisible(false);
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
@@ -423,10 +498,14 @@ export class GameScene extends Phaser.Scene {
     if (this.deployed && !nextDeploy) this.lastDeployedMs = this.timeMs;
     this.deployed = nextDeploy;
     this.overloadMs = this.deployed ? this.overloadMs + ms : 0;
-    this.aura.setPosition(this.player.x, this.player.y).setRadius(this.deployed ? 47 : 36)
-      .setFillStyle(this.deployed ? 0xffb96f : 0x6cfadc, this.deployed ? 0.13 : 0.07)
-      .setStrokeStyle(2, this.deployed ? 0xffcd83 : 0x58dcc6, this.deployed ? 0.84 : 0.2);
-    this.player.setTint(this.timeMs - this.lastHurtMs < 170 ? 0xff6a5b : this.deployed ? 0xffe6ba : 0xffffff);
+    this.aura.setPosition(this.player.x, this.player.y).setRadius(this.deployed ? 53 : 37)
+      .setFillStyle(this.deployed ? 0xf3a365 : 0x65b7bb, this.deployed ? 0.12 : 0.04)
+      .setStrokeStyle(this.deployed ? 3 : 2, this.deployed ? 0xffae64 : 0x6fc7c4, this.deployed ? 0.9 : 0.25);
+    this.deploymentBraces.setVisible(this.deployed).setPosition(this.player.x, this.player.y)
+      .setRotation(this.player.rotation);
+    this.playerShadow.setPosition(this.player.x + 5, this.player.y + 14);
+    if (this.timeMs - this.lastHurtMs < 170) this.player.setTint(0xff7666);
+    else this.player.clearTint();
 
     this.updateEnemies(dt, ms);
     if (!this.active) return; // Contact damage can end a run before the rest of this step.
@@ -436,6 +515,7 @@ export class GameScene extends Phaser.Scene {
     if (this.lockedTarget) {
       const target = this.lockedTarget;
       const aim = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+      this.player.setRotation(aim + Math.PI / 2);
       this.rifle.setRotation(aim);
       this.rifle.setPosition(this.player.x + Math.cos(aim) * 15, this.player.y + Math.sin(aim) * 15);
       this.crosshair.setPosition(target.x, target.y);
@@ -542,15 +622,15 @@ export class GameScene extends Phaser.Scene {
     const stats = elite
       ? { ...base, hp: Math.round(base.hp * 2.3), speed: base.speed * 1.12, size: base.size * 1.2 }
       : base;
-    const shadow = this.add.circle(x, y + 13, 17 * stats.size, 0x020e12, 0.35).setScale(1, 0.4).setDepth(0);
+    const shadow = this.add.circle(x + 5, y + 14, 22 * stats.size, 0x01080e, 0.53).setScale(1, 0.39).setDepth(0);
     const eliteAura = elite
-      ? this.add.circle(x, y, 27 * stats.size, 0xffc166, 0.07)
-          .setStrokeStyle(3, 0xffc978, 0.8).setDepth(3)
+      ? this.add.circle(x, y, 31 * stats.size, 0xb76554, 0.04)
+          .setStrokeStyle(2, 0xf6ab77, 0.86).setDepth(3)
       : null;
-    const sprite = this.add.image(x, y, kind === 'boss' ? 'broodlord' : kind === 'bomber' ? 'bomber' : 'crawler')
-      .setScale(stats.size).setDepth(kind === 'boss' ? 6 : 5);
-    if (elite) sprite.setTint(0xffdf9b);
-    else if (stats.color !== 0xffffff) sprite.setTint(stats.color);
+    const sprite = this.add.image(x, y, HIVE_TEXTURE[kind])
+      .setScale(stats.size * (kind === 'boss' ? 0.9 : kind === 'armored' ? 0.9 : 0.83))
+      .setDepth(kind === 'boss' ? 6 : 5);
+    if (elite) sprite.setTint(0xf4c6a9);
     const warning = kind === 'leaper' || kind === 'spitter' || kind === 'boss' || kind === 'bomber'
       ? this.add.circle(x, y, kind === 'boss' ? 65 : kind === 'bomber' ? 105 : 26,
         kind === 'bomber' ? 0xff537e : 0xff745c, kind === 'bomber' ? 0.17 : 0.13)
@@ -584,7 +664,9 @@ export class GameScene extends Phaser.Scene {
       }
       if (enemy.windupMs > 0) {
         enemy.windupMs -= ms;
-        enemy.warning?.setPosition(enemy.x, enemy.y);
+        enemy.warning?.setPosition(enemy.x, enemy.y)
+          .setAlpha(0.65 + Math.sin(this.timeMs / 80) * 0.3)
+          .setScale(0.96 + Math.sin(this.timeMs / 115) * 0.04);
         if (enemy.windupMs <= 0) {
           enemy.warning?.setVisible(false);
           if (enemy.kind === 'bomber') {
@@ -610,14 +692,15 @@ export class GameScene extends Phaser.Scene {
         enemy.y = Phaser.Math.Clamp(enemy.y + dy / distance * enemy.speed * slowed * direction * dt, 48, WORLD - 48);
       }
       enemy.sprite.setPosition(enemy.x, enemy.y);
-      enemy.shadow.setPosition(enemy.x, enemy.y + 14 * enemy.size);
+      enemy.shadow.setPosition(enemy.x + 5, enemy.y + 14 * enemy.size);
       enemy.eliteAura?.setPosition(enemy.x, enemy.y).setAlpha(0.65 + Math.sin(this.timeMs / 260) * 0.25);
       enemy.sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
       if (enemy.flashTime > 0) {
         enemy.flashTime -= ms;
         if (enemy.flashTime <= 0) {
-          const tint = enemy.slowMs > 0 ? 0x8fdfff : enemy.elite ? 0xffdf9b : enemy.kind === 'grunt' || enemy.kind === 'bomber' ? 0xffffff : enemy.kind === 'leaper' ? 0xf2a867 : enemy.kind === 'armored' ? 0xa0b8e0 : enemy.kind === 'spitter' ? 0xb3ee83 : 0xe99578;
-          enemy.sprite.setTint(tint);
+          if (enemy.slowMs > 0) enemy.sprite.setTint(0x94cfdf);
+          else if (enemy.elite) enemy.sprite.setTint(0xf4c6a9);
+          else enemy.sprite.clearTint();
         }
       }
       if (enemy.kind !== 'bomber' && distance < 19 + enemy.size * 14 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) {
@@ -636,7 +719,8 @@ export class GameScene extends Phaser.Scene {
     enemy.eliteAura?.destroy();
     const index = this.enemyList.indexOf(enemy);
     if (index >= 0) this.enemyList.splice(index, 1);
-    this.spawnSparks(enemy.x, enemy.y, 20, 0xff6489, 230);
+    this.stampSplat(enemy.x, enemy.y, 'bomber');
+    this.spawnSparks(enemy.x, enemy.y, 20, HIVE_GORE.bomber, 230);
     const distance = Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y);
     if (distance < 260) this.cameras.main.shake(100, 0.002);
     if (distance <= 105 && this.timeMs - this.lastHurtMs > GAMEPLAY.hitGraceMs) this.hurt(2);
@@ -803,7 +887,8 @@ export class GameScene extends Phaser.Scene {
     enemy.warning?.destroy();
     enemy.eliteAura?.destroy();
     if (enemy.elite) this.spawnSupply(enemy.x, enemy.y);
-    this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : 7, 0x9ce281, 190);
+    this.stampSplat(enemy.x, enemy.y, enemy.kind);
+    this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : 7, HIVE_GORE[enemy.kind], 190);
     this.registerKill();
     if (this.kills % 3 === 0) this.soundFx.kill();
     if (this.lockedTarget === enemy) this.lockedTarget = null;
@@ -825,7 +910,8 @@ export class GameScene extends Phaser.Scene {
           this.enemyList.splice(this.enemyList.indexOf(other), 1);
           if (other.kind === 'boss') this.bossKilled = true;
           this.registerKill();
-          this.spawnSparks(other.x, other.y, 5, 0xffbb6b, 180);
+          this.stampSplat(other.x, other.y, other.kind);
+          this.spawnSparks(other.x, other.y, 5, HIVE_GORE[other.kind], 180);
         }
       }
       this.spawnSparks(enemy.x, enemy.y, 13, 0xffad62, 220);
@@ -958,7 +1044,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private deployBurst(): void {
-    this.spawnSparks(this.player.x, this.player.y, 12, 0xffc987, 155);
+    this.spawnSparks(this.player.x, this.player.y, 16, FACTION_COLORS.command, 155);
     this.cameras.main.shake(75, 0.0015);
   }
 
@@ -1019,14 +1105,22 @@ export class GameScene extends Phaser.Scene {
 
     const g = this.hudGraphics;
     g.clear();
-    g.fillStyle(0x06151f, 0.85);
-    g.fillRoundedRect(14, 13, VIEW_W - 28, 67, 14);
-    g.lineStyle(1, 0x35626c, 0.45);
-    g.strokeRoundedRect(14, 13, VIEW_W - 28, 67, 14);
+    g.fillStyle(0x07151d, 0.93);
+    g.fillRoundedRect(13, 12, VIEW_W - 26, 72, 4);
+    g.fillStyle(0x273c45, 0.95);
+    g.fillRect(13, 12, VIEW_W - 26, 3);
+    g.lineStyle(1, 0x627d7a, 0.65);
+    g.strokeRoundedRect(13, 12, VIEW_W - 26, 72, 4);
+    g.fillStyle(0xf7a761, 0.9); g.fillRect(13, 12, 39, 3);
+    g.fillStyle(0x75ccc1, 0.65); g.fillRect(56, 12, 14, 3);
+    g.lineStyle(1, 0x48646b, 0.65);
+    g.lineBetween(240, 21, 240, 74);
+    g.fillStyle(0xf6ad6c, 0.75); g.fillTriangle(VIEW_W - 22, 12, VIEW_W - 13, 12, VIEW_W - 13, 21);
     for (let i = 0; i < this.build.maxHp; i++) {
       const x = 30 + i * Math.min(25, 200 / this.build.maxHp);
-      g.fillStyle(i < this.hp ? 0x6ff2cd : 0x243c45, 1);
-      g.fillRoundedRect(x, 52, 19, 9, 3);
+      g.fillStyle(i < this.hp ? 0x8ce3c8 : 0x27343d, 1);
+      g.fillRoundedRect(x, 53, 19, 9, 1);
+      if (i < this.hp) { g.fillStyle(0xe5fcdf, 0.55); g.fillRect(x + 2, 54, 15, 2); }
     }
     // Explicit progress towards deployment; turns letting go into an intentional decision.
     const progress = Phaser.Math.Clamp(this.stillMs / (GAMEPLAY.deployDelayMs * this.build.deployDelay), 0, 1);
@@ -1036,6 +1130,11 @@ export class GameScene extends Phaser.Scene {
     g.fillRoundedRect(115, this.scale.height - 80, (VIEW_W - 230) * progress, 9, 4);
     g.lineStyle(1, 0x72989b, 0.5);
     g.strokeRoundedRect(112, this.scale.height - 83, VIEW_W - 224, 15, 7);
+    // Military orange threat rail; each segment corresponds to one wave.
+    for (let i = 0; i < 5; i++) {
+      g.fillStyle(i < this.waveNumber ? 0xea9c63 : 0x34454c, i < this.waveNumber ? 0.95 : 0.65);
+      g.fillRect(129 + i * 39, 117, 31, 3);
+    }
     if (this.waveNumber === 5 && this.bossSpawned && !this.bossKilled) {
       const boss = this.enemyList.find(enemy => enemy.kind === 'boss' && enemy.alive);
       if (boss) {

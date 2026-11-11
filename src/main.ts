@@ -15,7 +15,7 @@ const game = new Phaser.Game({
   parent: 'game',
   width: 450,
   height: logicalHeight,
-  backgroundColor: '#08121c',
+  backgroundColor: '#0c141a',
   render: { antialias: true, pixelArt: false },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 450, height: logicalHeight },
   scene: [scene],
@@ -55,11 +55,14 @@ window.addEventListener('swarm:reward', (event) => {
   const offer = (event as CustomEvent<RewardOffer>).detail;
   rewardTitle.textContent = `第 ${offer.wave} 波完成 · 三选一`;
   rewardCards.replaceChildren();
-  for (const card of offer.options) {
+  for (const [i, card] of offer.options.entries()) {
     const button = document.createElement('button');
     button.className = 'reward-card';
     button.type = 'button';
     button.dataset.category = card.category;
+    const serial = document.createElement('span');
+    serial.className = 'reward-card-serial';
+    serial.textContent = `MODULE / 0${i + 1}`;
     const icon = document.createElement('span');
     icon.className = 'reward-card-icon'; icon.textContent = card.icon;
     const name = document.createElement('strong');
@@ -68,7 +71,7 @@ window.addEventListener('swarm:reward', (event) => {
     description.className = 'reward-card-description'; description.textContent = card.description;
     const category = document.createElement('span');
     category.className = 'reward-card-category'; category.textContent = cardCategory[card.category] ?? '强化';
-    button.append(icon, name, description, category);
+    button.append(serial, icon, name, description, category);
     button.addEventListener('click', () => {
       if (!scene.chooseCard(card.id)) return;
       rewardOverlay.classList.add('is-hidden');
@@ -82,8 +85,8 @@ window.addEventListener('swarm:reward', (event) => {
 
 window.addEventListener('swarm:gameover', (event) => {
   const { kills, survived, record, victory, wave, weapons, bestStreak } = (event as CustomEvent<RunResult>).detail;
-  title.textContent = victory ? '虫巢已肃清！' : '本次行动结束';
-  subtitle.textContent = victory ? '五波虫潮突破成功，下一次尝试更强的构筑。' : '战士倒下，但火力绝不停歇。';
+  title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
+  subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
   const entry = (value: string, label: string): HTMLElement => {
     const wrapper = document.createElement('div');
@@ -95,7 +98,7 @@ window.addEventListener('swarm:gameover', (event) => {
   stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
-  startButton.textContent = '再次出击';
+  startButton.textContent = '重新执行行动';
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
 });

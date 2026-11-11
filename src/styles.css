@@ -56,3 +56,217 @@ h1{font-size:clamp(43px,9.5vw,58px);letter-spacing:.06em;margin:0;line-height:1.
 .reward-footer{font-size:11px;color:#799b9e;margin-top:22px;letter-spacing:.08em}
 @media(max-width:375px){.reward-card{padding:12px 5px;min-height:206px}.reward-card-icon{font-size:36px;width:50px;height:57px}.reward-card-name{font-size:12px}.reward-card-description{font-size:10px}}
 @media(max-height:640px){.reward-overlay{justify-content:flex-start}.reward-card{min-height:177px;padding:10px 6px}.reward-card-icon{height:44px;font-size:29px}.reward-header{margin-bottom:12px}.reward-footer{margin-top:12px}}
+
+
+/* ========================================================================
+   M4 — IRON VEIL art direction
+   Human: faceted industrial panels, bone-white enamel, worn amber markings.
+   Hive: bruise/plum biology, unbalanced organic contours and acidic residue.
+   No external font, image or shader downloads. Works in offline PWA contexts.
+   ======================================================================== */
+:root{
+  font-family:'Bahnschrift','DIN Alternate','Arial Narrow','PingFang SC','Microsoft YaHei',sans-serif;
+  color:#e3e8db;background:#0a1016;
+  --armor:#a9b6a9;--steel:#253943;--iron:#101e27;
+  --signal:#e9a369;--phosphor:#78cbbf;--blood:#8b4554;
+}
+body{
+  background:
+    radial-gradient(ellipse at 20% 85%,rgba(110,55,64,.18),transparent 46%),
+    radial-gradient(ellipse at 88% 15%,rgba(65,100,110,.19),transparent 45%),
+    repeating-linear-gradient(135deg,transparent 0 30px,rgba(255,255,255,.008) 31px 32px),
+    #090f15;
+}
+.app-shell{gap:clamp(25px,4.6vw,75px);position:relative}
+.ambient-mark{
+  position:absolute;left:clamp(20px,4vw,90px);top:35px;
+  color:#718a8c;font-size:10px;letter-spacing:.42em;opacity:.52;
+  writing-mode:vertical-rl;font-weight:900;pointer-events:none;
+}
+.game-panel{
+  background:#101821;border:1px solid #64716f;
+  box-shadow:0 0 0 4px #071015,0 0 0 5px #465862,0 0 0 7px #071015,
+    0 20px 95px #000c,32px 24px 75px #090c11aa;
+}
+.game-panel::after{
+  content:'';position:absolute;inset:0;z-index:3;pointer-events:none;
+  opacity:.14;
+  background:repeating-linear-gradient(180deg,transparent 0 3px,#061015 4px 5px);
+}
+.panel-chamfer{
+  position:absolute;z-index:7;top:0;left:0;width:72px;height:6px;
+  background:linear-gradient(90deg,#f1ab68 70%,transparent 70%);
+  pointer-events:none;
+}
+.top-brand{
+  top:max(87px,10%);letter-spacing:.34em;color:#c6b497;font-size:9px;
+  text-shadow:0 2px 2px #05090d;opacity:.95;
+}
+.brand-mark{color:#ec9e67}
+.top-brand-version{color:#96a5a2}
+.overlay{
+  background:
+    radial-gradient(ellipse at 95% 80%,rgba(113,42,61,.30),transparent 65%),
+    radial-gradient(ellipse at 0 20%,rgba(55,94,104,.31),transparent 65%),
+    linear-gradient(160deg,rgba(10,19,27,.96),rgba(14,29,33,.95) 55%,rgba(9,16,22,.97));
+}
+.overlay::before{
+  content:'';
+  position:absolute;inset:9px;border:1px solid #77827a33;pointer-events:none;
+  clip-path:polygon(0 0,91% 0,100% 6%,100% 100%,8% 100%,0 95%);
+}
+.overlay-pattern{
+  opacity:.31;
+  background:
+    repeating-linear-gradient(90deg,transparent 0 76px,#9cb2ad22 77px 78px),
+    repeating-linear-gradient(0deg,transparent 0 76px,#9cb2ad22 77px 78px),
+    linear-gradient(120deg,transparent 40%,#e89a5e1d 40.2%,transparent 40.6%);
+}
+.briefing{max-width:390px;text-align:left;padding:22px 16px;isolation:isolate}
+.badge{
+  border-radius:0;gap:11px;border-color:#c19b705f;
+  color:#e3b98b;letter-spacing:.15em;
+  background:#1d292dba;padding:7px 11px;
+  font-size:9px;border-left:3px solid var(--signal);
+}
+.badge-dot,.status-light{
+  background:#ef9c65;border-radius:0;width:6px;height:6px;
+  box-shadow:0 0 12px #f2a66e8f;transform:rotate(45deg);
+}
+.insignia{
+  width:112px;height:105px;margin:25px 0 17px;
+  border:none;border-radius:0;box-shadow:none;
+  background:none;display:grid;place-items:center;
+  position:relative;
+}
+.insignia::before{
+  content:'';position:absolute;inset:6px 11px;
+  clip-path:polygon(50% 0,100% 20%,100% 75%,50% 100%,0 75%,0 20%);
+  background:linear-gradient(135deg,#597073,#b5c3ae 37%,#46545a 38%,#23313a 64%,#a4aa98);
+  opacity:.95;
+}
+.insignia::after{
+  content:'';position:absolute;inset:12px 17px;
+  clip-path:polygon(50% 0,100% 20%,100% 75%,50% 100%,0 75%,0 20%);
+  background:#142631;box-shadow:inset 0 0 20px #000b;
+}
+.insignia-inner{width:62px;height:70px;position:relative;z-index:1;transform:none}
+.insignia-inner i{display:block;position:absolute;background:#c8d2bd;transform:skewY(-8deg)}
+.insignia-inner i:nth-child(1){width:13px;height:58px;top:4px;left:25px;clip-path:polygon(0 0,100% 0,100% 76%,50% 100%,0 76%)}
+.insignia-inner i:nth-child(2){width:25px;height:9px;top:20px;left:3px;transform:skewY(20deg);background:#e2a46d}
+.insignia-inner i:nth-child(3){width:25px;height:9px;top:20px;left:35px;transform:skewY(-20deg);background:#e2a46d}
+.title-en{font-size:10px;letter-spacing:.31em;color:#e7a976;margin:0 0 11px}
+h1{
+  font-family:'Arial Narrow','PingFang SC','Microsoft YaHei',sans-serif;
+  text-shadow:2px 3px #243238,0 8px 34px #0009;
+  color:#f5f0de;letter-spacing:.025em;font-weight:950;
+  font-size:clamp(47px,10vw,60px);
+}
+.subtitle{font-size:13px;letter-spacing:.24em;color:#b6bdb0;margin:14px 0 25px}
+.instruction-list{border-color:#52605c9c;gap:4px;padding:13px 0 12px}
+.instruction-list>div{padding:4px 0;gap:13px}
+.instruction-icon{
+  width:36px;height:36px;border:1px solid #70847e;
+  border-radius:0;background:#273a3f;color:#f0b279;
+  font-size:11px;font-weight:900;letter-spacing:.03em;
+  clip-path:polygon(0 0,100% 0,100% 80%,80% 100%,0 100%);
+}
+.instruction-list strong{color:#e9eadc;font-size:13px;letter-spacing:.05em}
+.instruction-list small{color:#a8b7ac;font-size:11px}
+.action-button{
+  border-radius:0;background:linear-gradient(105deg,#d18c56,#f1b674 58%,#dc9863);
+  box-shadow:inset 0 1px #ffe2a5,0 7px 0 #855132,0 13px 22px #000b;
+  clip-path:polygon(0 0,96% 0,100% 21%,100% 100%,4% 100%,0 80%);
+  min-height:56px;color:#152027;letter-spacing:.14em;font-weight:950;
+}
+.action-button:hover{filter:brightness(1.07)}
+.action-button:focus-visible{outline:3px solid #d8f9e4;outline-offset:4px}
+.action-button:active{transform:translateY(3px);box-shadow:0 3px 0 #855132,0 6px 12px #0008}
+.bottom-note{font-size:9px;letter-spacing:.15em;color:#98aaa5;justify-content:flex-start}
+.run-stats>div{
+  border-radius:0;border:1px solid #71827e;
+  background:linear-gradient(160deg,#233b42,#131e26);
+  clip-path:polygon(0 0,93% 0,100% 14%,100% 100%,0 100%);
+}
+.run-stats strong{color:#f0b374}
+.run-stats span{color:#b4c2b6}
+.mute-button{
+  background:#101d25da;border:1px solid #77867b;color:#b3c7bc;
+  border-radius:0;padding:6px 12px;font-size:10px;letter-spacing:.05em;
+}
+.desktop-aside{max-width:28vw;border-left:2px solid #34434a;padding-left:33px}
+.micro-label{color:#e6ae76;letter-spacing:.33em}
+.desktop-aside h2{color:#e9e8da;letter-spacing:.025em}
+.desktop-aside h2 em{color:#dca075}
+.desktop-aside>p:not(.micro-label){color:#a6b7b2;line-height:2.05}
+.aside-rule{background:linear-gradient(90deg,#d7a26b,#475b5e,transparent);height:2px}
+.aside-control strong{color:#f1c49a}
+.aside-tag{border-radius:0;color:#a8b6ae;border-color:#6f827a;padding:11px 13px}
+.reward-overlay{
+  background:
+    repeating-linear-gradient(125deg,transparent 0 46px,rgba(237,162,105,.018) 47px 48px),
+    radial-gradient(ellipse at 75% 70%,#652f3a44,transparent 65%),
+    linear-gradient(160deg,#0b181f 0%,#243138 59%,#0b161d 100%);
+}
+.reward-header{width:100%;max-width:420px;text-align:left;border-left:3px solid var(--signal);padding-left:14px}
+.reward-kicker{font-size:9px;letter-spacing:.17em;color:#f7b77e}
+.reward-header h2{font-size:clamp(23px,5vw,30px);color:#f7efdb;letter-spacing:.04em}
+.reward-header p{color:#b5c1b6;line-height:1.6}
+.reward-cards{width:min(100%,420px);gap:7px}
+.reward-card{
+  position:relative;display:flex;align-items:flex-start;
+  padding:12px 10px 14px;gap:10px;min-height:226px;
+  border:1px solid #6a817b;border-top:3px solid #708882;border-radius:0;
+  background:linear-gradient(170deg,#344349,#15232b 76%);
+  color:#eff0e0;text-align:left;box-shadow:inset 0 2px #c3d1c01c,0 5px 0 #09141a;
+  clip-path:polygon(0 0,91% 0,100% 5%,100% 100%,0 100%);
+}
+.reward-card::before{
+  content:'';display:block;position:absolute;bottom:7px;right:10px;
+  width:20px;height:3px;background:#e3a36b;opacity:.85;
+}
+.reward-card:hover,.reward-card:focus-visible{border-color:#e0ad78;outline:2px solid #f7d8a9;outline-offset:1px}
+.reward-card[data-category="weapon"]{background:linear-gradient(165deg,#58463d,#202c30 76%);border-color:#e0b17c}
+.reward-card[data-category="deploy"]{border-color:#d88f69}
+.reward-card[data-category="survival"]{border-color:#9bb49b}
+.reward-card[data-category="mobile"]{border-color:#8baeb0}
+.reward-card-icon{
+  width:52px;height:57px;flex:none;display:grid;place-items:center;
+  border-radius:0;border:1px solid #667878;
+  color:#f6c899;font-size:31px;text-shadow:none;
+  background:linear-gradient(150deg,#293941,#172830);
+  clip-path:polygon(0 0,100% 0,100% 78%,80% 100%,0 100%);
+}
+.reward-card-name{font-size:14px;letter-spacing:.015em;line-height:1.4}
+.reward-card-description{color:#bbcbc1;font-size:11px;line-height:1.6}
+.reward-card-category{color:#f7bc84;font-size:10px;letter-spacing:.08em;margin-top:auto;font-weight:900}
+.reward-card-serial{
+  width:100%;font-size:9px;letter-spacing:.1em;color:#a4b8b1;
+  padding-bottom:6px;border-bottom:1px solid #82908955;margin-bottom:0;
+}
+.reward-footer{display:flex;align-items:center;gap:12px;color:#c2b59a;letter-spacing:.09em;text-align:center}
+.footer-line{height:1px;min-width:16px;flex:1;background:#ab825e70}
+@media(max-width:850px){
+  .ambient-mark{display:none}
+  .game-panel{box-shadow:none;border:none}
+  .briefing{max-width:390px;padding:18px 15px}
+  .reward-card{min-height:224px;padding:11px 7px}
+}
+@media(max-height:680px){
+  .insignia{width:68px;height:68px;margin:9px 0}
+  .insignia-inner{transform:scale(.62)}
+  .subtitle{margin:8px 0 13px}
+  .instruction-list{padding:7px 0;margin-bottom:15px}
+  .instruction-list>div{padding:1px 0}
+  .instruction-icon{width:27px;height:29px}
+  .action-button{min-height:45px;padding:11px}
+  .reward-card{min-height:170px;padding:9px 7px;gap:5px}
+  .reward-card-icon{width:35px;height:36px;font-size:25px}
+  .reward-header{margin-bottom:10px}
+  .reward-footer{margin-top:10px}
+}
+@media(max-width:375px){
+  .reward-card{padding:10px 6px}
+  .reward-card-name{font-size:12px}
+  .reward-card-icon{width:38px;height:42px;font-size:25px}
+}
