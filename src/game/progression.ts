@@ -112,7 +112,10 @@ export function eligibleCards(build: RunBuild): CardDef[] {
 }
 
 /** Three distinct, legal choices. Early rewards prominently offer a second weapon. */
-export function rollCards(build: RunBuild, rewardNumber: number, random: () => number = Math.random): CardDef[] {
+export function rollCards(
+  build: RunBuild, rewardNumber: number, random: () => number = Math.random,
+  preferredRecipes: readonly CardId[] = [],
+): CardDef[] {
   const pool = eligibleCards(build);
   const chosen: CardDef[] = [];
   if (rewardNumber <= 4) {
@@ -134,6 +137,16 @@ export function rollCards(build: RunBuild, rewardNumber: number, random: () => n
       chosen.push(card);
       remaining.splice(remaining.indexOf(card), 1);
     }
+  }
+  // Give players a realistic path toward their Lv5 evolution without granting
+  // the prerequisite for free. A normal tactical-card choice is still required.
+  const preferred = remaining.filter(card => preferredRecipes.includes(card.id));
+  if (preferred.length && chosen.length < 3) {
+    const value = random();
+    const roll = Number.isFinite(value) ? Math.max(0, Math.min(0.999999, value)) : 0;
+    const card = preferred[Math.floor(roll * preferred.length)];
+    chosen.push(card);
+    remaining.splice(remaining.indexOf(card), 1);
   }
   while (chosen.length < 3 && remaining.length) {
     const index = Math.min(remaining.length - 1, Math.floor(Math.max(0, random()) * remaining.length));
