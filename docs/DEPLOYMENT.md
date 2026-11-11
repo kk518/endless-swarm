@@ -11,7 +11,7 @@
 | 主机上的部署目录 | `/var/www/endless-swarm/` |
 | 预期网址 | `https://kk518.top/swarm/` |
 | 旧项目位置 | `/var/www/bossisnear/`（**不可覆盖**） |
-| 验证 | `npm test` + `npm run build` + 外网 URL 冒烟检测 |
+| 验证 | `npm test` + `npm run build` + 外网 URL 与实际部署 commit 核验 |
 
 > **目前只是配置方案。** GitHub Actions Secrets 属于仓库作用域，旧仓库中的值不会自动复制到新仓库。必须完成下面的服务器及密钥配置之后，才会执行真正的上传。没有 Secrets 时，构建正常完成，但部署会显式提示 SKIPPED。
 
@@ -73,12 +73,12 @@ sudo systemctl reload nginx
 
 ## 4. 工作流行为
 
-1. 合并代码到 `main` 后 GitHub Actions 自动触发 `Deploy Endless Swarm`。
+1. 合并代码到 `main` 后 GitHub Actions 自动触发 `Deploy Endless Swarm`。通过 GitHub Actions 手动触发也**仅限 `main`**，不能通过选择 feature 分支直接发布未经合并的代码。
 2. 在 GitHub Runner 使用 Node 22，安装依赖、执行单测和 TypeScript/Vite 生产构建。
-3. 若 4 个 SSH Secret 不齐：**跳过部署**，在 Actions Summary 显示警告（不能将其视为已上线）。
+3. 构建完成后写入 `dist/deploy-version.json`（当前 Git commit）。若 4 个 SSH Secret 不齐：**跳过部署**，在 Actions Summary 显示警告（不能将其视为已上线）。
 4. 若齐全：通过已验证的 SSH known_hosts 严格核验主机、检查专用目录和标记文件。
 5. 使用 `rsync -az --delete --delay-updates` 仅同步 `dist/` → `/var/www/endless-swarm/`。
-6. 请求 `https://kk518.top/swarm/`，检查 HTTP 成功且返回的是 Endless Swarm HTML。若访问失败或路由错误，工作流失败并显示原因。
+6. 请求 `https://kk518.top/swarm/`，检查 HTTP 成功且返回 Endless Swarm HTML；再请求 `/swarm/deploy-version.json`，核对内容中的 commit 与当前 GitHub Actions 运行的 SHA 完全一致。若仍是旧版或 Nginx 路由错误，工作流失败并显示原因。
 7. 推送到 `feature/*` 不触发**生产**部署；仍由现有 `Verify prototype` CI 进行测试和构建。
 
 ## 5. 首次上线与常见问题
@@ -92,7 +92,7 @@ sudo systemctl reload nginx
 
 ## 6. 安全与后续优化
 
-- 初版延续旧项目的 GitHub Actions → SSH/rsync 思路，不引入新的服务器组件。
+- 初版延续旧项目的 GitHub Actions → SSH/rsync 思路，不引入新的服务器组件。SSH 秘钥仅作用于部署相关步骤，测试与安装依赖步骤不会得到秘钥环境变量。
 - 建议今后为部署密钥限制目录写权限、使用独立 SSH 用户，且仅授予必要权限。
 - `npm install` 适用于仓库当前**尚无 `package-lock.json`**的状态；提交 lockfile 后应切换成 `npm ci` 以提高可复现性。
 - 正式发布前建议补充分支保护、人工批准环境、上线后功能冒烟测试和版本回滚策略。当前的 rsync 不是原子版本切换，不提供自动回滚。
