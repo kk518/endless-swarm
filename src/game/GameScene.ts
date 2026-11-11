@@ -42,6 +42,9 @@ type Enemy = {
   shadow: Phaser.GameObjects.Arc;
   flashTime: number;
   slowMs: number;
+  burnMs: number;
+  burnTickMs: number;
+  burnDamage: number;
   attackCooldownMs: number;
   windupMs: number;
   warning: Phaser.GameObjects.Arc | null;
@@ -90,7 +93,7 @@ export interface RunResult {
   level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
 }
 export interface RewardOffer { wave: number; options: CardDef[]; nextWave: number }
-export interface LevelOffer { level: number; options: LevelChoice[] }
+export interface LevelOffer { level: number; pending: number; options: LevelChoice[] }
 
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
@@ -370,7 +373,7 @@ export class GameScene extends Phaser.Scene {
     this.releaseJoystick();
     this.levelOptions = rollLevelChoices(this.build, this.growth);
     window.dispatchEvent(new CustomEvent<LevelOffer>('swarm:levelup', {
-      detail: { level: this.growth.level, options: this.levelOptions },
+      detail: { level: this.growth.level, pending: this.queuedLevels, options: this.levelOptions },
     }));
   }
 
@@ -746,15 +749,26 @@ export class GameScene extends Phaser.Scene {
     const pressure = pressurePlan(this.waveNumber, this.waveElapsedMs, WAVES[this.waveNumber - 1].durationMs);
     this.enemyList.push({
       kind, elite, eliteAura, x, y, alive: true, hp: stats.hp, speed: stats.speed * pressure.speedMultiplier, size: stats.size,
-      sprite, shadow, warning, flashTime: 0, slowMs: 0, attackCooldownMs: 1900 + Math.random() * 1500, windupMs: 0,
+      sprite, shadow, warning, flashTime: 0, slowMs: 0,
+      burnMs: 0, burnTickMs: 0, burnDamage: 0,
+      attackCooldownMs: 1900 + Math.random() * 1500, windupMs: 0,
     });
     return true;
   }
 
   private updateEnemies(dt: number, ms: number): void {
-    for (let i = this.enemyList.length - 1; i >= 0; i--) {
-      const enemy = this.enemyList[i];
+    // Snapshot keeps burn deaths from invalidating a live index traversal.
+    for (const enemy of [...this.enemyList]) {
       if (!enemy.alive) continue;
+      if (enemy.burnMs > 0) {
+        enemy.burnMs = Math.max(0, enemy.burnMs - ms);
+        enemy.burnTickMs -= ms;
+        if (enemy.burnTickMs <= 0) {
+          enemy.burnTickMs += 250;
+          this.damageEnemy(enemy, enemy.burnDamage);
+          if (!enemy.alive) continue;
+        }
+      }
       const dx = this.player.x - enemy.x;
       const dy = this.player.y - enemy.y;
       const distance = Math.max(0.1, Math.hypot(dx, dy));
@@ -805,7 +819,8 @@ export class GameScene extends Phaser.Scene {
       if (enemy.flashTime > 0) {
         enemy.flashTime -= ms;
         if (enemy.flashTime <= 0) {
-          if (enemy.slowMs > 0) enemy.sprite.setTint(0x94cfdf);
+          if (enemy.burnMs > 0) enemy.sprite.setTint(0xf6a073);
+          else if (enemy.slowMs > 0) enemy.sprite.setTint(0x94cfdf);
           else if (enemy.elite) enemy.sprite.setTint(0xf4c6a9);
           else enemy.sprite.clearTint();
         }
@@ -1095,11 +1110,13 @@ export class GameScene extends Phaser.Scene {
       this.addCombatVisual('beam', fromX, fromY, enemy.x, enemy.y,
         WEAPON_LIGHT.arc, 1, 125);
       this.damageEnemy(enemy, this.weaponDamage((i === 0 ? 38 : 25) * tuning.damage));
-      if (this.build.frost) enemy.slowMs = 1000;
+      if (this.build.frost || tuning.shockMs > 0) {
+        enemy.slowMs = Math.max(enemy.slowMs, tuning.shockMs || 1000);
+      }
       this.spawnSparks(enemy.x, enemy.y, 6, 0x9bcbff, 130);
       fromX = enemy.x; fromY = enemy.y;
       const nearby: Enemy[] = this.enemyList.filter(e => e.alive && !chained.has(e) &&
-        Math.hypot(e.x - enemy.x, e.y - enemy.y) < 160 * this.build.range);
+        Math.hypot(e.x - enemy.x, e.y - enemy.y) < tuning.chainRange * this.build.range);
       current = nearby.sort((a, b) => Math.hypot(a.x - enemy.x, a.y - enemy.y) -
         Math.hypot(b.x - enemy.x, b.y - enemy.y))[0] ?? null;
     }
@@ -1108,7 +1125,7 @@ export class GameScene extends Phaser.Scene {
   private fireFlame(angle: number): void {
     const tuning = weaponTuning(this.growth, 'flame');
     const range = 190 * this.build.range * tuning.range;
-    const cosThreshold = Math.cos(0.45 * this.build.range);
+    const cosThreshold = Math.cos(Math.min(1.2, tuning.coneHalfAngle * this.build.range));
     let hits = 0;
     for (const enemy of [...this.enemyList]) {
       if (!enemy.alive) continue;
@@ -1117,6 +1134,14 @@ export class GameScene extends Phaser.Scene {
       const len = Math.hypot(dx, dy);
       if (len > range || len <= 0 || (dx * Math.cos(angle) + dy * Math.sin(angle)) / len < cosThreshold) continue;
       this.damageEnemy(enemy, this.weaponDamage(9 * tuning.damage));
+      if (!enemy.alive) { hits++; continue; }
+      if (tuning.burnDurationMs > 0) {
+        // Sustained burning refreshes duration, never multiplies the number of
+        // per-enemy damage timers. DoT ticks in the existing enemy update loop.
+        if (enemy.burnMs <= 0) enemy.burnTickMs = 250;
+        enemy.burnMs = tuning.burnDurationMs;
+        enemy.burnDamage = this.weaponDamage(tuning.burnTickDamage);
+      }
       if (this.build.frost) enemy.slowMs = 1000;
       hits++;
     }
@@ -1442,7 +1467,7 @@ export class GameScene extends Phaser.Scene {
     this.buffLabel.setFontSize(12);
     this.buffLabel.setText(`${buildReadout(this.build)}  · ${this.build.selected.length}张卡`);
     const loadout = visibleLoadout(this.build.weapons).map(id =>
-      `${id === 'rifle' ? '步枪' : id === 'scatter' ? '肩炮' : id === 'arc' ? '电弧' : '喷焰'}${this.growth.weaponLevels[id]}${(id === 'rifle' || id === 'scatter') && this.growth.evolved[id] ? '★' : ''}`
+      `${id === 'rifle' ? '步枪' : id === 'scatter' ? '肩炮' : id === 'arc' ? '电弧' : '喷焰'}${this.growth.weaponLevels[id]}${this.growth.evolved[id] ? '★' : ''}`
     ).join(' / ');
     this.modeHint.setText(this.overclockMs > 0
       ? `超频射击 +45% · 剩余 ${Math.ceil(this.overclockMs / 1000)} 秒`
