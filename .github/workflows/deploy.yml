@@ -14,12 +14,8 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      SERVER_HOST: ${{ secrets.SERVER_HOST }}
-      SERVER_USER: ${{ secrets.SERVER_USER }}
-      SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-      SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,9 +36,18 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      - name: Add deploy version marker to build
+        run: |
+          printf '{"commit":"%s"}\n' "$GITHUB_SHA" > dist/deploy-version.json
+
       - name: Check deployment secrets
         id: deploy_config
         shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
         run: |
           if [[ -n "$SERVER_HOST" && -n "$SERVER_USER" && -n "$SERVER_SSH_KEY" && -n "$SERVER_KNOWN_HOSTS" ]]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
@@ -55,6 +60,9 @@ jobs:
       - name: Configure SSH
         if: steps.deploy_config.outputs.ready == 'true'
         shell: bash
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_deploy
@@ -65,6 +73,9 @@ jobs:
       - name: Check isolated deployment directory
         if: steps.deploy_config.outputs.ready == 'true'
         shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$SERVER_USER@$SERVER_HOST" \
@@ -73,6 +84,9 @@ jobs:
       - name: Deploy static assets
         if: steps.deploy_config.outputs.ready == 'true'
         shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           rsync -az --delete --delay-updates \
             --exclude='/.endless-swarm-deploy' \
@@ -80,7 +94,7 @@ jobs:
             dist/ "$SERVER_USER@$SERVER_HOST:/var/www/endless-swarm/"
           echo '### Deployed to /var/www/endless-swarm/' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify public URL
+      - name: Verify public URL and exact deployed commit
         if: steps.deploy_config.outputs.ready == 'true'
         shell: bash
         run: |
@@ -89,4 +103,10 @@ jobs:
             echo '::error::Public URL does not appear to serve Endless Swarm. Verify Nginx location /swarm/.'
             exit 1
           fi
-          echo '### Public smoke check passed: https://kk518.top/swarm/' >> "$GITHUB_STEP_SUMMARY"
+          deployed="$(curl -fsSL --retry 2 --max-time 20 "https://kk518.top/swarm/deploy-version.json?sha=$GITHUB_SHA")"
+          expected="$(printf '{"commit":"%s"}' "$GITHUB_SHA")"
+          if [[ "$deployed" != "$expected" ]]; then
+            echo '::error::Public URL is stale or points to the wrong deployment directory.'
+            exit 1
+          fi
+          echo "### Verified deployment of $GITHUB_SHA to https://kk518.top/swarm/" >> "$GITHUB_STEP_SUMMARY"
