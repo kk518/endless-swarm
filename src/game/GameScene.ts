@@ -263,7 +263,6 @@ export class GameScene extends Phaser.Scene {
   startRun(training: TrainingPlan = DEFAULT_TRAINING): void {
     if (!this.ready) return;
     this.training = { ...DEFAULT_TRAINING };
-    this.setTraining(training.weapon, training.focus);
     this.removeProjectilesAndEnemies();
     this.player.setPosition(CENTER, CENTER).setRotation(0).clearTint();
     this.playerShadow.setPosition(CENTER + 4, CENTER + 13);
@@ -296,6 +295,7 @@ export class GameScene extends Phaser.Scene {
     this.rewardOptions = [];
     this.build = newBuild();
     this.growth = newGrowth();
+    this.setTraining(training.weapon, training.focus);
     this.growthNotice = '';
     this.growthNoticeMs = 0;
     this.refreshMountedWeapons();
