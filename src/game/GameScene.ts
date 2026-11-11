@@ -773,6 +773,7 @@ export class GameScene extends Phaser.Scene {
     const index = this.enemyList.indexOf(enemy);
     if (index >= 0) this.enemyList.splice(index, 1);
     this.stampSplat(enemy.x, enemy.y, 'bomber');
+    this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, 0xff5d7a, 103, 260);
     this.spawnSparks(enemy.x, enemy.y, 20, HIVE_GORE.bomber, 230);
     const distance = Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y);
     if (distance < 260) this.cameras.main.shake(100, 0.002);
@@ -971,7 +972,7 @@ export class GameScene extends Phaser.Scene {
       if (!target || this.weaponCooldowns[id] > 0) continue;
       const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
       switch (id) {
-        case 'rifle': this.fire(angle, this.weaponDamage(GAMEPLAY.bulletDamage), this.build.pierce, 1, 0x64f6e5); break;
+        case 'rifle': this.fire(angle, this.weaponDamage(GAMEPLAY.bulletDamage), this.build.pierce, 1, WEAPON_LIGHT.rifle); break;
         case 'scatter': this.fireScatter(angle); break;
         case 'arc': this.fireArc(target); break;
         case 'flame': this.fireFlame(angle); break;
@@ -981,43 +982,63 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private fire(angle: number, damage: number, pierce: number, scale = 1, tint = 0x64f6e5): void {
-    const muzzleX = this.player.x + Math.cos(angle) * 40;
-    const muzzleY = this.player.y + Math.sin(angle) * 40;
-    const bullet = this.add.image(muzzleX, muzzleY, 'bolt').setRotation(angle).setDepth(9).setScale(scale).setTint(tint);
-    if (this.deployed) bullet.setScale(scale * 1.12);
+  private fire(
+    angle: number, damage: number, pierce: number, scale = 1,
+    tint = WEAPON_LIGHT.rifle, source: WeaponId = 'rifle', feedback = true,
+  ): void {
+    const muzzle = this.muzzlePoints[source];
+    const muzzleX = muzzle.x, muzzleY = muzzle.y;
+    const tier = visualPowerTier(this.build);
+    const bullet = this.add.image(muzzleX, muzzleY, 'bolt')
+      .setRotation(angle).setDepth(9).setScale(scale * (1 + tier * 0.06)).setTint(tint);
+    if (this.deployed) bullet.setScale(scale * 1.12 * (1 + tier * 0.06));
     this.bullets.push({
       x: muzzleX, y: muzzleY,
       vx: Math.cos(angle) * GAMEPLAY.projectileSpeed,
       vy: Math.sin(angle) * GAMEPLAY.projectileSpeed,
       damage, pierce, hitEnemies: new Set<Enemy>(), frost: this.build.frost,
-      remainingMs: GAMEPLAY.projectileLifetimeMs, sprite: bullet,
+      color: tint, remainingMs: GAMEPLAY.projectileLifetimeMs, sprite: bullet,
     });
-    this.spawnSparks(muzzleX, muzzleY, 2, tint, 80);
-    this.soundFx.shot();
+    if (feedback) {
+      this.burstMuzzle(source, angle);
+      this.spawnSparks(muzzleX, muzzleY, 2 + tier, tint, 100);
+    }
   }
 
   private fireScatter(angle: number): void {
+    this.burstMuzzle('scatter', angle, 1.55);
+    // One loud cannon report, five physical pellets, each with an orange tracer.
     for (let i = -2; i <= 2; i++) {
-      // Range upgrades must not widen the shot cone and reduce hit probability.
       const spread = i * 0.14;
-      this.fire(angle + spread, this.weaponDamage(19), this.build.pierce, 0.8, 0xffc88c);
+      this.fire(angle + spread, this.weaponDamage(19), this.build.pierce, 0.8,
+        WEAPON_LIGHT.scatter, 'scatter', false);
     }
+    this.spawnSparks(this.muzzlePoints.scatter.x, this.muzzlePoints.scatter.y,
+      12, 0xffd08a, 200);
+    this.cameras.main.shake(47, 0.00125);
   }
 
   private fireArc(first: Enemy): void {
+    const origin = this.muzzlePoints.arc;
+    const angle = Math.atan2(first.y - origin.y, first.x - origin.x);
+    this.burstMuzzle('arc', angle, 0.8);
     const chained = new Set<Enemy>();
     let current: Enemy | null = first;
+    let fromX = origin.x, fromY = origin.y;
     for (let i = 0; i < 4 && current; i++) {
       const enemy: Enemy = current;
       chained.add(enemy);
+      this.addCombatVisual('beam', fromX, fromY, enemy.x, enemy.y,
+        WEAPON_LIGHT.arc, 1, 125);
       this.damageEnemy(enemy, this.weaponDamage(i === 0 ? 38 : 25));
       if (this.build.frost) enemy.slowMs = 1000;
-      this.spawnSparks(enemy.x, enemy.y, 6, 0x8aaeff, 130);
-      const nearby: Enemy[] = this.enemyList.filter(e => e.alive && !chained.has(e) && Math.hypot(e.x - enemy.x, e.y - enemy.y) < 160 * this.build.range);
-      current = nearby.sort((a, b) => Math.hypot(a.x - enemy.x, a.y - enemy.y) - Math.hypot(b.x - enemy.x, b.y - enemy.y))[0] ?? null;
+      this.spawnSparks(enemy.x, enemy.y, 6, 0x9bcbff, 130);
+      fromX = enemy.x; fromY = enemy.y;
+      const nearby: Enemy[] = this.enemyList.filter(e => e.alive && !chained.has(e) &&
+        Math.hypot(e.x - enemy.x, e.y - enemy.y) < 160 * this.build.range);
+      current = nearby.sort((a, b) => Math.hypot(a.x - enemy.x, a.y - enemy.y) -
+        Math.hypot(b.x - enemy.x, b.y - enemy.y))[0] ?? null;
     }
-    this.soundFx.shot();
   }
 
   private fireFlame(angle: number): void {
@@ -1034,10 +1055,11 @@ export class GameScene extends Phaser.Scene {
       if (this.build.frost) enemy.slowMs = 1000;
       hits++;
     }
-    const x = this.player.x + Math.cos(angle) * 85;
-    const y = this.player.y + Math.sin(angle) * 85;
-    this.spawnSparks(x, y, Math.min(8, hits + 3), 0xff9f4f, 240);
-    this.soundFx.shot();
+    const x = this.muzzlePoints.flame.x + Math.cos(angle) * 70;
+    const y = this.muzzlePoints.flame.y + Math.sin(angle) * 70;
+    this.burstMuzzle('flame', angle, 1.25);
+    this.spawnSparks(x, y, Math.min(9, hits + 4), 0xff8c4e, 190);
+    this.addCombatVisual('ring', x, y, x, y, 0xf36c45, 14 + hits * 2, 160);
   }
 
   private spitAcid(enemy: Enemy): void {
@@ -1088,7 +1110,8 @@ export class GameScene extends Phaser.Scene {
           bullet.hitEnemies.add(enemy);
           this.damageEnemy(enemy, bullet.damage);
           if (bullet.frost) enemy.slowMs = 1000;
-          this.spawnSparks(bullet.x, bullet.y, 3, 0xa5ffd3, 110);
+          this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, bullet.color, 12, 90);
+          this.spawnSparks(enemy.x, enemy.y, 4 + visualPowerTier(this.build), bullet.color, 165);
           if (bullet.hitEnemies.size > bullet.pierce) break;
         }
       }
@@ -1104,7 +1127,10 @@ export class GameScene extends Phaser.Scene {
     if (!enemy.alive) return;
     const critical = this.build.criticalChance > 0 && Math.random() < this.build.criticalChance;
     enemy.hp -= critical ? damage * 2 : damage;
-    if (critical) this.spawnSparks(enemy.x, enemy.y, 4, 0xffed92, 145);
+    if (critical) {
+      this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, 0xffe38b, 24, 125);
+      this.spawnSparks(enemy.x, enemy.y, 8, 0xffed92, 200);
+    }
     if (enemy.hp > 0) {
       enemy.flashTime = 78;
       enemy.sprite.setTint(0xf5fff6);
@@ -1117,7 +1143,15 @@ export class GameScene extends Phaser.Scene {
     enemy.eliteAura?.destroy();
     if (enemy.elite) this.spawnSupply(enemy.x, enemy.y);
     this.stampSplat(enemy.x, enemy.y, enemy.kind);
-    this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : 7, HIVE_GORE[enemy.kind], 190);
+    this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y,
+      enemy.elite || enemy.kind === 'boss' ? 0xffd99d : HIVE_GORE[enemy.kind],
+      enemy.kind === 'boss' ? 90 : enemy.elite ? 49 : 26, 220);
+    this.spawnSparks(enemy.x, enemy.y, enemy.kind === 'boss' ? 35 : enemy.elite ? 20 : 10,
+      HIVE_GORE[enemy.kind], enemy.kind === 'boss' ? 310 : 220);
+    if (enemy.elite || enemy.kind === 'boss') {
+      this.hitStopMs = Math.max(this.hitStopMs, enemy.kind === 'boss' ? 52 : 32);
+      this.cameras.main.shake(enemy.kind === 'boss' ? 180 : 90, enemy.kind === 'boss' ? 0.005 : 0.002);
+    }
     this.registerKill();
     if (this.kills % 3 === 0) this.soundFx.kill();
     if (this.lockedTarget === enemy) this.lockedTarget = null;
@@ -1143,6 +1177,7 @@ export class GameScene extends Phaser.Scene {
           this.spawnSparks(other.x, other.y, 5, HIVE_GORE[other.kind], 180);
         }
       }
+      this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, 0xffb26e, 100 * this.build.range, 260);
       this.spawnSparks(enemy.x, enemy.y, 13, 0xffad62, 220);
     }
   }
@@ -1326,11 +1361,14 @@ export class GameScene extends Phaser.Scene {
     this.stateLabel.setColor(this.deployed ? '#ffcd86' : '#c1f7e7');
     this.buffLabel.setFontSize(12);
     this.buffLabel.setText(`${buildReadout(this.build)}  · ${this.build.selected.length}张卡`);
+    const loadout = visibleLoadout(this.build.weapons).map(id =>
+      id === 'rifle' ? '步枪' : id === 'scatter' ? '肩炮' : id === 'arc' ? '电弧' : '喷焰'
+    ).join(' / ');
     this.modeHint.setText(this.overclockMs > 0
       ? `超频射击 +45% · 剩余 ${Math.ceil(this.overclockMs / 1000)} 秒`
       : this.deployed
         ? this.build.overload && this.overloadMs < 3000 ? '超载生效 · 额外射速 +40%' : '火力展开 · 伤害 +35% 射速 +25%'
-        : this.stillMs > 0 ? '停止移动以展开火力' : `已装备 ${this.build.weapons.length}/4 武器 · 连杀持续强化`);
+        : this.stillMs > 0 ? '停止移动以展开火力' : `${loadout} · T${visualPowerTier(this.build)}火力`);
 
     const g = this.hudGraphics;
     g.clear();
@@ -1386,6 +1424,10 @@ export class GameScene extends Phaser.Scene {
     this.acids = [];
     this.particles.forEach((p) => p.sprite.destroy());
     this.particles = [];
+    for (const flash of this.muzzleFlashes) flash.sprite.destroy();
+    this.muzzleFlashes = [];
+    this.combatVisuals = [];
+    this.combatGraphics?.clear();
     this.crosshair?.setVisible(false);
     this.targetingLine?.clear();
   }
