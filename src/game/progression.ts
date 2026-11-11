@@ -1,10 +1,11 @@
 /** M1 progression rules deliberately have no Phaser/DOM dependencies. */
 export type WeaponId = 'rifle' | 'scatter' | 'arc' | 'flame';
-export type EnemyKind = 'grunt' | 'leaper' | 'armored' | 'spitter' | 'boss';
+export type EnemyKind = 'grunt' | 'leaper' | 'armored' | 'spitter' | 'bomber' | 'boss';
 export type CardId =
   | 'scatter-kit' | 'arc-kit' | 'flame-kit' | 'feed' | 'warhead' | 'pierce'
   | 'chain-blast' | 'radius' | 'thrusters' | 'cryogenic' | 'afterglow'
-  | 'fast-braces' | 'overload' | 'bulwark' | 'repair' | 'plating';
+  | 'fast-braces' | 'overload' | 'bulwark' | 'repair' | 'plating'
+  | 'frenzy' | 'salvage' | 'critical-core';
 
 export interface WaveDef {
   number: number;
@@ -17,9 +18,9 @@ export interface WaveDef {
 export const WAVES: readonly WaveDef[] = [
   { number: 1, durationMs: 35000, maxEnemies: 42, spawnIntervalMs: 850, mix: [{ kind: 'grunt', weight: 1 }] },
   { number: 2, durationMs: 40000, maxEnemies: 57, spawnIntervalMs: 620, mix: [{ kind: 'grunt', weight: 4 }, { kind: 'leaper', weight: 1 }] },
-  { number: 3, durationMs: 45000, maxEnemies: 70, spawnIntervalMs: 480, mix: [{ kind: 'grunt', weight: 5 }, { kind: 'leaper', weight: 2 }, { kind: 'armored', weight: 1 }] },
-  { number: 4, durationMs: 50000, maxEnemies: 86, spawnIntervalMs: 390, mix: [{ kind: 'grunt', weight: 5 }, { kind: 'leaper', weight: 2 }, { kind: 'armored', weight: 2 }, { kind: 'spitter', weight: 1 }] },
-  { number: 5, durationMs: 90000, maxEnemies: 95, spawnIntervalMs: 800, mix: [{ kind: 'grunt', weight: 6 }, { kind: 'leaper', weight: 2 }, { kind: 'spitter', weight: 1 }] },
+  { number: 3, durationMs: 45000, maxEnemies: 70, spawnIntervalMs: 480, mix: [{ kind: 'grunt', weight: 5 }, { kind: 'leaper', weight: 2 }, { kind: 'armored', weight: 1 }, { kind: 'bomber', weight: 1 }] },
+  { number: 4, durationMs: 50000, maxEnemies: 86, spawnIntervalMs: 390, mix: [{ kind: 'grunt', weight: 5 }, { kind: 'leaper', weight: 2 }, { kind: 'armored', weight: 2 }, { kind: 'spitter', weight: 1 }, { kind: 'bomber', weight: 1 }] },
+  { number: 5, durationMs: 90000, maxEnemies: 95, spawnIntervalMs: 800, mix: [{ kind: 'grunt', weight: 6 }, { kind: 'leaper', weight: 2 }, { kind: 'spitter', weight: 1 }, { kind: 'bomber', weight: 2 }] },
 ] as const;
 
 export interface CardDef {
@@ -48,6 +49,9 @@ export const CARDS: readonly CardDef[] = [
   { id: 'bulwark', name: '钢铁壁垒', description: '展开时有 40% 概率抵消一次伤害', icon: '▣', category: 'deploy' },
   { id: 'repair', name: '应急修复', description: '立即回复 3 点装甲生命', icon: '✚', category: 'survival' },
   { id: 'plating', name: '装甲加固', description: '最大生命 +2，并回复 2 点生命', icon: '⬡', category: 'survival' },
+  { id: 'frenzy', name: '战斗狂热', description: '连杀伤害增幅每档从 10% 提升至 15%', icon: '✷', category: 'assault' },
+  { id: 'salvage', name: '战地回收', description: '获得后每击杀 20 只虫恢复 1 点装甲', icon: '⚒', category: 'survival' },
+  { id: 'critical-core', name: '弱点扫描', description: '每级增加 14% 双倍暴击概率，最高 42%', icon: '◈', category: 'assault' },
 ];
 
 export interface RunBuild {
@@ -63,6 +67,9 @@ export interface RunBuild {
   deployDelay: number;
   overload: boolean;
   bulwark: boolean;
+  frenzy: boolean;
+  salvage: boolean;
+  criticalChance: number;
   maxHp: number;
   hp: number;
   selected: CardId[];
@@ -72,7 +79,8 @@ export function newBuild(): RunBuild {
   return {
     weapons: ['rifle'], damage: 1, rate: 1, speed: 1, range: 1, pierce: 0,
     explosionChance: 0, frost: false, afterglow: false, deployDelay: 1,
-    overload: false, bulwark: false, maxHp: 6, hp: 6, selected: [],
+    overload: false, bulwark: false, frenzy: false, salvage: false,
+    criticalChance: 0, maxHp: 6, hp: 6, selected: [],
   };
 }
 
@@ -84,6 +92,9 @@ export function eligibleCards(build: RunBuild): CardDef[] {
     if (card.id === 'afterglow' && build.afterglow) return false;
     if (card.id === 'overload' && build.overload) return false;
     if (card.id === 'bulwark' && build.bulwark) return false;
+    if (card.id === 'frenzy' && build.frenzy) return false;
+    if (card.id === 'salvage' && build.salvage) return false;
+    if (card.id === 'critical-core' && build.criticalChance >= 0.42 - 1e-6) return false;
     if (card.id === 'chain-blast' && build.explosionChance >= 0.66) return false;
     return true;
   });
@@ -127,6 +138,9 @@ export function applyCard(build: RunBuild, cardId: CardId): boolean {
     case 'bulwark': build.bulwark = true; break;
     case 'repair': build.hp = Math.min(build.maxHp, build.hp + 3); break;
     case 'plating': build.maxHp += 2; build.hp = Math.min(build.maxHp, build.hp + 2); break;
+    case 'frenzy': build.frenzy = true; break;
+    case 'salvage': build.salvage = true; break;
+    case 'critical-core': build.criticalChance = Math.min(0.42, build.criticalChance + 0.14); break;
   }
   build.selected.push(cardId);
   return true;
