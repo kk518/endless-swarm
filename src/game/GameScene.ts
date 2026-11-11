@@ -3,7 +3,7 @@ import { createArt } from './Art';
 import { SoundFx } from './Sound';
 import {
   GAMEPLAY, bulletDamage, fireIntervalMs, formatTime,
-  isDeployed, normalizedMove, selectTarget, spawnIntervalMs,
+  FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget, spawnIntervalMs,
 } from './combat';
 
 const VIEW_W = 450;
@@ -59,6 +59,7 @@ export class GameScene extends Phaser.Scene {
   private active = false;
   private ready = false;
   private timeMs = 0;
+  private simAccumulatorMs = 0;
   private spawnAccumulator = 0;
   private shotAccumulator = 0;
   private stillMs = 0;
@@ -109,10 +110,18 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointermove', this.onPointerMove, this);
     this.input.on('pointerup', this.onPointerUp, this);
     this.input.on('pointerupoutside', this.onPointerUp, this);
+    this.input.on('gameout', this.releaseJoystick, this);
     // Browsers can revoke touches without a pointerup (app switch, call, etc.).
-    this.game.events.on(Phaser.Core.Events.BLUR, this.releaseJoystick, this);
+    this.game.events.on(Phaser.Core.Events.BLUR, this.pauseControls, this);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.layoutHUD, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.game.events.off(Phaser.Core.Events.BLUR, this.releaseJoystick, this);
+      this.game.events.off(Phaser.Core.Events.BLUR, this.pauseControls, this);
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.layoutHUD, this);
+      this.input.off('pointerdown', this.onPointerDown, this);
+      this.input.off('pointermove', this.onPointerMove, this);
+      this.input.off('pointerup', this.onPointerUp, this);
+      this.input.off('pointerupoutside', this.onPointerUp, this);
+      this.input.off('gameout', this.releaseJoystick, this);
     });
 
     this.ready = true;
@@ -128,6 +137,7 @@ export class GameScene extends Phaser.Scene {
     this.aura.setPosition(CENTER, CENTER).setAlpha(1);
     this.cameras.main.centerOn(CENTER, CENTER);
     this.timeMs = 0;
+    this.simAccumulatorMs = 0;
     this.spawnAccumulator = 500;
     this.shotAccumulator = 0;
     this.stillMs = 0;
@@ -146,6 +156,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   setMuted(muted: boolean): void { this.soundFx.setMuted(muted); }
+
+  /** Interruptions must not leave a finger logically held down or cause a catch-up burst. */
+  pauseControls(): void {
+    this.releaseJoystick();
+    this.simAccumulatorMs = 0;
+  }
+
+  private layoutHUD(): void {
+    if (!this.ready) return;
+    this.stateLabel.setY(this.scale.height - 123);
+    this.modeHint.setY(this.scale.height - 99);
+    this.introHint.setY(this.scale.height - 195);
+    this.releaseJoystick();
+    this.updateHUD();
+  }
 
   private drawWorldDecorations(): void {
     const g = this.add.graphics().setDepth(-40);
@@ -201,7 +226,8 @@ export class GameScene extends Phaser.Scene {
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     if (!this.active || this.joystickPointer !== null) return;
-    // Entire battle view is touchable; positioning naturally supports both hands.
+    // Reserve the upper HUD/battle-visibility area; either thumb can play in the lower area.
+    if (pointer.y < this.scale.height * 0.42) return;
     this.joystickPointer = pointer.id;
     this.joystickOrigin = { x: pointer.x, y: pointer.y };
     this.joystickBase.setPosition(pointer.x, pointer.y).setVisible(true);
@@ -253,7 +279,12 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.active) return;
-    const ms = Math.min(delta, 45); // No massive catch-up after backgrounding the tab.
+    const batch = fixedStepBatch(this.simAccumulatorMs, delta);
+    this.simAccumulatorMs = batch.remainderMs;
+    for (let i = 0; i < batch.steps && this.active; i++) this.simulate(FIXED_STEP_MS);
+  }
+
+  private simulate(ms: number): void {
     const dt = ms / 1000;
     this.timeMs += ms;
     this.introFadeMs -= ms;
@@ -277,9 +308,10 @@ export class GameScene extends Phaser.Scene {
     this.aura.setPosition(this.player.x, this.player.y).setRadius(this.deployed ? 47 : 36)
       .setFillStyle(this.deployed ? 0xffb96f : 0x6cfadc, this.deployed ? 0.13 : 0.07)
       .setStrokeStyle(2, this.deployed ? 0xffcd83 : 0x58dcc6, this.deployed ? 0.84 : 0.2);
-    this.player.setTint(this.deployed ? 0xffe6ba : 0xffffff);
+    this.player.setTint(this.timeMs - this.lastHurtMs < 170 ? 0xff6a5b : this.deployed ? 0xffe6ba : 0xffffff);
 
     this.updateEnemies(dt, ms);
+    if (!this.active) return; // Contact damage can end a run before the rest of this step.
     this.lockedTarget = selectTarget(this.player, this.enemyList, GAMEPLAY.fireRange, this.lockedTarget);
     this.crosshair.setVisible(Boolean(this.lockedTarget));
     this.targetingLine.clear();
@@ -454,9 +486,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(150, 0.006);
     this.player.setTint(0xff6a5b);
     this.soundFx.hurt();
-    this.time.delayedCall(170, () => {
-      if (this.player.active) this.player.setTint(this.deployed ? 0xffe6ba : 0xffffff);
-    });
+    // Red damage flash is derived from game time; no stale timer can tint a restarted run.
     if (this.hp <= 0) this.finishRun();
   }
 
