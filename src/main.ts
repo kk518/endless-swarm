@@ -81,7 +81,7 @@ window.addEventListener('swarm:reward', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, weapons } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, weapons, bestStreak } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '虫巢已肃清！' : '本次行动结束';
   subtitle.textContent = victory ? '五波虫潮突破成功，下一次尝试更强的构筑。' : '战士倒下，但火力绝不停歇。';
   instructions.classList.add('is-hidden');
@@ -92,9 +92,9 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(kills), '击杀虫族'), entry(String(weapons.length), '装备武器'));
+  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
   stats.classList.remove('is-hidden');
-  stats.setAttribute('aria-label', `存活 ${survived}，历史最佳 ${record} 次击杀`);
+  stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '再次出击';
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
