@@ -50,6 +50,23 @@ export function createArt(scene: Phaser.Scene): void {
     g.lineStyle(2, 0x274237); g.lineBetween(24, 19, 24, 35);
   });
 
+  // Explosive hive runner: deliberately distinct silhouette and glowing unstable core.
+  make('bomber', 56, 56, (g) => {
+    g.lineStyle(4, 0x9b405f, 1);
+    for (const sign of [-1, 1]) {
+      g.lineBetween(28 + sign * 9, 19, 28 + sign * 24, 6);
+      g.lineBetween(28 + sign * 12, 31, 28 + sign * 26, 29);
+      g.lineBetween(28 + sign * 9, 39, 28 + sign * 21, 51);
+    }
+    g.fillStyle(0x3b2033); g.fillEllipse(28, 30, 32, 37);
+    g.fillStyle(0x9e486a); g.fillEllipse(28, 29, 26, 32);
+    g.fillStyle(0xff5a83, 0.42); g.fillCircle(28, 28, 15);
+    g.fillStyle(0xffbfd0); g.fillCircle(28, 28, 10);
+    g.fillStyle(0xff436e); g.fillCircle(28, 28, 6);
+    g.lineStyle(2, 0xffa1b8); g.strokeCircle(28, 28, 15);
+    g.fillStyle(0xffd8a3); g.fillCircle(19, 15, 3); g.fillCircle(37, 15, 3);
+  });
+
   make('bolt', 24, 9, (g) => {
     g.fillStyle(0x55ffe0, 0.35); g.fillEllipse(11, 4.5, 23, 9);
     g.fillStyle(0xe9fff0); g.fillRoundedRect(6, 3, 17, 3, 2);
