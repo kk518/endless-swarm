@@ -4,6 +4,11 @@ import { FACTION_COLORS, HIVE_GORE, HIVE_TEXTURE } from './artStyle';
 import { bodyOffset, visibleLoadout, visualPowerTier, WEAPON_LIGHT, WEAPON_MOUNTS, type MountedWeapon } from './weaponVisual';
 import { SoundFx } from './Sound';
 import {
+  applyLevelChoice, grantExperience, installWeaponCalibration, killExperience, newGrowth,
+  rollLevelChoices, weaponTuning, xpToNext, MAX_RUN_LEVEL,
+  type GrowthState, type LevelChoice, type LevelChoiceId,
+} from './arsenal';
+import {
   GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
   FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget,
 } from './combat';
@@ -82,8 +87,10 @@ type Particle = {
 export interface RunResult {
   kills: number; survived: string; record: number;
   victory: boolean; wave: number; weapons: WeaponId[]; cards: string[]; bestStreak: number;
+  level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
 }
 export interface RewardOffer { wave: number; options: CardDef[]; nextWave: number }
+export interface LevelOffer { level: number; options: LevelChoice[] }
 
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
@@ -123,6 +130,10 @@ export class GameScene extends Phaser.Scene {
   private bossSpawned = false;
   private bossKilled = false;
   private build: RunBuild = newBuild();
+  private growth: GrowthState = newGrowth();
+  private queuedLevels = 0;
+  private awaitingLevel = false;
+  private levelOptions: LevelChoice[] = [];
   private weaponCooldowns: Record<WeaponId, number> = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
   private lastDeployedMs = -10000;
   private overloadMs = 0;
@@ -156,6 +167,7 @@ export class GameScene extends Phaser.Scene {
   private killLabel!: Phaser.GameObjects.Text;
   private stateLabel!: Phaser.GameObjects.Text;
   private waveLabel!: Phaser.GameObjects.Text;
+  private xpLabel!: Phaser.GameObjects.Text;
   private modeHint!: Phaser.GameObjects.Text;
   private buffLabel!: Phaser.GameObjects.Text;
   private introHint!: Phaser.GameObjects.Text;
@@ -260,6 +272,10 @@ export class GameScene extends Phaser.Scene {
     this.awaitingReward = false;
     this.rewardOptions = [];
     this.build = newBuild();
+    this.growth = newGrowth();
+    this.queuedLevels = 0;
+    this.awaitingLevel = false;
+    this.levelOptions = [];
     this.refreshMountedWeapons();
     this.lastDeployedMs = -10000;
     this.overloadMs = 0;
@@ -288,6 +304,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.awaitingReward || !chosen) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
+    if (chosen.weapon) installWeaponCalibration(this.growth, chosen.weapon);
     this.refreshMountedWeapons();
     if (cardId === 'scatter-kit' || cardId === 'arc-kit' || cardId === 'flame-kit') {
       const color = WEAPON_LIGHT[chosen.weapon!];
@@ -320,6 +337,41 @@ export class GameScene extends Phaser.Scene {
     this.active = true;
     this.updateHUD();
     return true;
+  }
+
+  /** Accept only the currently offered upgrade. World simulation stays paused until selected. */
+  chooseLevelUpgrade(id: string): boolean {
+    if (!this.awaitingLevel || !this.levelOptions.some(option => option.id === id)) return false;
+    this.build.hp = this.hp;
+    if (!applyLevelChoice(this.build, this.growth, id as LevelChoiceId)) return false;
+    this.hp = this.build.hp;
+    this.levelOptions = [];
+    this.awaitingLevel = false;
+    this.queuedLevels = Math.max(0, this.queuedLevels - 1);
+    const evolved = id.startsWith('evolve:');
+    this.introHint.setText(evolved ? '武器进化完成！高能系统已上线' : '战斗升级完成 · 战力提升').setAlpha(1);
+    this.introFadeMs = 1650;
+    this.spawnSparks(this.player.x, this.player.y, evolved ? 24 : 10, evolved ? 0xffc67a : 0x7cebd2, 170);
+    this.soundFx.deploy();
+    if (this.queuedLevels > 0) this.presentLevelChoice();
+    else {
+      this.active = true;
+      this.simAccumulatorMs = 0;
+    }
+    this.updateHUD();
+    return true;
+  }
+
+  private presentLevelChoice(): void {
+    if (this.awaitingReward || this.awaitingLevel || this.queuedLevels <= 0) return;
+    this.active = false;
+    this.awaitingLevel = true;
+    this.simAccumulatorMs = 0;
+    this.releaseJoystick();
+    this.levelOptions = rollLevelChoices(this.build, this.growth);
+    window.dispatchEvent(new CustomEvent<LevelOffer>('swarm:levelup', {
+      detail: { level: this.growth.level, options: this.levelOptions },
+    }));
   }
 
   setMuted(muted: boolean): void { this.soundFx.setMuted(muted); }
@@ -442,6 +494,7 @@ export class GameScene extends Phaser.Scene {
     this.clockLabel = this.hudText(VIEW_W - 27, 21, '00:00', '26px', '#f3faf5').setOrigin(1, 0);
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
     this.waveLabel = this.hudText(VIEW_W / 2, 94, '第 1 / 5 波', '17px', '#ffbd78').setOrigin(0.5, 0);
+    this.xpLabel = this.hudText(31, 140, 'LV.1 | 0/8 XP', '12px', '#a9f1d9');
     this.stateLabel = this.hudText(VIEW_W / 2, this.scale.height - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
     this.modeHint = this.hudText(VIEW_W / 2, this.scale.height - 99, '移动射击中', '12px', '#79a2a9').setOrigin(0.5, 0.5);
     this.buffLabel = this.hudText(VIEW_W / 2, this.scale.height - 158, '', '16px', '#91eaf8').setOrigin(0.5, 0.5);
@@ -617,9 +670,10 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const phase = nextPhase(this.waveNumber, this.bossKilled, this.waveElapsedMs);
-    if (phase === 'reward') this.endWave();
     if (phase === 'victory') this.finishRun(true);
-    if (phase === 'timeout') this.finishRun(false);
+    else if (phase === 'timeout') this.finishRun(false);
+    else if (this.queuedLevels > 0) this.presentLevelChoice();
+    else if (phase === 'reward') this.endWave();
     this.updateHUD();
   }
 
@@ -967,18 +1021,25 @@ export class GameScene extends Phaser.Scene {
   private updateWeapons(ms: number): void {
     for (const id of this.build.weapons) {
       this.weaponCooldowns[id] = Math.max(0, this.weaponCooldowns[id] - ms);
-      const range = (id === 'flame' ? 190 : id === 'scatter' ? 270 : id === 'arc' ? 320 : GAMEPLAY.fireRange) * this.build.range;
+      const tuning = weaponTuning(this.growth, id);
+      const range = (id === 'flame' ? 190 : id === 'scatter' ? 270 : id === 'arc' ? 320 : GAMEPLAY.fireRange)
+        * this.build.range * tuning.range;
       const target = selectTarget(this.player, this.enemyList, range);
       if (!target || this.weaponCooldowns[id] > 0) continue;
       const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
       switch (id) {
-        case 'rifle': this.fire(angle, this.weaponDamage(GAMEPLAY.bulletDamage), this.build.pierce, 1, WEAPON_LIGHT.rifle); break;
+        case 'rifle': {
+          this.fire(angle, this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage),
+            this.build.pierce + tuning.pierce, this.growth.evolved.rifle ? 1.65 : 1,
+            this.growth.evolved.rifle ? 0xffd7a2 : WEAPON_LIGHT.rifle);
+          break;
+        }
         case 'scatter': this.fireScatter(angle); break;
         case 'arc': this.fireArc(target); break;
         case 'flame': this.fireFlame(angle); break;
       }
       const interval = id === 'rifle' ? fireIntervalMs(false) : id === 'scatter' ? 850 : id === 'arc' ? 980 : 170;
-      this.weaponCooldowns[id] = this.weaponInterval(interval);
+      this.weaponCooldowns[id] = this.weaponInterval(interval) * tuning.interval;
     }
   }
 
@@ -1007,11 +1068,13 @@ export class GameScene extends Phaser.Scene {
 
   private fireScatter(angle: number): void {
     this.burstMuzzle('scatter', angle, 1.55);
-    // One loud cannon report, five physical pellets, each with an orange tracer.
-    for (let i = -2; i <= 2; i++) {
-      const spread = i * 0.14;
-      this.fire(angle + spread, this.weaponDamage(19), this.build.pierce, 0.8,
-        WEAPON_LIGHT.scatter, 'scatter', false);
+    // Weapon Lv.3/5 increases actual pellet count; evolved shotgun adds knockback.
+    const tuning = weaponTuning(this.growth, 'scatter');
+    const center = (tuning.pellets - 1) / 2;
+    for (let i = 0; i < tuning.pellets; i++) {
+      const spread = (i - center) * 0.112;
+      this.fire(angle + spread, this.weaponDamage(19 * tuning.damage),
+        this.build.pierce, 0.8, WEAPON_LIGHT.scatter, 'scatter', false);
     }
     this.spawnSparks(this.muzzlePoints.scatter.x, this.muzzlePoints.scatter.y,
       12, 0xffd08a, 200);
@@ -1025,12 +1088,13 @@ export class GameScene extends Phaser.Scene {
     const chained = new Set<Enemy>();
     let current: Enemy | null = first;
     let fromX = origin.x, fromY = origin.y;
-    for (let i = 0; i < 4 && current; i++) {
+    const tuning = weaponTuning(this.growth, 'arc');
+    for (let i = 0; i < tuning.chains && current; i++) {
       const enemy: Enemy = current;
       chained.add(enemy);
       this.addCombatVisual('beam', fromX, fromY, enemy.x, enemy.y,
         WEAPON_LIGHT.arc, 1, 125);
-      this.damageEnemy(enemy, this.weaponDamage(i === 0 ? 38 : 25));
+      this.damageEnemy(enemy, this.weaponDamage((i === 0 ? 38 : 25) * tuning.damage));
       if (this.build.frost) enemy.slowMs = 1000;
       this.spawnSparks(enemy.x, enemy.y, 6, 0x9bcbff, 130);
       fromX = enemy.x; fromY = enemy.y;
@@ -1042,7 +1106,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private fireFlame(angle: number): void {
-    const range = 190 * this.build.range;
+    const tuning = weaponTuning(this.growth, 'flame');
+    const range = 190 * this.build.range * tuning.range;
     const cosThreshold = Math.cos(0.45 * this.build.range);
     let hits = 0;
     for (const enemy of [...this.enemyList]) {
@@ -1051,7 +1116,7 @@ export class GameScene extends Phaser.Scene {
       const dy = enemy.y - this.player.y;
       const len = Math.hypot(dx, dy);
       if (len > range || len <= 0 || (dx * Math.cos(angle) + dy * Math.sin(angle)) / len < cosThreshold) continue;
-      this.damageEnemy(enemy, this.weaponDamage(9));
+      this.damageEnemy(enemy, this.weaponDamage(9 * tuning.damage));
       if (this.build.frost) enemy.slowMs = 1000;
       hits++;
     }
@@ -1110,6 +1175,13 @@ export class GameScene extends Phaser.Scene {
           bullet.hitEnemies.add(enemy);
           this.damageEnemy(enemy, bullet.damage);
           if (bullet.frost) enemy.slowMs = 1000;
+          if (bullet.color === WEAPON_LIGHT.scatter && this.growth.evolved.scatter && enemy.alive) {
+            const knock = weaponTuning(this.growth, 'scatter').knockback;
+            const dx = enemy.x - this.player.x, dy = enemy.y - this.player.y;
+            const dist = Math.max(1, Math.hypot(dx, dy));
+            enemy.x = Phaser.Math.Clamp(enemy.x + knock * dx / dist, 48, WORLD - 48);
+            enemy.y = Phaser.Math.Clamp(enemy.y + knock * dy / dist, 48, WORLD - 48);
+          }
           this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, bullet.color, 12, 90);
           this.spawnSparks(enemy.x, enemy.y, 4 + visualPowerTier(this.build), bullet.color, 165);
           if (bullet.hitEnemies.size > bullet.pierce) break;
@@ -1152,7 +1224,7 @@ export class GameScene extends Phaser.Scene {
       this.hitStopMs = Math.max(this.hitStopMs, enemy.kind === 'boss' ? 52 : 32);
       this.cameras.main.shake(enemy.kind === 'boss' ? 180 : 90, enemy.kind === 'boss' ? 0.005 : 0.002);
     }
-    this.registerKill();
+    this.registerKill(enemy.kind, enemy.elite);
     if (this.kills % 3 === 0) this.soundFx.kill();
     if (this.lockedTarget === enemy) this.lockedTarget = null;
     const index = this.enemyList.indexOf(enemy);
@@ -1172,7 +1244,7 @@ export class GameScene extends Phaser.Scene {
           if (other.elite) this.spawnSupply(other.x, other.y);
           this.enemyList.splice(this.enemyList.indexOf(other), 1);
           if (other.kind === 'boss') this.bossKilled = true;
-          this.registerKill();
+          this.registerKill(other.kind, other.elite);
           this.stampSplat(other.x, other.y, other.kind);
           this.spawnSparks(other.x, other.y, 5, HIVE_GORE[other.kind], 180);
         }
@@ -1261,8 +1333,11 @@ export class GameScene extends Phaser.Scene {
     this.soundFx.deploy();
   }
 
-  private registerKill(): void {
+  private registerKill(kind: EnemyKind, elite: boolean): void {
     this.kills++;
+    const reward = grantExperience(this.growth, killExperience(kind, elite));
+    this.growth = reward.state;
+    this.queuedLevels += reward.gainedLevels;
     this.streak = advanceStreak(this.streak, this.lastKillMs, this.timeMs);
     this.lastKillMs = this.timeMs;
     this.bestStreak = Math.max(this.bestStreak, this.streak);
@@ -1342,12 +1417,17 @@ export class GameScene extends Phaser.Scene {
       kills: this.kills, survived: formatTime(this.timeMs / 1000), record,
       victory, wave: this.waveNumber, weapons: [...this.build.weapons],
       cards: [...this.build.selected], bestStreak: this.bestStreak,
+      level: this.growth.level, weaponLevels: { ...this.growth.weaponLevels },
+      evolutions: Object.entries(this.growth.evolved).filter(([, enabled]) => enabled).map(([name]) => name),
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
 
   private updateHUD(): void {
     this.clockLabel.setText(formatTime(this.timeMs / 1000));
+    this.xpLabel.setText(this.growth.level === MAX_RUN_LEVEL
+      ? 'LV.MAX / 完全同步'
+      : `LV.${this.growth.level}  |  ${this.growth.xp}/${xpToNext(this.growth.level)} XP`);
     const combo = this.streak >= 5
       ? ` · ${this.streak}连杀 ×${streakDamageMultiplier(this.streak, this.build.frenzy).toFixed(2)}`
       : this.streak >= 2 ? ` · ${this.streak}连杀` : '';
@@ -1362,7 +1442,7 @@ export class GameScene extends Phaser.Scene {
     this.buffLabel.setFontSize(12);
     this.buffLabel.setText(`${buildReadout(this.build)}  · ${this.build.selected.length}张卡`);
     const loadout = visibleLoadout(this.build.weapons).map(id =>
-      id === 'rifle' ? '步枪' : id === 'scatter' ? '肩炮' : id === 'arc' ? '电弧' : '喷焰'
+      `${id === 'rifle' ? '步枪' : id === 'scatter' ? '肩炮' : id === 'arc' ? '电弧' : '喷焰'}${this.growth.weaponLevels[id]}${(id === 'rifle' || id === 'scatter') && this.growth.evolved[id] ? '★' : ''}`
     ).join(' / ');
     this.modeHint.setText(this.overclockMs > 0
       ? `超频射击 +45% · 剩余 ${Math.ceil(this.overclockMs / 1000)} 秒`
@@ -1372,6 +1452,10 @@ export class GameScene extends Phaser.Scene {
 
     const g = this.hudGraphics;
     g.clear();
+    // XP bar lives below the existing wave / boss bar and never overlaps armor.
+    const xpProgress = this.growth.level === MAX_RUN_LEVEL ? 1 : this.growth.xp / xpToNext(this.growth.level);
+    g.fillStyle(0x102833, 0.9); g.fillRoundedRect(30, 163, VIEW_W - 60, 6, 2);
+    g.fillStyle(0x78e8d0, 0.98); g.fillRoundedRect(30, 163, (VIEW_W - 60) * xpProgress, 6, 2);
     g.fillStyle(0x07151d, 0.93);
     g.fillRoundedRect(13, 12, VIEW_W - 26, 72, 4);
     g.fillStyle(0x273c45, 0.95);
