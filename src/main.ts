@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameScene, type RunResult } from './game/GameScene';
+import { GameScene, type RewardOffer, type RunResult } from './game/GameScene';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
@@ -29,6 +29,12 @@ const instructions = document.querySelector<HTMLElement>('#overlay-instructions'
 const stats = document.querySelector<HTMLElement>('#run-stats')!;
 const startButton = document.querySelector<HTMLButtonElement>('#play-button')!;
 const muteButton = document.querySelector<HTMLButtonElement>('#mute-button')!;
+const rewardOverlay = document.querySelector<HTMLElement>('#reward-overlay')!;
+const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
+const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
+const cardCategory: Record<string, string> = {
+  weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
+};
 
 function beginRun(): void {
   // The scene is created during boot; if early on slow devices, wait one frame.
@@ -38,20 +44,59 @@ function beginRun(): void {
     return;
   }
   scene.startRun();
+  rewardOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
   document.querySelector<HTMLElement>('#game')?.focus();
 }
 
 startButton.addEventListener('click', beginRun);
 
+window.addEventListener('swarm:reward', (event) => {
+  const offer = (event as CustomEvent<RewardOffer>).detail;
+  rewardTitle.textContent = `第 ${offer.wave} 波完成 · 三选一`;
+  rewardCards.replaceChildren();
+  for (const card of offer.options) {
+    const button = document.createElement('button');
+    button.className = 'reward-card';
+    button.type = 'button';
+    button.dataset.category = card.category;
+    const icon = document.createElement('span');
+    icon.className = 'reward-card-icon'; icon.textContent = card.icon;
+    const name = document.createElement('strong');
+    name.className = 'reward-card-name'; name.textContent = card.name;
+    const description = document.createElement('span');
+    description.className = 'reward-card-description'; description.textContent = card.description;
+    const category = document.createElement('span');
+    category.className = 'reward-card-category'; category.textContent = cardCategory[card.category] ?? '强化';
+    button.append(icon, name, description, category);
+    button.addEventListener('click', () => {
+      if (!scene.chooseCard(card.id)) return;
+      rewardOverlay.classList.add('is-hidden');
+      document.querySelector<HTMLElement>('#game')?.focus();
+    });
+    rewardCards.append(button);
+  }
+  rewardOverlay.classList.remove('is-hidden');
+  rewardCards.querySelector('button')?.focus();
+});
+
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record } = (event as CustomEvent<RunResult>).detail;
-  title.textContent = '本次行动结束';
-  subtitle.textContent = '信号中断，但火力绝不停歇。';
+  const { kills, survived, record, victory, wave, weapons } = (event as CustomEvent<RunResult>).detail;
+  title.textContent = victory ? '虫巢已肃清！' : '本次行动结束';
+  subtitle.textContent = victory ? '五波虫潮突破成功，下一次尝试更强的构筑。' : '战士倒下，但火力绝不停歇。';
   instructions.classList.add('is-hidden');
-  stats.innerHTML = `<div><strong>${kills}</strong><span>消灭虫族</span></div><div><strong>${survived}</strong><span>生存时间</span></div><div><strong>${record}</strong><span>历史最佳击杀</span></div>`;
+  const entry = (value: string, label: string): HTMLElement => {
+    const wrapper = document.createElement('div');
+    const strong = document.createElement('strong'); strong.textContent = value;
+    const span = document.createElement('span'); span.textContent = label;
+    wrapper.append(strong, span);
+    return wrapper;
+  };
+  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(kills), '击杀虫族'), entry(String(weapons.length), '装备武器'));
   stats.classList.remove('is-hidden');
+  stats.setAttribute('aria-label', `存活 ${survived}，历史最佳 ${record} 次击杀`);
   startButton.textContent = '再次出击';
+  rewardOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
 });
 
