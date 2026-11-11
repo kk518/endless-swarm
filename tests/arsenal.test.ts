@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
-  applyLevelChoice, evolutionEligible, grantExperience, installWeaponCalibration, killExperience,
+  applyLevelChoice, evolutionEligible, evolutionRecipeTargets, grantExperience, installWeaponCalibration, killExperience,
   legalLevelChoices, MAX_RUN_LEVEL, MAX_WEAPON_LEVEL, newGrowth, rollLevelChoices,
   weaponTuning, xpToNext,
 } from '../src/game/arsenal.ts';
-import { applyCard, newBuild } from '../src/game/progression.ts';
+import { applyCard, newBuild, rollCards } from '../src/game/progression.ts';
 
 test('M5 XP starts at Lv1, grows with the run and correctly carries overflow', () => {
   const first = newGrowth();
@@ -249,4 +249,42 @@ test('M5.1 combat consumes shock range, cone width and burn ticks without a time
     'enemy.burnTickMs += 250',
     "this.damageEnemy(enemy, enemy.burnDamage)",
   ]) assert.ok(source.includes(marker), `missing live combat integration: ${marker}`);
+});
+
+test('M5.1 wave end offers a missing recipe for an invested weapon', () => {
+  const build = newBuild(), growth = newGrowth();
+  growth.weaponLevels.rifle = 4;
+  const suggested = evolutionRecipeTargets(build, growth);
+  assert.deepEqual(suggested, ['pierce', 'critical-core']);
+  for (const rng of [() => 0, () => 0.5, () => 0.99999]) {
+    const options = rollCards(build, 2, rng, suggested);
+    assert.equal(options.length, 3);
+    assert.ok(options.some(c => suggested.includes(c.id)), 'Missing evolution blueprint choice');
+    assert.equal(new Set(options.map(x => x.id)).size, 3);
+  }
+  assert.equal(applyCard(build, 'pierce'), true);
+  assert.deepEqual(evolutionRecipeTargets(build, growth), []);
+});
+
+test('M5.1 multiple weapons prefer highest-level missing recipe and never offer invalid repeats', () => {
+  const build = newBuild(), growth = newGrowth();
+  for (const card of ['scatter-kit', 'arc-kit', 'flame-kit'] as const) {
+    assert.equal(applyCard(build, card), true);
+  }
+  growth.weaponLevels = { rifle: 2, scatter: 3, arc: 5, flame: 4 };
+  assert.deepEqual(evolutionRecipeTargets(build, growth), ['cryogenic', 'chain-blast']);
+  assert.equal(applyCard(build, 'cryogenic'), true);
+  assert.deepEqual(evolutionRecipeTargets(build, growth), ['radius', 'overload']);
+  const choice = rollCards(build, 3, () => 0.8, evolutionRecipeTargets(build, growth));
+  assert.ok(choice.some(c => c.id === 'radius' || c.id === 'overload'));
+  assert.ok(!choice.some(c => c.id === 'cryogenic'));
+});
+
+test('M5.1 level-up descriptions reveal evolution ingredients in Chinese when nearly ready', () => {
+  const build = newBuild(), growth = newGrowth();
+  growth.weaponLevels.rifle = 4;
+  const rifle = legalLevelChoices(build, growth).find(c => c.id === 'weapon:rifle');
+  assert.ok(rifle?.description.includes('Lv.5'));
+  assert.ok(rifle?.description.includes('穿甲弹'));
+  assert.ok(rifle?.description.includes('弱点扫描'));
 });
