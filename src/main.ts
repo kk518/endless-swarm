@@ -2,15 +2,18 @@ import Phaser from 'phaser';
 import { GameScene, type RunResult } from './game/GameScene';
 import './styles.css';
 
+// Keep the full viewport on tall phones instead of fixed 9:16 letterboxing.
+const portraitPhone = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+const logicalHeight = portraitPhone ? Math.round(450 * window.innerHeight / window.innerWidth) : 800;
 const scene = new GameScene();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: 450,
-  height: 800,
+  height: logicalHeight,
   backgroundColor: '#08121c',
   render: { antialias: true, pixelArt: false },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 450, height: 800 },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 450, height: logicalHeight },
   scene: [scene],
   fps: { target: 60, forceSetTimeOut: false },
 });
