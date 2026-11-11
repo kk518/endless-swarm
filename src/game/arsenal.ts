@@ -34,7 +34,7 @@ export interface WeaponTuning {
 export function newGrowth(): GrowthState {
   return {
     level: 1, xp: 0,
-    weaponLevels: { rifle: 1, scatter: 1, arc: 1, flame: 1 },
+    weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
     evolved: { rifle: false, scatter: false },
   };
 }
@@ -75,9 +75,11 @@ const WEAPON_NAMES: Record<WeaponId, string> = {
 
 export function evolutionEligible(build: RunBuild, growth: GrowthState, weapon: 'rifle' | 'scatter'): boolean {
   if (!build.weapons.includes(weapon) || growth.weaponLevels[weapon] < MAX_WEAPON_LEVEL || growth.evolved[weapon]) return false;
+  // Evolution needs a specific tactical blueprint card. Generic XP stat bonuses
+  // or supply passives must not accidentally bypass that recipe.
   return weapon === 'rifle'
-    ? build.pierce > 0 || build.criticalChance > 0
-    : build.range > 1 || build.damage > 1;
+    ? build.selected.includes('pierce') || build.selected.includes('critical-core')
+    : build.selected.includes('radius') || build.selected.includes('warhead');
 }
 
 const CORES: readonly LevelChoice[] = [
