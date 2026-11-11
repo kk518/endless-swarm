@@ -787,6 +787,182 @@ export class GameScene extends Phaser.Scene {
     return buildWeaponInterval(base, this.build, this.deployed, this.overloadMs < 3000, this.overclockMs > 0);
   }
 
+  /** Hardware is always physically mounted only when the corresponding card is owned. */
+  private refreshMountedWeapons(): void {
+    for (const id of ['scatter', 'arc', 'flame'] as const) {
+      this.mountedWeapons[id].setVisible(this.build.weapons.includes(id));
+    }
+    for (const id of ['rifle', 'scatter', 'arc', 'flame'] as const) {
+      this.weaponGlows[id].setVisible(this.build.weapons.includes(id));
+    }
+  }
+
+  /** One human-shaped body with three independent slots that rotate around the suit. */
+  private updateWeaponRig(ms: number): void {
+    const tier = visualPowerTier(this.build);
+    const rotation = this.player.rotation;
+    const aim = this.rifle.rotation;
+    const pulse = 0.76 + Math.sin(this.timeMs / 112) * 0.24;
+    const burst = this.overclockMs > 0 || this.deployed ? 0.18 : 0;
+    const rifleRecoil = this.recoilMs.rifle / 90;
+    this.rifle.x -= Math.cos(aim) * rifleRecoil * 7;
+    this.rifle.y -= Math.sin(aim) * rifleRecoil * 7;
+    this.muzzlePoints.rifle = {
+      x: this.rifle.x + Math.cos(aim) * 43,
+      y: this.rifle.y + Math.sin(aim) * 43,
+    };
+    for (const id of ['scatter', 'arc', 'flame'] as const) {
+      const meta = WEAPON_MOUNTS[id];
+      const offset = bodyOffset(meta.x, meta.y, rotation);
+      const mount = this.mountedWeapons[id];
+      const recoil = this.recoilMs[id] / 130 * 8;
+      mount.setPosition(
+        this.player.x + offset.x - Math.cos(aim) * recoil,
+        this.player.y + offset.y - Math.sin(aim) * recoil,
+      ).setRotation(aim);
+      this.muzzlePoints[id] = {
+        x: mount.x + Math.cos(aim) * meta.muzzle,
+        y: mount.y + Math.sin(aim) * meta.muzzle,
+      };
+      mount.setScale(this.deployed ? 1.11 : 1);
+    }
+    const bodyGlow = bodyOffset(0, -8, rotation);
+    this.reactorGlow.setPosition(this.player.x + bodyGlow.x, this.player.y + bodyGlow.y)
+      .setRadius(8 + tier * 2.8 + (this.deployed ? 3 : 0))
+      .setAlpha(tier ? Math.min(0.78, 0.13 + tier * 0.11 + burst) * pulse : this.deployed ? 0.3 : 0.08);
+    for (const id of visibleLoadout(this.build.weapons)) {
+      const pos = this.muzzlePoints[id];
+      this.weaponGlows[id].setPosition(pos.x, pos.y)
+        .setRadius(7 + tier * 3 + (this.deployed ? 4 : 0))
+        .setAlpha(tier ? Math.min(0.78, (0.12 + tier * 0.13 + burst) * pulse) : this.deployed ? 0.25 : 0.025);
+    }
+    for (const id of ['rifle', 'scatter', 'arc', 'flame'] as const) {
+      this.recoilMs[id] = Math.max(0, this.recoilMs[id] - ms);
+    }
+    if (tier >= 2) {
+      this.glowParticleMs += ms;
+      if (this.glowParticleMs >= (tier >= 3 ? 90 : 145)) {
+        this.glowParticleMs = 0;
+        const equipped = visibleLoadout(this.build.weapons);
+        const id = equipped[Math.floor(this.timeMs / 223) % equipped.length];
+        const pos = this.muzzlePoints[id];
+        this.spawnSparks(pos.x, pos.y, tier >= 3 ? 2 : 1, WEAPON_LIGHT[id], 53);
+      }
+    }
+  }
+
+  private addCombatVisual(
+    kind: CombatVisual['kind'], x: number, y: number, x2: number, y2: number,
+    color: number, size: number, lifeMs: number,
+  ): void {
+    // On a phone, short lived drawing commands are cheaper than hundreds of
+    // persistent Phaser sprites or one WebGL object per flame/spark.
+    if (this.combatVisuals.length >= 68) this.combatVisuals.shift();
+    this.combatVisuals.push({
+      kind, x, y, x2, y2, angle: Math.atan2(y2 - y, x2 - x),
+      size, color, ms: lifeMs, maxMs: lifeMs,
+    });
+  }
+
+  private burstMuzzle(id: WeaponId, angle: number, scale = 1): void {
+    const point = this.muzzlePoints[id];
+    const tier = visualPowerTier(this.build);
+    this.recoilMs[id] = id === 'scatter' ? 115 : id === 'arc' ? 95 : 65;
+    if (this.muzzleFlashes.length < 32) {
+      const sprite = this.add.image(point.x, point.y, 'muzzle-flash')
+        .setOrigin(0.16, 0.5).setRotation(angle)
+        .setDepth(11).setScale((0.38 + tier * 0.11) * scale)
+        .setTint(WEAPON_LIGHT[id]).setBlendMode(Phaser.BlendModes.ADD);
+      this.muzzleFlashes.push({ sprite, ms: 95, maxMs: 95 });
+    }
+    if (id === 'scatter') this.addCombatVisual(
+      'cone', point.x, point.y, point.x + Math.cos(angle) * 95, point.y + Math.sin(angle) * 95,
+      WEAPON_LIGHT.scatter, 0.47, 175,
+    );
+    if (id === 'flame') this.addCombatVisual(
+      'cone', point.x, point.y, point.x + Math.cos(angle) * 125, point.y + Math.sin(angle) * 125,
+      WEAPON_LIGHT.flame, 0.37, 165,
+    );
+    this.soundFx.weaponShot(id, tier);
+  }
+
+  private updateCombatVisuals(ms: number): void {
+    const graphics = this.combatGraphics;
+    graphics.clear();
+    const tier = visualPowerTier(this.build);
+    // Each physical projectile draws a bright hot core and a soft streak tail.
+    // The number of commands is clamped; collision simulation remains unchanged.
+    for (let i = 0; i < this.bullets.length && i < 85; i++) {
+      const bullet = this.bullets[i];
+      const tailTime = 0.028 + tier * 0.009;
+      const tx = bullet.x - bullet.vx * tailTime;
+      const ty = bullet.y - bullet.vy * tailTime;
+      graphics.lineStyle(5 + tier, bullet.color, 0.10 + tier * 0.03);
+      graphics.lineBetween(tx, ty, bullet.x, bullet.y);
+      graphics.lineStyle(2.6, bullet.color, 0.7);
+      graphics.lineBetween(tx + (bullet.x - tx) * 0.35, ty + (bullet.y - ty) * 0.35, bullet.x, bullet.y);
+      graphics.lineStyle(1.15, 0xfff5da, 0.92);
+      graphics.lineBetween(tx + (bullet.x - tx) * 0.6, ty + (bullet.y - ty) * 0.6, bullet.x, bullet.y);
+    }
+    for (let i = this.combatVisuals.length - 1; i >= 0; i--) {
+      const fx = this.combatVisuals[i];
+      fx.ms -= ms;
+      if (fx.ms <= 0) { this.combatVisuals.splice(i, 1); continue; }
+      const f = fx.ms / fx.maxMs;
+      if (fx.kind === 'ring') {
+        graphics.lineStyle(5, fx.color, 0.13 * f);
+        graphics.strokeCircle(fx.x, fx.y, fx.size * (1.3 - f * 0.38));
+        graphics.lineStyle(2, fx.color, 0.8 * f);
+        graphics.strokeCircle(fx.x, fx.y, fx.size * (1.1 - f * 0.65));
+      } else if (fx.kind === 'beam') {
+        // Broken electrical discharge, never a smooth solid "laser line".
+        const dx = fx.x2 - fx.x, dy = fx.y2 - fx.y;
+        const len = Math.max(1, Math.hypot(dx, dy));
+        const nx = -dy / len, ny = dx / len;
+        let px = fx.x, py = fx.y;
+        for (let j = 1; j <= 7; j++) {
+          const k = j / 7;
+          const shake = (j === 7 ? 0 : Math.sin((j * 21.7 + this.timeMs / 47 + fx.x) * 2.3) * 12 * f);
+          const x = fx.x + dx * k + nx * shake;
+          const y = fx.y + dy * k + ny * shake;
+          graphics.lineStyle(8, fx.color, 0.13 * f);
+          graphics.lineBetween(px, py, x, y);
+          graphics.lineStyle(3, fx.color, 0.78 * f);
+          graphics.lineBetween(px, py, x, y);
+          graphics.lineStyle(1, 0xf8faff, 0.9 * f);
+          graphics.lineBetween(px, py, x, y);
+          px = x; py = y;
+        }
+      } else {
+        // Two layers of short-lived translucent flame / buckshot pressure cones.
+        const angle = fx.angle;
+        const halfWidth = fx.size;
+        const length = Math.hypot(fx.x2 - fx.x, fx.y2 - fx.y) * (1.05 - 0.16 * f);
+        const left = angle + halfWidth, right = angle - halfWidth;
+        const lx = fx.x + Math.cos(left) * length, ly = fx.y + Math.sin(left) * length;
+        const rx = fx.x + Math.cos(right) * length, ry = fx.y + Math.sin(right) * length;
+        graphics.fillStyle(fx.color, 0.16 * f);
+        graphics.fillTriangle(fx.x, fx.y, lx, ly, rx, ry);
+        graphics.lineStyle(3, fx.color, 0.33 * f);
+        graphics.lineBetween(fx.x, fx.y, lx, ly);
+        graphics.lineBetween(fx.x, fx.y, rx, ry);
+        const inner = length * 0.56;
+        graphics.lineStyle(5, 0xffefd4, 0.37 * f);
+        graphics.lineBetween(fx.x, fx.y, fx.x + Math.cos(angle) * inner, fx.y + Math.sin(angle) * inner);
+      }
+    }
+    for (let i = this.muzzleFlashes.length - 1; i >= 0; i--) {
+      const flash = this.muzzleFlashes[i];
+      flash.ms -= ms;
+      if (flash.ms <= 0) {
+        flash.sprite.destroy();
+        this.muzzleFlashes.splice(i, 1);
+      } else {
+        flash.sprite.setAlpha(flash.ms / flash.maxMs);
+      }
+    }
+  }
+
   private updateWeapons(ms: number): void {
     for (const id of this.build.weapons) {
       this.weaponCooldowns[id] = Math.max(0, this.weaponCooldowns[id] - ms);
