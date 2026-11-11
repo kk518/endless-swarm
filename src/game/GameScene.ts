@@ -92,7 +92,7 @@ export class GameScene extends Phaser.Scene {
   private spawnAccumulator = 0;
   private stillMs = 0;
   private deployed = false;
-  private hp = GAMEPLAY.playerMaxHealth;
+  private hp: number = GAMEPLAY.playerMaxHealth;
   private lastHurtMs = -10000;
   private kills = 0;
   private joystickPointer: number | null = null;
