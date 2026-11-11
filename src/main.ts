@@ -58,7 +58,7 @@ startButton.addEventListener('click', beginRun);
 window.addEventListener('swarm:levelup', (event) => {
   const offer = (event as CustomEvent<LevelOffer>).detail;
   rewardOverlay.classList.add('is-hidden');
-  levelTitle.textContent = `战地升级 · LV.${offer.level}`;
+  levelTitle.textContent = `战地升级 · LV.${offer.level}${offer.pending > 1 ? ` · 剩余 ${offer.pending} 次` : ''}`;
   levelCards.replaceChildren();
   for (const [index, choice] of offer.options.entries()) {
     const button = document.createElement('button');
