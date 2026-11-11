@@ -111,9 +111,40 @@ test('core upgrade rewards are small and healing is strictly capped', () => {
   assert.ok(build.damage > 1.3);
 });
 
+test('unowned weapons have level zero and never appear in combat upgrade choices', () => {
+  const build = newBuild(), growth = newGrowth();
+  for (const weapon of ['scatter', 'arc', 'flame'] as const) {
+    assert.equal(growth.weaponLevels[weapon], 0);
+    assert.ok(!legalLevelChoices(build, growth).some(choice => choice.id === `weapon:${weapon}`));
+  }
+  assert.equal(applyCard(build, 'scatter-kit'), true);
+  installWeaponCalibration(growth, 'scatter');
+  assert.equal(growth.weaponLevels.scatter, 2);
+  assert.ok(legalLevelChoices(build, growth).some(choice => choice.id === 'weapon:scatter'));
+});
+
+test('evolution recipes require the exact tactical card, not generic passive growth', () => {
+  const build = newBuild(), growth = newGrowth();
+  growth.weaponLevels.rifle = 5;
+  assert.equal(applyLevelChoice(build, growth, 'core:damage'), true);
+  assert.equal(applyLevelChoice(build, growth, 'core:rate'), true);
+  assert.equal(applyCard(build, 'emp-array'), true);
+  assert.equal(evolutionEligible(build, growth, 'rifle'), false);
+  assert.equal(applyCard(build, 'critical-core'), true);
+  assert.equal(evolutionEligible(build, growth, 'rifle'), true);
+
+  assert.equal(applyCard(build, 'scatter-kit'), true);
+  installWeaponCalibration(growth, 'scatter');
+  growth.weaponLevels.scatter = 5;
+  assert.equal(evolutionEligible(build, growth, 'scatter'), false);
+  assert.equal(applyCard(build, 'warhead'), true);
+  assert.equal(evolutionEligible(build, growth, 'scatter'), true);
+});
+
 test('fresh run clears XP, weapon rank and evolution flags', () => {
   const a = newGrowth(); a.level = 12; a.weaponLevels.rifle = 5; a.evolved.rifle = true;
   const b = newGrowth();
   assert.equal(b.level, 1); assert.equal(b.xp, 0);
-  assert.equal(b.weaponLevels.rifle, 1); assert.equal(b.evolved.rifle, false);
+  assert.equal(b.weaponLevels.rifle, 1); assert.equal(b.weaponLevels.scatter, 0);
+  assert.equal(b.evolved.rifle, false);
 });
