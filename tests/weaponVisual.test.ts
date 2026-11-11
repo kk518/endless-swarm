@@ -69,7 +69,8 @@ test('visual effects are wired to actual weapon attacks, not only the card picke
   for (const marker of [
     'this.updateWeaponRig(ms)', 'this.refreshMountedWeapons()',
     "this.burstMuzzle('scatter'", "this.burstMuzzle('arc'", "this.burstMuzzle('flame'",
-    "this.addCombatVisual('beam'", "this.addCombatVisual('cone'",
+    "this.addCombatVisual('beam'",
     'this.updateCombatVisuals(ms)',
   ]) assert.ok(scene.includes(marker), `missing combat wiring: ${marker}`);
+  assert.match(scene, /this\\.addCombatVisual\\(\\s*'cone'/, 'flame/scatter cone should be drawn');
 });
