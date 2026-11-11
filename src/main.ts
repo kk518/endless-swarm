@@ -2,9 +2,13 @@ import Phaser from 'phaser';
 import { GameScene, type RunResult } from './game/GameScene';
 import './styles.css';
 
-// Keep the full viewport on tall phones instead of fixed 9:16 letterboxing.
+// Use the full vertical viewport on tall phones rather than letterboxing 9:16.
 const portraitPhone = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
-const logicalHeight = portraitPhone ? Math.round(450 * window.innerHeight / window.innerWidth) : 800;
+const viewportHeight = (): number => {
+  const portrait = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+  return portrait ? Math.round(450 * window.innerHeight / window.innerWidth) : 800;
+};
+const logicalHeight = portraitPhone ? viewportHeight() : 800;
 const scene = new GameScene();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -59,7 +63,30 @@ muteButton.addEventListener('click', () => {
   muteButton.setAttribute('aria-pressed', String(muted));
 });
 
-window.addEventListener('pagehide', () => {
-  // Phaser owns canvas resources; no need to keep audio playing in the background.
+/** Browser navigation, calls and app switches must freeze combat, not fast-forward it. */
+function pauseForInterruption(): void {
+  scene.pauseControls();
+  if (game.scene.isActive('Battle')) game.scene.pause('Battle');
   game.sound?.pauseAll();
+}
+function resumeAfterInterruption(): void {
+  if (document.hidden) return;
+  scene.pauseControls();
+  if (game.scene.isPaused('Battle')) game.scene.resume('Battle');
+  game.sound?.resumeAll();
+}
+window.addEventListener('pagehide', pauseForInterruption);
+window.addEventListener('pageshow', resumeAfterInterruption);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseForInterruption();
+  else resumeAfterInterruption();
+});
+window.addEventListener('blur', pauseForInterruption);
+window.addEventListener('focus', resumeAfterInterruption);
+window.addEventListener('pointercancel', () => scene.pauseControls());
+
+/** Address-bar changes / phone rotation must not strand HUD labels off-screen. */
+window.addEventListener('resize', () => {
+  const height = viewportHeight();
+  if (game.scale.height !== height) game.scale.resize(450, height);
 });
