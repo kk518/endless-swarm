@@ -81,3 +81,12 @@ button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:poin
 .decision-hint{margin:0;text-align:center;color:#a6c4c5;font-size:11px;line-height:1.5}
 @media(max-width:390px){.decision-overlay{padding:19px 8px}.decision-options{gap:5px}
 .decision-card{padding:11px 7px;min-height:163px}.decision-description{font-size:10px}}
+
+/* M5.2 training controls appear at a safe node only, not on every XP level. */
+.training-panel{display:grid;gap:8px;border-top:1px solid #456567;padding-top:10px}
+.training-title{font-size:11px;line-height:1.5;color:#bee2d6;margin:0}
+.training-choices{display:flex;flex-wrap:wrap;gap:6px}
+.training-choice{border:1px solid #4b8584;background:#18343b;color:#d7ede8;
+  font-size:11px;padding:7px 8px;min-height:34px;flex:1;min-width:65px;touch-action:manipulation}
+.training-choice[aria-pressed="true"]{border-color:#ebc98a;background:#365443;color:#fff1c4}
+.training-choice:focus-visible{outline:2px solid #ffd68f;outline-offset:1px}

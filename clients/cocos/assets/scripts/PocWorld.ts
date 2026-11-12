@@ -7,6 +7,7 @@
 import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
 import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { xpToNext, weaponTuning } from './m6/arsenal.ts';
+import { TRAINING_LABELS, type TrainingFocus, type TrainingPlan } from './m6/autoGrowth.ts';
 import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts';
 import {
   pressurePlan, spawnOffset, SURGE_PERIOD_MS, SURGE_WARNING_MS,
@@ -77,6 +78,7 @@ export interface PocState {
   campaignId: string;
   totalStages: number;
   weapons: WeaponId[];
+  training: TrainingPlan;
   weaponLevels: Record<WeaponId, number>;
   evolved: Record<WeaponId, boolean>;
   player: PocPlayer;
@@ -178,7 +180,7 @@ function clamp(x: number, low: number, high: number): number {
 function emptyState(): PocState {
   return {
     heroId: 'marine', mode: 'prototype', campaignId: '', totalStages: 5,
-    weapons: ['rifle'],
+    weapons: ['rifle'], training: { weapon: 'rifle', focus: 'damage' },
     weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
     evolved: { rifle: false, scatter: false, arc: false, flame: false },
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
@@ -277,6 +279,14 @@ export class PocWorld {
   }
 
   get decision(): RunDecision | null { return this.runController.snapshot().decision; }
+  /** M5.2: configure the next automatic rank only at a safe reward node. */
+  setTraining(weapon: WeaponId, focus: TrainingFocus): boolean {
+    if (!this.decision || !this.state.weapons.includes(weapon)
+      || !(focus in TRAINING_LABELS)) return false;
+    this.runController.setTraining(weapon, focus);
+    this.syncRunState();
+    return true;
+  }
   get currentWaveDurationMs(): number { return this.runController.currentWave.durationMs; }
 
   chooseDecision(index: number): boolean {
@@ -345,6 +355,7 @@ export class PocWorld {
     this.state.xp = run.growth.xp;
     this.state.xpToNext = xpToNext(run.growth.level);
     this.state.weapons = [...run.build.weapons];
+    this.state.training = { ...run.training };
     this.state.weaponLevels = { ...run.growth.weaponLevels };
     this.state.evolved = { ...run.growth.evolved };
     this.state.arcUnlocked = run.build.weapons.includes('arc');

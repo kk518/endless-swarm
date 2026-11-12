@@ -94,3 +94,19 @@ test('M5.3 viewport keeps 600-unit combat separate from 450-unit touch/HUD UI', 
   assert.match(preview, /battleViewport\.uiWidth/);
   assert.match(ops, /viewport\.worldWidth, viewport\.worldHeight/);
 });
+
+test('M5.2 real safe-node training controls exist in both clients', () => {
+  const html = read('clients/cocos-preview/index.html');
+  const preview = read('clients/cocos-preview/src/main.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  const world = read('clients/cocos/assets/scripts/PocWorld.ts');
+  assert.match(html, /id="training-weapons"/);
+  assert.match(html, /id="training-focus"/);
+  assert.match(preview, /trainingWeapons\.replaceChildren/);
+  assert.match(preview, /trainingFocus\.replaceChildren/);
+  assert.match(preview, /world\.setTraining\(/);
+  assert.match(creator, /SafeTrainingChoice/);
+  assert.match(creator, /this\.world\.setTraining\(/);
+  assert.match(world, /get decision\(\)/);
+  assert.match(world, /setTraining\(weapon: WeaponId, focus: TrainingFocus\)/);
+});

@@ -10,6 +10,8 @@ import {
 import { PocWorld, normalizedMove, type Vec2 } from './PocWorld';
 import { type PocHeroId } from './PocRoster.ts';
 import type { CampaignMode } from './m6/runController.ts';
+import { TRAINING_LABELS, type TrainingFocus } from './m6/autoGrowth.ts';
+import type { WeaponId } from './m6/progression.ts';
 import { mobileViewport, type MobileViewport } from './PocViewport.ts';
 
 const { ccclass } = _decorator;
@@ -38,6 +40,7 @@ export class PocBattle extends Component {
   private viewport!: MobileViewport;
   private hud!: Label;
   private optionLabels: Label[] = [];
+  private trainingLabels: Label[] = [];
   private activeTouch: number | null = null;
   private touchOrigin: Vec2 = { x: 0, y: 0 };
   private touchMove: Vec2 = { x: 0, y: 0 };
@@ -85,6 +88,19 @@ export class PocBattle extends Component {
       labelNode.active = false;
       this.optionLabels.push(label);
     }
+    // Four equipped-weapon choices + three focus choices, independent of world zoom.
+    for (let index = 0; index < 7; index++) {
+      const node = new Node('SafeTrainingChoice' + index);
+      this.node.addChild(node);
+      node.addComponent(UITransform).setContentSize(112, 34);
+      const label = node.addComponent(Label);
+      label.fontSize = Math.max(11, 12 * this.viewport.hudScale);
+      label.lineHeight = 18;
+      label.enableWrapText = true;
+      label.overflow = Label.Overflow.SHRINK;
+      node.active = false;
+      this.trainingLabels.push(label);
+    }
     // Staging-only smoke-test contract. Never expose storage or player identity.
     (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
       state: () => ({
@@ -101,6 +117,7 @@ export class PocBattle extends Component {
         level: this.world.state.level, over: this.world.state.over,
         mode: this.world.state.mode, totalStages: this.world.state.totalStages,
         decision: this.world.decision?.kind ?? null,
+        training: { ...this.world.state.training },
       }),
     };
   }
@@ -142,6 +159,19 @@ export class PocBattle extends Component {
     const p = event.getUILocation();
     const decision = this.world.decision;
     if (decision) {
+      // Training is editable only while the safe-node reward UI is open.
+      const owned = this.world.state.weapons;
+      if (p.y >= 250 && p.y <= 290 && owned.length) {
+        const index = Math.min(owned.length - 1, Math.floor(p.x / this.screenWidth * owned.length));
+        this.world.setTraining(owned[index], this.world.state.training.focus);
+        return;
+      }
+      if (p.y >= 306 && p.y <= 346) {
+        const choices: readonly TrainingFocus[] = ['damage', 'rate', 'speed'];
+        const index = Math.min(2, Math.floor(p.x / this.screenWidth * 3));
+        this.world.setTraining(this.world.state.training.weapon, choices[index]);
+        return;
+      }
       const count = decision.options.length;
       const gap = 8, cardWidth = (this.screenWidth - 16 - gap * (count - 1)) / count;
       if (p.y >= 100 && p.y <= 228) {
@@ -343,6 +373,33 @@ export class PocBattle extends Component {
     const gap = 8, cardWidth = count > 0
       ? (this.screenWidth - 16 - gap * (count - 1)) / count : 0;
     const cardHeight = 128, cardY = -this.screenHeight / 2 + 100;
+    const owned = s.weapons;
+    const labels: Record<WeaponId, string> = {
+      rifle: '步枪', scatter: '散射炮', arc: '电弧', flame: '喷火',
+    };
+    for (let index = 0; index < this.trainingLabels.length; index++) {
+      const label = this.trainingLabels[index];
+      label.node.active = Boolean(decision) && (index < owned.length
+        || (index >= 4 && index < 7));
+      if (!label.node.active) continue;
+      const weaponRow = index < 4;
+      if (weaponRow && index >= owned.length) continue;
+      const count = weaponRow ? owned.length : 3;
+      const pos = weaponRow ? index : index - 4;
+      const cellWidth = this.screenWidth / count;
+      const x = -this.screenWidth / 2 + pos * cellWidth + 3;
+      const y = -this.screenHeight / 2 + (weaponRow ? 250 : 306);
+      const active = weaponRow ? owned[pos] === s.training.weapon
+        : (['damage','rate','speed'] as const)[pos] === s.training.focus;
+      ui.fillColor = active ? new Color(57, 97, 78, 235) : new Color(25, 46, 52, 235);
+      ui.rect(x, y, cellWidth - 6, 40); ui.fill();
+      ui.strokeColor = active ? new Color(242, 207, 131, 255)
+        : new Color(91, 153, 151, 200);
+      ui.lineWidth = 2; ui.rect(x, y, cellWidth - 6, 40); ui.stroke();
+      label.node.setPosition(x + cellWidth / 2 - 3, y + 20, 0);
+      label.string = weaponRow ? labels[owned[pos]]
+        : TRAINING_LABELS[(['damage','rate','speed'] as const)[pos]];
+    }
     for (let i = 0; i < this.optionLabels.length; i++) {
       const label = this.optionLabels[i];
       label.node.active = i < count;
@@ -361,12 +418,14 @@ export class PocBattle extends Component {
       : decision
         ? (decision.kind === 'card' ? '遭遇结束 · 选择战术卡' : '路线分岔 · 选择前进路线')
           + '\\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
-          + '\\n点击下方对应选项继续'
+          + '\\n训练：' + s.training.weapon + '／' + TRAINING_LABELS[s.training.focus]
+          + ' · 下方可更改专精后选卡'
         : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
           + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages + ' · Lv.' + s.level
           + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
           + (s.streak >= 2 ? ' · ' + s.streak + '连杀' : '')
           + (s.suppliesCollected ? ' · 补给' + s.suppliesCollected : '')
+          + ' · 专精' + s.training.weapon + '/' + TRAINING_LABELS[s.training.focus]
           + ' · ' + s.weapons.map(id => id + ' Lv.' + s.weaponLevels[id]
             + (s.evolved[id] ? ' ★' : '')).join('/')
           + ' · ' + (s.overclockMs > 0 ? '超频射击' :

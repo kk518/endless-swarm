@@ -5,6 +5,8 @@
 import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/PocWorld.ts';
 import { PreviewOps } from './m6Ui.ts';
 import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
+import { TRAINING_LABELS, type TrainingFocus } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
+import type { WeaponId } from '../../cocos/assets/scripts/m6/progression.ts';
 import './style.css';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#battle');
@@ -25,6 +27,8 @@ const message = document.querySelector<HTMLElement>('#battle-message')!;
 const decisionOverlay = document.querySelector<HTMLElement>('#decision-overlay')!;
 const decisionHeading = document.querySelector<HTMLElement>('#decision-heading')!;
 const decisionOptions = document.querySelector<HTMLElement>('#decision-options')!;
+const trainingWeapons = document.querySelector<HTMLElement>('#training-weapons')!;
+const trainingFocus = document.querySelector<HTMLElement>('#training-focus')!;
 let renderedDecision = '';
 const endScreen = document.querySelector<HTMLElement>('#end-screen')!;
 const endKills = document.querySelector<HTMLElement>('#end-kills')!;
@@ -359,7 +363,11 @@ function showSafeDecision(): void {
   const decision = world.decision;
   decisionOverlay.hidden = !decision;
   if (!decision) { renderedDecision = ''; return; }
-  const key = world.state.wave + ':' + decision.kind + ':' + decision.options.map(option => option.id).join(',');
+  const training = world.state.training;
+  const key = world.state.wave + ':' + decision.kind + ':'
+    + decision.options.map(option => option.id).join(',')
+    + ':' + training.weapon + ':' + training.focus
+    + ':' + world.state.weapons.join(',');
   if (renderedDecision === key) return;
   // A previously held movement gesture must never continue after a reward.
   releaseInput();
@@ -367,6 +375,33 @@ function showSafeDecision(): void {
   decisionHeading.textContent = decision.kind === 'card'
     ? '第 ' + world.state.wave + ' 段完成 · 战术模块三选一'
     : '路线分岔 · 选择安全或高风险路线';
+  const names: Record<WeaponId, string> = {
+    rifle: '电磁步枪', scatter: '散射炮', arc: '电弧线圈', flame: '喷火器',
+  };
+  const weaponButtons = world.state.weapons.map(id => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'training-choice';
+    button.textContent = names[id] + (id === training.weapon ? ' ✓' : '');
+    button.setAttribute('aria-pressed', String(id === training.weapon));
+    button.addEventListener('click', () => {
+      if (world.setTraining(id, world.state.training.focus)) showSafeDecision();
+    });
+    return button;
+  });
+  trainingWeapons.replaceChildren(...weaponButtons);
+  const focusButtons = (['damage','rate','speed'] as const).map(focus => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'training-choice';
+    button.textContent = TRAINING_LABELS[focus] + (focus === training.focus ? ' ✓' : '');
+    button.setAttribute('aria-pressed', String(focus === training.focus));
+    button.addEventListener('click', () => {
+      if (world.setTraining(world.state.training.weapon, focus)) showSafeDecision();
+    });
+    return button;
+  });
+  trainingFocus.replaceChildren(...focusButtons);
   const cards = decision.options.map((option, index) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -407,7 +442,8 @@ function ui(): void {
     + ' · XP ' + s.xp + '/' + s.xpToNext;
   const weaponNames: Record<string, string> = { rifle: '步枪', scatter: '散射炮', arc: '电弧', flame: '喷火器' };
   arcUnlock.textContent = s.weapons.map(id => weaponNames[id] + ' Lv.' + s.weaponLevels[id]
-    + (s.evolved[id] ? ' ★' : '')).join(' · ');
+    + (s.evolved[id] ? ' ★' : '')).join(' · ')
+    + ' · 专精' + weaponNames[s.training.weapon] + '／' + TRAINING_LABELS[s.training.focus];
   arcUnlock.classList.toggle('unlocked', s.weapons.length > 1);
   const isDeployed = s.player.deployed;
   // Hero-specific attacks are resolved in the shared world, not this Canvas renderer.

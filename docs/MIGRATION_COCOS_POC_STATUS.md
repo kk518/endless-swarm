@@ -39,3 +39,9 @@
 ## 验收准则
 
 同一 Seed 与输入序列下比较核心战斗/奖励/路线/存档结果；每一项必须有 Node 规则测试、Cocos Creator 场景接线验证，最终再完成微信真机验收。P2/M2–M5.3 增量需核对 **tests/cocosM23Parity.test.ts**、**tests/cocosEnemyVisibilityParity.test.ts** 和最新 PR Checks；代码已提交不等于发布验收已通过。
+
+## M5.2 波末训练控制（当前提交）
+
+已在 Cocos 核心共享世界新增安全节点专精配置 API。只有结算奖励待选时才能修改专精；只允许选择已装备的普通武器和主线的火力/速攻/机动三倾向。Canvas 预览新增真实可操作的训练按钮；Creator 端新增独立 UI 层的七个训练 Label/点击区域。两端都读取主线 autoGrowth 规则和 RunController 的训练快照。调整配置不会在波内弹窗或重抽卡牌，下一批 XP 等级沿所选专精升级。
+
+本项完成情况需以最新 SHA 对应 Node 回归、Canvas 独立部署和真正 Creator Web Mobile 构建结果为准。仍然缺少 M6.0c 安全节点存档恢复和 Creator 局外工坊完整操作。

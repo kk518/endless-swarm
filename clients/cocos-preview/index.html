@@ -27,6 +27,11 @@
         <div class="bottom-tip" id="battle-message">按住下半屏滑动移动 · 静止 0.8 秒火力展开</div>
         <section id="decision-overlay" class="decision-overlay" hidden aria-live="polite" aria-label="战术选择">
           <div id="decision-heading" class="decision-heading">战斗已暂停 · 选择下一步</div>
+          <div class="training-panel" aria-label="下波自动成长训练计划">
+            <p class="training-title">下波自动成长 · 先选武器专精与训练倾向（不会触发升级弹窗）</p>
+            <div id="training-weapons" class="training-choices" role="group" aria-label="专精武器"></div>
+            <div id="training-focus" class="training-choices" role="group" aria-label="训练倾向"></div>
+          </div>
           <div id="decision-options" class="decision-options" role="group" aria-label="选择战术卡或路线"></div>
           <p class="decision-hint">选择其中一项继续作战，波内经验升级不会打断战斗</p>
         </section>
