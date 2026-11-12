@@ -97,9 +97,9 @@ test('actual battle scene includes safe-node persistence, exact pending offers a
   assert.ok(source.includes('resumeSavedExpedition(value: unknown): boolean'));
   assert.ok(source.includes('this.saveSafeNode(); // Saved after reward roll'));
   assert.ok(source.includes('cardOfferIds: this.rewardOptions.map(card => card.id)'));
-  assert.ok(source.includes('settleStoredRun(localStorage, {'));
-  assert.ok(source.includes('clearRunSafeSave(localStorage)'));
+  assert.ok(source.includes('settleStoredRun(storage, {'));
+  assert.ok(source.includes('clearRunSafeSave(storage)'));
   assert.ok(ui.includes('refreshArmory('));
   assert.ok(ui.includes('scene.resumeSavedExpedition(saved)'));
-  assert.ok(ui.includes('purchaseStoredArmor(localStorage)'));
+  assert.ok(ui.includes('purchaseStoredArmor(storage)'));
 });
