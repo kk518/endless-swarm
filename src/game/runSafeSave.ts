@@ -4,12 +4,17 @@ import {
 } from './campaignDirector.ts';
 import { CARDS, type RunBuild, type WeaponId, type CardId } from './progression.ts';
 import { MAX_RUN_LEVEL, MAX_WEAPON_LEVEL, xpToNext, type GrowthState } from './arsenal.ts';
+import { DEFAULT_BATTLEFIELD, isBattlefieldId, type BattlefieldId } from './battlefields.ts';
+import { MAX_EQUIPMENT_RANK } from './metaProgression.ts';
 import type { TrainingPlan } from './autoGrowth.ts';
 import type { RandomCheckpoint } from './runRandom.ts';
 
 export const SAFE_RUN_KEY = 'endless-swarm-expedition-safe-v1';
 export interface RunSafeSave {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
+  readonly battlefieldId: BattlefieldId;
+  /** Snapshot means later workshop purchases cannot change a resumed run. */
+  readonly equipment: { readonly weaponFrameRank: number; readonly repairModuleRank: number };
   readonly runId: string;
   readonly heroId: string;
   readonly savedAtMs: number;
@@ -56,7 +61,17 @@ const uint = (v: unknown, max: number): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
 
 export function parseRunSafeSave(raw: unknown): RunSafeSave | null {
-  if (!isRecord(raw) || raw.schemaVersion !== 1 || raw.heroId !== 'marine'
+  if (!isRecord(raw)) return null;
+  // Existing M6.0c saves did not have regions or frame/repair equipment.
+  if (raw.schemaVersion === 1) {
+    raw = { ...raw, schemaVersion: 2, battlefieldId: DEFAULT_BATTLEFIELD,
+      equipment: { weaponFrameRank: 0, repairModuleRank: 0 } };
+  }
+  if (!isRecord(raw) || raw.schemaVersion !== 2 || !isBattlefieldId(raw.battlefieldId)
+    || !isRecord(raw.equipment)
+    || ![raw.equipment.weaponFrameRank, raw.equipment.repairModuleRank].every(rank =>
+      Number.isInteger(rank) && (rank as number) >= 0 && (rank as number) <= MAX_EQUIPMENT_RANK)
+    || raw.heroId !== 'marine'
     || typeof raw.runId !== 'string' || !/^[a-z0-9-]{8,128}$/.test(raw.runId)
     || !uint(raw.savedAtMs, Number.MAX_SAFE_INTEGER)) return null;
   const state = fromCheckpoint(THREE_ACT_BLUEPRINT, raw.campaign);
