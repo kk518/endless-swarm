@@ -53,18 +53,31 @@ try {
     throw new Error('Cocos canvas is absent or unexpectedly small: ' + JSON.stringify(bounds));
   }
   await page.screenshot({ path: path.join(output, 'creator-before.png'), fullPage: true });
-  await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(1050);
-  await page.keyboard.up('ArrowRight');
+  // Mini-game controls are primarily touch, NOT keyboard. Use raw Chrome
+  // touch events on the actual rendered canvas in a mobile viewport.
+  const session = await page.context().newCDPSession(page);
+  const x = bounds.x + bounds.width * .30;
+  const y = bounds.y + bounds.height * .80;
+  const point = (tx, ty) => [{ x: tx, y: ty, id: 1, radiusX: 5, radiusY: 5, force: 1 }];
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(x,y) });
+  await page.waitForTimeout(100);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x+105,y) });
+  await page.waitForTimeout(1080);
+  const during = await page.evaluate(() => window.__swarmCocosDebug.state());
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(120);
   const after = await page.evaluate(() => window.__swarmCocosDebug.state());
   await page.screenshot({ path: path.join(output, 'creator-after.png'), fullPage: true });
-  if (after.x <= before.x + 10) {
-    throw new Error('Cocos keyboard input did not move the player: ' + JSON.stringify({before,after}));
+  if (during.x <= before.x + 10) {
+    throw new Error('Cocos mobile-touch movement failed: ' + JSON.stringify({before,during,after,bounds}));
+  }
+  if (after.input?.touchActive) {
+    throw new Error('Cocos touch stayed stuck after release: ' + JSON.stringify(after));
   }
   if (messages.some(x => x.startsWith('PAGE ERROR '))) {
     throw new Error('Uncaught runtime errors: ' + messages.join('\n'));
   }
-  console.log('SUCCESS: actual Cocos web scene rendered and player moved', {url, commit:expectedCommit, before, after});
+  console.log('SUCCESS: actual Cocos web scene rendered and responded to mobile touch', {url, commit:expectedCommit, before, during, after});
 } catch (error) {
   failed = true;
   console.error('COCOS BROWSER SMOKE FAILURE:', error);
