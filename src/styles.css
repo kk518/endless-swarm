@@ -319,3 +319,17 @@ h1{
 .wave-training>span{grid-column:1/-1;text-align:center;padding-bottom:3px}
 .wave-training label{font-size:10px;color:#97b9b4}
 @media(max-height:690px){.training-controls{margin:4px 0 8px;padding:7px 10px}.wave-training{margin-top:7px;padding:7px 10px}}
+
+
+/* M6.0b experimental route draft: choices stay readable on a narrow portrait screen. */
+.reward-overlay[data-mode="route"] .reward-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 400px;
+}
+.reward-overlay[data-mode="route"] .wave-training { display: none; }
+.reward-overlay[data-mode="route"] .reward-card { min-height: 180px; }
+.reward-card[data-category="hazard"] {
+  border-color: #e09b68;
+  background: linear-gradient(165deg, #583a32, #202c30 80%);
+}
+.reward-card[data-category="safe"] { border-color: #77bcad; }
