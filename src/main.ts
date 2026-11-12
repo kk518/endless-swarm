@@ -119,7 +119,9 @@ window.addEventListener('swarm:route', (event) => {
   const offer = (event as CustomEvent<RouteOffer>).detail;
   rewardOverlay.dataset.mode = 'route';
   rewardTitle.textContent = `${offer.actTitle} · 路线抉择（${offer.wave}/${offer.totalStages}）`;
-  rewardDescription.textContent = `${offer.encounterTitle}已完成 · 二选一。高危路线损失装甲、增强火力并加速下一段虫潮增援。`;
+  rewardDescription.textContent = offer.options.length > 1
+    ? `${offer.encounterTitle}已完成 · 选择安全补给或高危突进。`
+    : `${offer.encounterTitle}已完成 · 当前装甲过低，仅可选择安全路线。`;
   rewardFooterCopy.textContent = '路线选择立即生效 / 无额外弹窗';
   rewardCards.replaceChildren();
   for (const [i, choice] of offer.options.entries()) {
