@@ -6,7 +6,9 @@
  */
 import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
 import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
-import { xpToNext } from './m6/arsenal.ts';
+import { xpToNext, weaponTuning } from './m6/arsenal.ts';
+import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts';
+import type { WeaponId } from './m6/progression.ts';
 import { CocosRunController, type CampaignMode, type RunDecision } from './m6/runController.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
   type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster.ts';
@@ -23,22 +25,31 @@ export interface PocPlayer extends Vec2 {
 export interface PocEnemy extends Vec2 {
   id: number;
   hp: number;
+  burnMs?: number;
+  burnTickMs?: number;
+  burnDamage?: number;
+  slowMs?: number;
   /** Optional only to keep old nearestEnemy callers source-compatible. */
   kind?: PocEnemyKind;
   maxHp?: number;
 }
 export interface PocBullet extends Vec2 {
   vx: number; vy: number; remainingMs: number;
+  damage: number; source: WeaponId; pierce: number; hitIds: number[];
+  knockback?: number;
 }
 export interface PocLightning {
   fromX: number; fromY: number; toX: number; toY: number;
-  remainingMs: number; kind?: 'arc' | 'rail';
+  remainingMs: number; kind?: 'arc' | 'rail' | 'flame';
 }
 export interface PocState {
   heroId: PocHeroId;
   mode: CampaignMode;
   campaignId: string;
   totalStages: number;
+  weapons: WeaponId[];
+  weaponLevels: Record<WeaponId, number>;
+  evolved: Record<WeaponId, boolean>;
   player: PocPlayer;
   enemies: PocEnemy[];
   bullets: PocBullet[];
@@ -116,6 +127,9 @@ function clamp(x: number, low: number, high: number): number {
 function emptyState(): PocState {
   return {
     heroId: 'marine', mode: 'prototype', campaignId: '', totalStages: 5,
+    weapons: ['rifle'],
+    weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
+    evolved: { rifle: false, scatter: false, arc: false, flame: false },
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], bullets: [], lightning: [],
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
@@ -141,8 +155,9 @@ export class PocWorld {
   private readonly weaponFrameRank: number;
   private readonly repairModuleRank: number;
   private accumulatorMs = 0;
-  private fireCooldownMs = 0;
-  private arcCooldownMs = 0;
+  private readonly weaponCooldownMs: Record<WeaponId, number> = {
+    rifle: 0, scatter: 0, arc: 0, flame: 0,
+  };
   private railCooldownMs = 0;
   private spawnCooldownMs: number = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
@@ -182,8 +197,10 @@ export class PocWorld {
     this.state.heroId = this.heroId;
     this.runController = this.createRunController();
     this.accumulatorMs = 0;
-    this.fireCooldownMs = 0;
-    this.arcCooldownMs = 0;
+    this.weaponCooldownMs.rifle = 0;
+    this.weaponCooldownMs.scatter = 0;
+    this.weaponCooldownMs.arc = 0;
+    this.weaponCooldownMs.flame = 0;
     this.railCooldownMs = 0;
     this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.hurtCooldownMs = 0;
@@ -211,6 +228,8 @@ export class PocWorld {
     this.state.bossSpawned = false;
     this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.hurtCooldownMs = 0;
+    for (const weapon of ['rifle', 'scatter', 'arc', 'flame'] as const)
+      this.weaponCooldownMs[weapon] = 0;
     this.state.player.stationaryMs = 0;
     this.state.player.deployed = false;
     this.syncRunState();
@@ -234,7 +253,7 @@ export class PocWorld {
       armorRank: this.armorRank,
       weaponFrameRank: this.weaponFrameRank,
       repairModuleRank: this.repairModuleRank,
-      playableWeapons: ['rifle', 'arc'],
+      playableWeapons: ['rifle', 'scatter', 'arc', 'flame'],
     });
   }
 
@@ -248,6 +267,9 @@ export class PocWorld {
     this.state.level = run.growth.level;
     this.state.xp = run.growth.xp;
     this.state.xpToNext = xpToNext(run.growth.level);
+    this.state.weapons = [...run.build.weapons];
+    this.state.weaponLevels = { ...run.growth.weaponLevels };
+    this.state.evolved = { ...run.growth.evolved };
     this.state.arcUnlocked = run.build.weapons.includes('arc');
     this.state.kills = run.kills;
     this.state.player.hp = run.hp;
@@ -315,12 +337,14 @@ export class PocWorld {
   }
   private step(ms: number, move: Vec2): void {
     const state = this.state, player = state.player;
+    const run = this.runController.snapshot();
+    const build = run.build;
     this.passiveRuntime.onCombatTick?.(ms);
     const seconds = ms / 1000;
     const moving = Math.hypot(move.x, move.y) > 0.07;
-    player.x = clamp(player.x + move.x * POC.moveSpeed * seconds,
+    player.x = clamp(player.x + move.x * POC.moveSpeed * build.speed * seconds,
       -this.width / 2 + 26, this.width / 2 - 26);
-    player.y = clamp(player.y + move.y * POC.moveSpeed * seconds,
+    player.y = clamp(player.y + move.y * POC.moveSpeed * build.speed * seconds,
       -this.height / 2 + 56, this.height / 2 - 90);
     player.stationaryMs = moving ? 0 : player.stationaryMs + ms;
     player.deployed = deploymentReady(player.stationaryMs, moving);
@@ -352,54 +376,78 @@ export class PocWorld {
     }
 
     for (const e of state.enemies) {
+      if ((e.burnMs ?? 0) > 0) {
+        e.burnMs = Math.max(0, (e.burnMs ?? 0) - ms);
+        e.burnTickMs = (e.burnTickMs ?? 250) - ms;
+        if (e.burnTickMs <= 0) {
+          e.burnTickMs += 250;
+          e.hp -= e.burnDamage ?? 0;
+        }
+      }
+      e.slowMs = Math.max(0, (e.slowMs ?? 0) - ms);
+      if (e.hp <= 0) continue;
       const dx = player.x - e.x, dy = player.y - e.y;
       const distance = Math.hypot(dx, dy);
       const stats = enemyStats(e.kind ?? 'grunt');
+      const slow = (e.slowMs ?? 0) > 0 ? 0.6 : 1;
       if (distance > 2) {
-        e.x += dx / distance * stats.speed * seconds;
-        e.y += dy / distance * stats.speed * seconds;
+        e.x += dx / distance * stats.speed * slow * seconds;
+        e.y += dy / distance * stats.speed * slow * seconds;
       }
       if (distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
         this.runController.applyDamage(1);
         this.syncRunState();
-        this.hurtCooldownMs = 750;
+        this.hurtCooldownMs = GAMEPLAY.hitGraceMs;
         if (state.player.hp <= 0) return;
       }
     }
 
-    this.fireCooldownMs -= ms;
-    const rifleTarget = nearestEnemy(player, state.enemies, POC.fireRange);
-    if (rifleTarget && this.fireCooldownMs <= 0) {
-      const angle = Math.atan2(rifleTarget.y - player.y, rifleTarget.x - player.x);
-      const rateBonus = 1 + (state.level - 1) * .025;
-      this.fireCooldownMs = 255 / (rateBonus * (player.deployed ? POC.deployRateMultiplier : 1));
-      POC_WEAPON_RUNTIME.get('rifle')!.attack(rifleTarget, angle, this.attackPort);
+    // Each equipped *ordinary* weapon owns its cooldown and main-M6 tuning.
+    // No free Lv.3 arc unlocks: installation requires a legal encounter card.
+    for (const id of build.weapons) {
+      this.weaponCooldownMs[id] = Math.max(0, this.weaponCooldownMs[id] - ms);
+      const driver = POC_WEAPON_RUNTIME.get(id);
+      if (!driver) throw new Error('Missing executable weapon driver: ' + id);
+      const tuning = weaponTuning(run.growth, id);
+      const range = driver.baseRange * build.range * tuning.range;
+      const target = nearestEnemy(player, state.enemies, range);
+      if (!target || this.weaponCooldownMs[id] > 0) continue;
+      const angle = Math.atan2(target.y - player.y, target.x - player.x);
+      driver.attack(target, angle, this.attackPort);
+      this.weaponCooldownMs[id] = buildWeaponInterval(
+        driver.baseIntervalMs, build, player.deployed, false, false,
+      ) * tuning.interval;
     }
 
-    for (let i = state.bullets.length - 1; i >= 0; i--) {
-      const bullet = state.bullets[i];
+    // Projectile collision resolves independently from firing, even while moving.
+    for (let index = state.bullets.length - 1; index >= 0; index--) {
+      const bullet = state.bullets[index];
+      const oldX = bullet.x, oldY = bullet.y;
       bullet.x += bullet.vx * seconds;
       bullet.y += bullet.vy * seconds;
       bullet.remainingMs -= ms;
-      let removed = bullet.remainingMs <= 0;
-      if (!removed) for (const e of state.enemies) {
-        if (e.hp <= 0 || squaredDistance(bullet, e) > 18 * 18) continue;
-        e.hp -= (28 + 3 * (state.level - 1)) * (1 + this.weaponFrameRank * .12)
-          * this.deployDamageBonus();
-        removed = true;
-        break;
+      let consumed = bullet.remainingMs <= 0;
+      if (!consumed) for (const enemy of state.enemies) {
+        if (enemy.hp <= 0 || bullet.hitIds.includes(enemy.id)) continue;
+        const dx = bullet.x - oldX, dy = bullet.y - oldY;
+        const distanceSq = dx * dx + dy * dy;
+        const t = distanceSq > 0 ? clamp(((enemy.x - oldX) * dx + (enemy.y - oldY) * dy)
+          / distanceSq, 0, 1) : 0;
+        const hitX = oldX + dx * t, hitY = oldY + dy * t;
+        if (squaredDistance({ x: hitX, y: hitY }, enemy) > 18 * 18) continue;
+        enemy.hp -= bullet.damage;
+        bullet.hitIds.push(enemy.id);
+        if (bullet.knockback && enemy.hp > 0) {
+          const awayX = enemy.x - player.x, awayY = enemy.y - player.y;
+          const distance = Math.max(1, Math.hypot(awayX, awayY));
+          enemy.x = clamp(enemy.x + bullet.knockback * awayX / distance,
+            -this.width / 2 + 20, this.width / 2 - 20);
+          enemy.y = clamp(enemy.y + bullet.knockback * awayY / distance,
+            -this.height / 2 + 20, this.height / 2 - 20);
+        }
+        if (bullet.hitIds.length > bullet.pierce) { consumed = true; break; }
       }
-      if (removed) state.bullets.splice(i, 1);
-    }
-
-    if (state.arcUnlocked) {
-      this.arcCooldownMs -= ms;
-      const first = nearestEnemy(player, state.enemies, 250);
-      if (first && this.arcCooldownMs <= 0) {
-        const angle = Math.atan2(first.y - player.y, first.x - player.x);
-        POC_WEAPON_RUNTIME.get('arc')!.attack(first, angle, this.attackPort);
-        this.arcCooldownMs = 940 / (player.deployed ? POC.deployRateMultiplier : 1);
-      }
+      if (consumed) state.bullets.splice(index, 1);
     }
 
     if (this.heroId === 'kane') {
@@ -428,27 +476,71 @@ export class PocWorld {
    */
   private readonly attackPort: PocAttackPort = {
     rifle: (_target, angle) => {
-      const p = this.state.player;
-      this.state.bullets.push({
-        x: p.x, y: p.y,
-        vx: Math.cos(angle) * POC.bulletSpeed,
-        vy: Math.sin(angle) * POC.bulletSpeed,
-        remainingMs: 800,
-      });
+      const run = this.runController.snapshot();
+      const tuning = weaponTuning(run.growth, 'rifle');
+      this.emitBullet(angle, 'rifle',
+        this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage, run.build, run.streak)
+        * (1 + this.weaponFrameRank * .025),
+        run.build.pierce + tuning.pierce);
+    },
+    scatter: (_target, angle) => {
+      const run = this.runController.snapshot();
+      const tuning = weaponTuning(run.growth, 'scatter');
+      const base = this.weaponDamage(19 * tuning.damage, run.build, run.streak);
+      const center = (tuning.pellets - 1) / 2;
+      for (let i = 0; i < tuning.pellets; i++) {
+        this.emitBullet(angle + (i - center) * .112, 'scatter',
+          base, run.build.pierce, tuning.knockback);
+      }
     },
     arc: (first) => {
-      const state = this.state;
-      const victims = state.enemies.filter(e => e.hp > 0 && e.id !== first.id
-        && squaredDistance(first, e) < 125 * 125)
-        .sort((a,b) => squaredDistance(first,a) - squaredDistance(first,b));
-      const chain: PocTarget[] = [first, ...victims.slice(0, state.level >= 6 ? 2 : 1)];
-      let from: Vec2 = state.player;
-      for (const e of chain) {
-        state.lightning.push({ fromX: from.x, fromY: from.y,
-          toX: e.x, toY: e.y, remainingMs: 160, kind: 'arc' });
-        e.hp -= (19 + (state.level - 1) * 2) * this.deployDamageBonus();
-        from = e;
+      const run = this.runController.snapshot();
+      const tuning = weaponTuning(run.growth, 'arc');
+      let from: Vec2 = this.state.player;
+      let current: PocEnemy | undefined = this.state.enemies.find(e => e.id === first.id);
+      const chained = new Set<number>();
+      for (let index = 0; index < tuning.chains && current; index++) {
+        const victim: PocEnemy = current;
+        chained.add(victim.id);
+        this.state.lightning.push({
+          fromX: from.x, fromY: from.y, toX: victim.x, toY: victim.y,
+          remainingMs: 160, kind: 'arc',
+        });
+        victim.hp -= this.weaponDamage((index === 0 ? 38 : 25) * tuning.damage,
+          run.build, run.streak);
+        if (run.build.frost || tuning.shockMs > 0)
+          victim.slowMs = Math.max(victim.slowMs ?? 0, tuning.shockMs || 1000);
+        from = victim;
+        const chainRangeSq = (tuning.chainRange * run.build.range) ** 2;
+        current = this.state.enemies
+          .filter(e => e.hp > 0 && !chained.has(e.id) && squaredDistance(victim, e) < chainRangeSq)
+          .sort((a,b) => squaredDistance(victim,a) - squaredDistance(victim,b))[0];
       }
+    },
+    flame: (_target, angle) => {
+      const run = this.runController.snapshot();
+      const tuning = weaponTuning(run.growth, 'flame');
+      const player = this.state.player;
+      const range = 190 * run.build.range * tuning.range;
+      const coneCosine = Math.cos(Math.min(1.2, tuning.coneHalfAngle * run.build.range));
+      for (const enemy of this.state.enemies) {
+        if (enemy.hp <= 0) continue;
+        const dx = enemy.x - player.x, dy = enemy.y - player.y;
+        const len = Math.hypot(dx, dy);
+        if (len <= 0 || len > range) continue;
+        if ((dx * Math.cos(angle) + dy * Math.sin(angle)) / len < coneCosine) continue;
+        enemy.hp -= this.weaponDamage(9 * tuning.damage, run.build, run.streak);
+        if (enemy.hp <= 0) continue;
+        if (tuning.burnDurationMs > 0) {
+          if ((enemy.burnMs ?? 0) <= 0) enemy.burnTickMs = 250;
+          enemy.burnMs = tuning.burnDurationMs;
+          enemy.burnDamage = this.weaponDamage(tuning.burnTickDamage, run.build, run.streak);
+        }
+        if (run.build.frost) enemy.slowMs = Math.max(enemy.slowMs ?? 0, 1000);
+      }
+      this.state.lightning.push({ fromX: player.x, fromY: player.y,
+        toX: player.x + Math.cos(angle) * range, toY: player.y + Math.sin(angle) * range,
+        remainingMs: 135, kind: 'flame' });
     },
     rail: (_target, angle) => {
       const state = this.state, player = state.player;
@@ -477,6 +569,22 @@ export class PocWorld {
       });
     },
   };
+  private emitBullet(angle: number, source: WeaponId, damage: number,
+    pierce: number, knockback = 0): void {
+    const player = this.state.player;
+    this.state.bullets.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(angle) * GAMEPLAY.projectileSpeed,
+      vy: Math.sin(angle) * GAMEPLAY.projectileSpeed,
+      remainingMs: GAMEPLAY.projectileLifetimeMs,
+      damage, source, pierce, hitIds: [], knockback,
+    });
+  }
+  private weaponDamage(base: number, build: ReturnType<CocosRunController['snapshot']>['build'],
+    streak: number): number {
+    const canon = buildWeaponDamage(base, build, this.state.player.deployed, false, streak);
+    return canon * (this.state.player.deployed && this.heroId === 'kane' ? 1.2 : 1);
+  }
   private deployDamageBonus(): number {
     if (!this.state.player.deployed) return 1;
     // Kane's real passive rewards deployed fire but DOES NOT disable moving fire.
