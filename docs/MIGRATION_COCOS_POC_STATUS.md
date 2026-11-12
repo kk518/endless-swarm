@@ -42,3 +42,13 @@
 - **保留风险：** 当前 `main` 的旧部署工作流会对父级 `/var/www/endless-swarm/` 执行 `rsync --delete`。主线已封板所以没有改动它；未来若恢复 main 发版，必须先为 `/cocos-preview/` 增加 rsync 排除项，或迁移到独立 Nginx alias，否则子目录可能被删除。
 
 **接下来的工作**：优先搭建 GitHub 执行的真正 Creator 3.8 构建环境并生成引擎工程所需场景、`.meta` 等资源元数据，验证 Web Mobile 后保持子页面预览方式，再扩展武器与虫群。
+
+## 2026-11-12：G1/G2 增量实施记录（本轮）
+
+- **共享战斗逻辑**：`PocWorld.ts` 增加五波阶段推进、三类常规虫、第五波 Boss、自动 XP 等级提升、Lv.3 解锁电弧线圈、连锁伤害与胜利结算；既有单指移动、自动射击和停步火力展开继续保留。
+- **两端表现**：`PocBattle.ts` 和 `clients/cocos-preview/src/main.ts` 读取同一个 PoC 规则状态，显示波次、等级、虫种、连锁攻击和 Boss 血条。
+- **回归测试**：添加敌种数值差异、自动 XP、第五波/Boss、重开清理的单元测试，原 H5 和新预览的 GitHub CI 已通过。这里的“五波”是迁移阶段的简化样板，**不是完整 Phaser M6 功能对等**。
+- **远程 Creator 工程**：已提交 `Battle.scene`、`.meta`、`clients/cocos/package.json` 的 3.8.8 项目声明、独立 macOS 编辑器构建工作流 `.github/workflows/cocos-creator-web.yml`。
+- **构建阻塞与修复**：Creator 工程的 `tsconfig.json` 原引用未提交的 `temp/tsconfig.cocos.json`，导致 Vite 无法构建共享规则；已改为独立、可解析的 tsconfig 并通过 Web CI。
+- **正式 Cocos 状态**：macOS GitHub Actions [实验运行](https://github.com/kk518/endless-swarm/actions/runs/43150575213) 已启动官方 3.8.8 安装包下载；截至本记录，**未确认真正的 Creator Web Mobile 构建成功**。只有该工作流的编辑器编译、引擎产物及 `/swarm/cocos-preview/creator/` 公网 SHA 校验全部通过，才更新为“真 Cocos 构建已上线”。
+- **路线隔离**：稳定预览继续使用 `/swarm/cocos-preview/`（Canvas 2D 调用同一份纯 TS Core），真 Cocos 产物使用独立子路径 `/swarm/cocos-preview/creator/`，不覆盖旧 Phaser 生产入口。
