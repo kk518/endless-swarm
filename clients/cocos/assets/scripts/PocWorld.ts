@@ -358,10 +358,23 @@ export class PocWorld {
       if (roll <= 0) { kind = entry.kind as PocEnemyKind; break; }
     }
     const angle = this.nextRandom() * Math.PI * 2;
-    // Keep spawn points off the player's feet; clip to readable arena.
-    const dx = Math.cos(angle) * 185, dy = Math.sin(angle) * 215;
-    const x = clamp(player.x + dx, -this.width / 2 + 20, this.width / 2 - 20);
-    const y = clamp(player.y + dy, -this.height / 2 + 20, this.height / 2 - 20);
+    // M5.3 safety: clipping a nominal off-screen spawn to the arena boundary
+    // can place it directly on a hero standing at that same boundary.
+    // Try evenly distributed sectors with NO extra RNG rolls, so fixed seeds
+    // are stable while at least 140 world units of player clearance is kept.
+    let location: Vec2 = { x: 0, y: 0 };
+    let farthestSq = -1;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const sector = angle + attempt * Math.PI / 4;
+      const candidate = {
+        x: clamp(player.x + Math.cos(sector) * 185, -this.width / 2 + 20, this.width / 2 - 20),
+        y: clamp(player.y + Math.sin(sector) * 215, -this.height / 2 + 20, this.height / 2 - 20),
+      };
+      const distanceSq = squaredDistance(candidate, player);
+      if (distanceSq > farthestSq) { location = candidate; farthestSq = distanceSq; }
+      if (distanceSq >= 140 * 140) { location = candidate; break; }
+    }
+    const { x, y } = location;
     const livingElites = this.state.enemies.filter(e => e.hp > 0 && e.elite).length;
     const elite = canSpawnElite(this.runController.currentStage.encounter.pressureTier,
       kind, livingElites, () => this.nextRandom());
