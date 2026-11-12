@@ -3,6 +3,7 @@
  * Rendering is temporary Canvas 2D; do not label this as a Cocos engine build.
  */
 import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/PocWorld.ts';
+import { PreviewOps } from './m6Ui.ts';
 import './style.css';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#battle');
@@ -10,7 +11,9 @@ if (!canvas) throw new Error('Preview canvas missing');
 const context = canvas.getContext('2d');
 if (!context) throw new Error('Canvas 2D is unsupported');
 const g = context;
-const world = new PocWorld(450, 800, 518);
+let world: PocWorld;
+const ops = new PreviewOps(restart);
+world = ops.createWorld();
 const hpFill = document.querySelector<HTMLElement>('#hp-fill')!;
 const killCount = document.querySelector<HTMLElement>('#kill-count')!;
 const waveCounter = document.querySelector<HTMLElement>('#wave-counter')!;
@@ -40,7 +43,7 @@ function releaseInput(): void {
 }
 function restart(): void {
   releaseInput();
-  world.reset();
+  world = ops.createWorld();
   endScreen.hidden = true;
 }
 document.querySelector('#restart')!.addEventListener('click', restart);
@@ -268,8 +271,9 @@ function paint(dt: number): void {
 }
 
 function ui(): void {
+  ops.settleIfOver(world);
   const s = world.state;
-  hpFill.style.width = Math.max(0, s.player.hp / 6 * 100) + '%';
+  hpFill.style.width = Math.max(0, s.player.hp / s.player.maxHp * 100) + '%';
   killCount.textContent = String(s.kills).padStart(3,'0');
   waveCounter.textContent = 'WAVE ' + String(s.wave).padStart(2,'0') + ' / 05';
   playerLevel.textContent = 'LV.' + String(s.level).padStart(2,'0')
