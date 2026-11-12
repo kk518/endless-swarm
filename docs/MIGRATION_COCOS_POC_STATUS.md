@@ -45,3 +45,11 @@
 已在 Cocos 核心共享世界新增安全节点专精配置 API。只有结算奖励待选时才能修改专精；只允许选择已装备的普通武器和主线的火力/速攻/机动三倾向。Canvas 预览新增真实可操作的训练按钮；Creator 端新增独立 UI 层的七个训练 Label/点击区域。两端都读取主线 autoGrowth 规则和 RunController 的训练快照。调整配置不会在波内弹窗或重抽卡牌，下一批 XP 等级沿所选专精升级。
 
 本项完成情况需以最新 SHA 对应 Node 回归、Canvas 独立部署和真正 Creator Web Mobile 构建结果为准。仍然缺少 M6.0c 安全节点存档恢复和 Creator 局外工坊完整操作。
+
+## M6.0c 安全节点存档和恢复（本轮新增）
+
+已接入主线 `runSafeSave.ts` 的 schema-v2 验证：`CocosRunController` 在奖励节点或下一遭遇第 0ms 生成完整构筑、经验等级、训练计划、装备快照、生命、已展示卡牌和四路随机状态；`PocWorld` 只在这些安全节点允许导出和恢复，战斗途中不保存敌人/弹幕状态。恢复原先展示的卡牌时直接取保存的 ID，不重抽奖励；来源无效、RNG 损坏或正在战斗时拒绝恢复。
+
+Canvas 预览新增“继续远征”控制和独立的 `cocos-preview-m6:` 存储命名空间，结算成功后仅清理本局 runId 的安全存档；Creator 版采用 `cocos-creator-m6:` 命名空间、屏幕顶部中央恢复入口和 `getStoragePort()` 注入式接口。两者都不能覆盖主线 `/swarm/` 的本地存档。schema-v2 当前仅接受 marine 英雄，凯恩仍需后续扩展。Creator 的工坊结算/微信原生 Storage 适配尚未完成，不可由 Web 通过推断。
+
+本项需以最新提交的 Node/Canvas/Creator 独立 CI 结果确认，不能只因代码已提交就宣称全平台验收。

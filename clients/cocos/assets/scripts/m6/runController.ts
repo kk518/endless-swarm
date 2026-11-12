@@ -5,11 +5,12 @@
  */
 import {
   PROTOTYPE_CAMPAIGN, THREE_ACT_BLUEPRINT, beginCampaign, tickCampaign,
-  advanceCampaignReward, getEncounter, type CampaignDefinition,
+  advanceCampaignReward, getEncounter, toCheckpoint, fromCheckpoint,
+  type CampaignDefinition,
   type CampaignRunState, type EncounterView, type CampaignPhase,
 } from './campaignDirector.ts';
 import {
-  newBuild, eligibleCards, rollCards, applyCard, type RunBuild,
+  newBuild, eligibleCards, rollCards, applyCard, CARDS, type RunBuild,
   type CardDef, type CardId, type WeaponId, type EnemyKind, type WaveDef,
 } from './progression.ts';
 import {
@@ -20,7 +21,10 @@ import {
   applyAutomaticLevels, applyAutomaticEvolutions, DEFAULT_TRAINING,
   type TrainingPlan, type TrainingFocus, type AutomaticGrowthResult,
 } from './autoGrowth.ts';
-import { createRunRandoms, type RunRandomStreams } from './runRandom.ts';
+import {
+  createRunRandoms, snapshotRandoms, restoreRandoms, type RunRandomStreams,
+} from './runRandom.ts';
+import { parseRunSafeSave, type RunSafeSave } from './runSafeSave.ts';
 import {
   eligibleRouteChoices, resolveRouteChoice, type RouteChoice,
 } from './routeDecisions.ts';
@@ -129,6 +133,70 @@ export class CocosRunController {
     this.build.hp = this.hp;
     this.playableWeapons = new Set(options.playableWeapons
       ?? ['rifle', 'scatter', 'arc', 'flame']);
+  }
+
+  /**
+   * M6.0c save contract: only a clean between-stage checkpoint or an already
+   * rolled reward node can be persisted. Never serialize arbitrary combat.
+   * The real combat RNG belongs to PocWorld; the rewards stream belongs here.
+   */
+  safeSnapshot(heroId: string, suppliesCollected: number,
+    combatRandomState: number, savedAtMs: number): RunSafeSave | null {
+    if (this.mode !== 'expedition' || heroId !== 'marine' || this.failed || this.won
+      || (this.campaignRun.phase !== 'reward'
+        && !(this.campaignRun.phase === 'playing' && this.campaignRun.elapsedMs === 0))) return null;
+    const randoms = snapshotRandoms(this.randoms);
+    randoms.combat = combatRandomState;
+    const checkpoint: RunSafeSave = {
+      schemaVersion: 2, battlefieldId: this.battlefieldId,
+      equipment: { weaponFrameRank: this.weaponFrameRank,
+        repairModuleRank: this.repairModuleRank },
+      runId: this.runId, heroId, savedAtMs: Math.floor(savedAtMs),
+      campaign: toCheckpoint(this.campaignRun),
+      build: cloneBuild(this.build), growth: cloneGrowth(this.growth),
+      training: { ...this.training }, hp: this.hp,
+      timeMs: Math.floor(this.timeMs), kills: this.kills,
+      bestStreak: this.bestStreak, salvageKills: this.salvageKills,
+      suppliesCollected, routePressureMultiplier: this.routePressureMultiplier,
+      randoms, cardOfferIds: this.decision?.kind === 'card'
+        ? this.decision.options.map(card => card.id) : [],
+    };
+    return parseRunSafeSave(checkpoint);
+  }
+
+  /** Validation and restoration preserve reward offers and RNG positions. */
+  static fromSafeSnapshot(value: unknown): CocosRunController | null {
+    const save = parseRunSafeSave(value);
+    if (!save) return null;
+    const campaign = fromCheckpoint(THREE_ACT_BLUEPRINT, save.campaign);
+    if (!campaign) return null;
+    const run = new CocosRunController({
+      seed: campaign.seed, runId: save.runId, mode: 'expedition',
+      battlefieldId: save.battlefieldId,
+      weaponFrameRank: save.equipment.weaponFrameRank,
+      repairModuleRank: save.equipment.repairModuleRank,
+    });
+    run.campaignRun = campaign;
+    restoreRandoms(run.randoms, save.randoms);
+    run.build = cloneBuild(save.build);
+    run.growth = cloneGrowth(save.growth);
+    run.training = { ...save.training };
+    run.hp = save.hp;
+    run.timeMs = save.timeMs;
+    run.kills = save.kills;
+    run.bestStreak = save.bestStreak;
+    run.salvageKills = save.salvageKills;
+    run.routePressureMultiplier = save.routePressureMultiplier;
+    const encounter = run.currentStage.encounter;
+    if (campaign.phase === 'reward' && encounter.decision === 'card') {
+      run.decision = { kind: 'card',
+        options: save.cardOfferIds.map(id => CARDS.find(card => card.id === id)!) };
+    } else if (campaign.phase === 'reward' && encounter.decision === 'route') {
+      run.routeSourceOptions = encounter.routes ?? [];
+      run.decision = { kind: 'route',
+        options: eligibleRouteChoices(run.routeSourceOptions, run.hp) };
+    }
+    return run;
   }
 
   get currentStage(): EncounterView {

@@ -38,7 +38,7 @@ Cocos 迁移已经完成真实 Creator 3.8.8 Web Mobile 构建和浏览器触控
 | M5.3 | 手机世界宽度扩至 600；HUD 独立缩放；普通武器优先索敌可见虫；边缘入场预警与安全距离 | PocWorld 使用固定场地边界和简单出生点，没有主线 visibility 规则、屏内索敌和入场预警 | 未迁移 |
 | M6.0a | 内容目录；普通/专武攻击驱动注册；英雄生命周期；Campaign Director；四路确定性随机流 | 目录、英雄/武器 Runtime、随机模块已复制；PocRoster 增加 Marine/Kane 与轨道炮。PocWorld 只消费 combat 随机流，未接入 campaignDirector 和阶段快照 | 部分完成 |
 | M6.0b | 可选五波/三幕；三幕九遭遇、约 16 分 20 秒战斗时长；六次卡牌决策、两次安全/高危路线；Boss 终局 | PocWorld 已接入主线 CampaignDirector，Creator/Canvas 提供五波与三幕模式切换，波末卡牌和路线可选；战斗/敌种表现仍缺 parity | 部分完成 |
-| M6.0c | 安全节点存档/恢复；保存构筑、HP、训练、随机流与已抽卡；失败也有战备；runId 幂等结算；基础装甲工坊 | 纯 metaProgression 规则已复用；Canvas 预览使用独立 localStorage namespace 做结算/购买。Cocos PocBattle 未接入 GameStoragePort、runSafeSave、恢复 UI 或结算工坊 | 部分完成：仅共享规则与 Canvas 预览接线，Creator 运行时未迁移 |
+| M6.0c | 安全节点存档/恢复；保存构筑、HP、训练、随机流与已抽卡；失败也有战备；runId 幂等结算；基础装甲工坊 | RunController/PocWorld 已按 schema-v2 建立严格安全节点存取与固定卡牌/RNG 恢复；Canvas 预览和 Creator Web 分别有隔离命名空间与恢复入口；Canvas 结算使用 runId 幂等账本。Creator 端工坊/结算及微信原生 Storage 尚未完成 | 部分完成：Web 流程与规则已接入，完整局外及真机待验收 |
 | M6.1a | 钢铁遗迹/感染巢穴双战区；敌群权重差异；战备 + 地区材料原子结算；武器框架/修复模块工坊；出击装备快照 | battlefields/metaProgression 规则已复用；Canvas 预览可选战区、结算材料和购买。Cocos PocBattle 以默认战区和空升级参数创建世界，没有战区/工坊 UI，也没有装备快照 | 部分完成：Creator 运行时未完成 M6.1a 闭环 |
 
 ### 2.1 已完成但不应误判为主线 parity 的扩展

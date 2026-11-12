@@ -10,6 +10,10 @@ import {
   type EquipmentId, type MetaStorage, type MetaProgress,
 } from '../../cocos/assets/scripts/m6/metaProgression.ts';
 import { newRunSeed } from '../../cocos/assets/scripts/m6/runRandom.ts';
+import {
+  readRunSafeSave, writeRunSafeSave, clearRunSafeSave,
+  type RunSafeSave, type SafeRunStorage,
+} from '../../cocos/assets/scripts/m6/runSafeSave.ts';
 import { PocWorld } from '../../cocos/assets/scripts/PocWorld.ts';
 import { mobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import type { CampaignMode } from '../../cocos/assets/scripts/m6/runController.ts';
@@ -19,13 +23,16 @@ const STORAGE_PREFIX = 'cocos-preview-m6:';
 const ZONE_KEY = STORAGE_PREFIX + 'zone';
 const HERO_KEY = STORAGE_PREFIX + 'hero';
 const MODE_KEY = STORAGE_PREFIX + 'mode';
-const storage: MetaStorage = {
+const storage: MetaStorage & SafeRunStorage = {
   getItem(key: string): string | null {
     try { return localStorage.getItem(STORAGE_PREFIX + key); }
     catch { return null; }
   },
   setItem(key: string, value: string): void {
     localStorage.setItem(STORAGE_PREFIX + key, value);
+  },
+  removeItem(key: string): void {
+    localStorage.removeItem(STORAGE_PREFIX + key);
   },
 };
 
@@ -50,20 +57,14 @@ function initialMode(): CampaignMode {
   try { return localStorage.getItem(MODE_KEY) === 'expedition' ? 'expedition' : 'prototype'; }
   catch { return 'prototype'; }
 }
-function runId(): string {
-  // Non-financial local demo ID; the M6 settlement ledger prevents repeat claims.
-  const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID().replaceAll('-', '')
-    : (Date.now().toString(36) + Math.floor(Math.random() * 0x100000000).toString(36));
-  return 'cocos-' + key;
-}
-
 export class PreviewOps {
   private zone: BattlefieldId = initialZone();
   private heroId: PocHeroId = initialHero();
   private mode: CampaignMode = initialMode();
   private currentRunId = '';
   private settled = false;
+  private nextRestore: RunSafeSave | null = null;
+  private lastSavedFingerprint = '';
   private report = '结算后自动写入预览版独立存档；升级下一局生效。';
 
   constructor(onRestart: () => void) {
@@ -73,6 +74,18 @@ export class PreviewOps {
     el<HTMLButtonElement>('hero-kane').addEventListener('click', () => this.selectHero('kane', onRestart));
     el<HTMLButtonElement>('mode-prototype').addEventListener('click', () => this.selectMode('prototype', onRestart));
     el<HTMLButtonElement>('mode-expedition').addEventListener('click', () => this.selectMode('expedition', onRestart));
+    el<HTMLButtonElement>('resume-expedition').addEventListener('click', () => {
+      const saved = readRunSafeSave(storage);
+      if (!saved) { this.report = '没有可恢复的安全节点。'; this.render(); return; }
+      this.nextRestore = saved;
+      this.mode = 'expedition';
+      this.zone = saved.battlefieldId;
+      this.heroId = 'marine'; // canonical schema v2 validates marine only
+      onRestart();
+      this.report = '已恢复远征第 ' + (saved.campaign.stageIndex + 1)
+        + ' 段，保留原有构筑、专精和已抽取卡牌。';
+      this.render();
+    });
     el<HTMLButtonElement>('buy-armor').addEventListener('click', () => this.purchase('armor'));
     el<HTMLButtonElement>('buy-frame').addEventListener('click', () => this.purchase('weapon-frame'));
     el<HTMLButtonElement>('buy-repair').addEventListener('click', () => this.purchase('repair-module'));
@@ -110,18 +123,44 @@ export class PreviewOps {
     this.render();
   }
   createWorld(): PocWorld {
-    this.currentRunId = runId();
     this.settled = false;
-    const meta = readMetaProgress(storage);
+    this.lastSavedFingerprint = '';
     const viewport = mobileViewport(450, 800);
-    return new PocWorld(viewport.worldWidth, viewport.worldHeight,
+    const restore = this.nextRestore;
+    this.nextRestore = null;
+    if (restore) {
+      const resumed = PocWorld.fromSafeSnapshot(restore,
+        viewport.worldWidth, viewport.worldHeight);
+      if (resumed) {
+        this.currentRunId = resumed.runId;
+        return resumed;
+      }
+      this.report = '安全节点校验失败，已改为全新出击。';
+    }
+    const meta = readMetaProgress(storage);
+    const world = new PocWorld(viewport.worldWidth, viewport.worldHeight,
       newRunSeed(), this.zone, {
       armorRank: meta?.armorRank ?? 0,
       weaponFrameRank: meta?.weaponFrameRank ?? 0,
       repairModuleRank: meta?.repairModuleRank ?? 0,
     }, this.heroId, this.mode);
+    this.currentRunId = world.runId;
+    return world;
+  }
+  persistSafeNode(world: PocWorld): boolean {
+    const save = world.safeSnapshot();
+    if (!save) return false;
+    const signature = JSON.stringify({ ...save, savedAtMs: 0 });
+    if (signature === this.lastSavedFingerprint) return true;
+    if (!writeRunSafeSave(storage, save)) {
+      this.report = '安全节点写入失败：请检查浏览器本地存储权限。';
+      return false;
+    }
+    this.lastSavedFingerprint = signature;
+    return true;
   }
   settleIfOver(world: PocWorld): void {
+    this.persistSafeNode(world);
     if (!world.state.over || this.settled) return;
     this.settled = true;
     const s = world.state;
@@ -131,6 +170,10 @@ export class PreviewOps {
       kills: s.kills, elapsedMs: Math.floor(s.elapsedMs),
       victory: s.won, zoneId: this.zone,
     });
+    if (result) {
+      const saved = readRunSafeSave(storage);
+      if (saved?.runId === this.currentRunId) clearRunSafeSave(storage);
+    }
     if (result?.newSettlement) {
       this.report = '本局获得战备 +' + result.earned + '、'
         + getBattlefield(this.zone).resourceName + ' +' + result.materialEarned + '。';
@@ -170,6 +213,12 @@ export class PreviewOps {
       button.classList.toggle('active', this.mode === mode);
       button.setAttribute('aria-pressed', String(this.mode === mode));
     }
+    const savedRun = readRunSafeSave(storage);
+    const resume = el<HTMLButtonElement>('resume-expedition');
+    resume.disabled = !savedRun;
+    resume.textContent = savedRun ? '继续远征 · 第 ' + (savedRun.campaign.stageIndex + 1)
+      + ' 段 · ' + (savedRun.campaign.phase === 'reward' ? '待选奖励' : '战斗准备')
+      : '继续远征 · 暂无安全节点';
     el('mode-current').textContent = this.mode === 'expedition'
       ? '当前模式：三幕远征 · 九遭遇 · 六卡二路线'
       : '当前模式：五波封锁 · 四次波末选卡';

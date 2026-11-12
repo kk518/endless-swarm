@@ -99,7 +99,10 @@ window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   if (world.decision && /^[123]$/.test(key) && !e.repeat) {
     e.preventDefault();
-    if (world.chooseDecision(Number(key) - 1)) releaseInput();
+    if (world.chooseDecision(Number(key) - 1)) {
+      ops.persistSafeNode(world);
+      releaseInput();
+    }
     return;
   }
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) e.preventDefault();
@@ -385,7 +388,10 @@ function showSafeDecision(): void {
     button.textContent = names[id] + (id === training.weapon ? ' ✓' : '');
     button.setAttribute('aria-pressed', String(id === training.weapon));
     button.addEventListener('click', () => {
-      if (world.setTraining(id, world.state.training.focus)) showSafeDecision();
+      if (world.setTraining(id, world.state.training.focus)) {
+        ops.persistSafeNode(world);
+        showSafeDecision();
+      }
     });
     return button;
   });
@@ -397,7 +403,10 @@ function showSafeDecision(): void {
     button.textContent = TRAINING_LABELS[focus] + (focus === training.focus ? ' ✓' : '');
     button.setAttribute('aria-pressed', String(focus === training.focus));
     button.addEventListener('click', () => {
-      if (world.setTraining(world.state.training.weapon, focus)) showSafeDecision();
+      if (world.setTraining(world.state.training.weapon, focus)) {
+        ops.persistSafeNode(world);
+        showSafeDecision();
+      }
     });
     return button;
   });
@@ -419,6 +428,7 @@ function showSafeDecision(): void {
     button.append(number, title, details);
     button.addEventListener('click', () => {
       if (!world.chooseDecision(index)) return;
+      ops.persistSafeNode(world);
       releaseInput();
       decisionOverlay.hidden = true;
       renderedDecision = '';

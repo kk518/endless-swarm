@@ -110,3 +110,19 @@ test('M5.2 real safe-node training controls exist in both clients', () => {
   assert.match(world, /get decision\(\)/);
   assert.match(world, /setTraining\(weapon: WeaponId, focus: TrainingFocus\)/);
 });
+
+test('M6 safe snapshots are validated, isolated and resumable in both runtime adapters', () => {
+  const ops = read('clients/cocos-preview/src/m6Ui.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  const world = read('clients/cocos/assets/scripts/PocWorld.ts');
+  const html = read('clients/cocos-preview/index.html');
+  assert.match(html, /id="resume-expedition"/);
+  assert.match(ops, /cocos-preview-m6:/);
+  assert.match(ops, /writeRunSafeSave\(storage, save\)/);
+  assert.match(ops, /PocWorld\.fromSafeSnapshot/);
+  assert.match(ops, /clearRunSafeSave\(storage\)/);
+  assert.match(creator, /cocos-creator-m6:/);
+  assert.match(creator, /writeRunSafeSave\(creatorSafeStorage, save\)/);
+  assert.match(creator, /private resumeSafeNode\(\)/);
+  assert.match(world, /static fromSafeSnapshot\(/);
+});

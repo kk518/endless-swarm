@@ -13,6 +13,28 @@ import type { CampaignMode } from './m6/runController.ts';
 import { TRAINING_LABELS, type TrainingFocus } from './m6/autoGrowth.ts';
 import type { WeaponId } from './m6/progression.ts';
 import { mobileViewport, type MobileViewport } from './PocViewport.ts';
+import {
+  readRunSafeSave, writeRunSafeSave, type SafeRunStorage,
+} from './m6/runSafeSave.ts';
+import { getStoragePort } from './m6/platformStorage.ts';
+
+// Creator's preview and the original Phaser H5 must NEVER share save keys.
+const creatorStoragePrefix = 'cocos-creator-m6:';
+const creatorSafeStorage: SafeRunStorage = {
+  getItem(key: string): string | null {
+    return getStoragePort()?.getItem(creatorStoragePrefix + key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    const port = getStoragePort();
+    if (!port) throw new Error('No Cocos storage adapter configured');
+    port.setItem(creatorStoragePrefix + key, value);
+  },
+  removeItem(key: string): void {
+    const port = getStoragePort();
+    if (!port) throw new Error('No Cocos storage adapter configured');
+    port.removeItem(creatorStoragePrefix + key);
+  },
+};
 
 const { ccclass } = _decorator;
 const COL = {
@@ -35,6 +57,8 @@ export class PocBattle extends Component {
   private world!: PocWorld;
   private selectedHero: PocHeroId = 'marine';
   private selectedMode: CampaignMode = 'prototype';
+  private lastSavedFingerprint = '';
+  private storageWarning = false;
   private graphic!: Graphics;
   private uiGraphic!: Graphics;
   private viewport!: MobileViewport;
@@ -118,6 +142,7 @@ export class PocBattle extends Component {
         mode: this.world.state.mode, totalStages: this.world.state.totalStages,
         decision: this.world.decision?.kind ?? null,
         training: { ...this.world.state.training },
+        savedCheckpoint: readRunSafeSave(creatorSafeStorage)?.campaign.stageIndex ?? null,
       }),
     };
   }
@@ -163,13 +188,15 @@ export class PocBattle extends Component {
       const owned = this.world.state.weapons;
       if (p.y >= 250 && p.y <= 290 && owned.length) {
         const index = Math.min(owned.length - 1, Math.floor(p.x / this.screenWidth * owned.length));
-        this.world.setTraining(owned[index], this.world.state.training.focus);
+        if (this.world.setTraining(owned[index], this.world.state.training.focus))
+          this.persistSafeNode();
         return;
       }
       if (p.y >= 306 && p.y <= 346) {
         const choices: readonly TrainingFocus[] = ['damage', 'rate', 'speed'];
         const index = Math.min(2, Math.floor(p.x / this.screenWidth * 3));
-        this.world.setTraining(this.world.state.training.weapon, choices[index]);
+        if (this.world.setTraining(this.world.state.training.weapon, choices[index]))
+          this.persistSafeNode();
         return;
       }
       const count = decision.options.length;
@@ -178,7 +205,10 @@ export class PocBattle extends Component {
         for (let index = 0; index < count; index++) {
           const left = 8 + index * (cardWidth + gap);
           if (p.x < left || p.x > left + cardWidth) continue;
-          if (this.world.chooseDecision(index)) this.releaseInput();
+          if (this.world.chooseDecision(index)) {
+            this.persistSafeNode();
+            this.releaseInput();
+          }
           break;
         }
       }
@@ -188,6 +218,7 @@ export class PocBattle extends Component {
       // Temporary migration controls: left switches 5-wave / 3-act, right hero.
       if (p.x < this.screenWidth * 0.36) this.switchMode();
       else if (p.x > this.screenWidth * 0.64) this.switchHero();
+      else this.resumeSafeNode();
       return;
     } // thumb zone near screen bottom
     this.activeTouch = event.getID();
@@ -219,6 +250,30 @@ export class PocBattle extends Component {
       this.releaseInput();
     }
   }
+  private persistSafeNode(): void {
+    const save = this.world.safeSnapshot();
+    if (!save) return;
+    const signature = JSON.stringify({ ...save, savedAtMs: 0 });
+    if (signature === this.lastSavedFingerprint) return;
+    if (!writeRunSafeSave(creatorSafeStorage, save)) {
+      this.storageWarning = true;
+      return;
+    }
+    this.storageWarning = false;
+    this.lastSavedFingerprint = signature;
+  }
+  private resumeSafeNode(): void {
+    const save = readRunSafeSave(creatorSafeStorage);
+    if (!save) return;
+    const restored = PocWorld.fromSafeSnapshot(save,
+      this.viewport.worldWidth, this.viewport.worldHeight);
+    if (!restored) return;
+    this.world = restored;
+    this.selectedHero = 'marine';
+    this.selectedMode = 'expedition';
+    this.lastSavedFingerprint = '';
+    this.releaseInput();
+  }
   private switchHero(): void {
     this.selectedHero = this.selectedHero === 'marine' ? 'kane' : 'marine';
     this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
@@ -243,7 +298,10 @@ export class PocBattle extends Component {
   }
   update(dt: number): void {
     if (!this.world || !this.graphic) return;
-    if (!this.suspended) this.world.advance(dt * 1000, this.intent());
+    if (!this.suspended) {
+      this.world.advance(dt * 1000, this.intent());
+      this.persistSafeNode();
+    }
     this.paint();
   }
   private paint(): void {
@@ -432,6 +490,7 @@ export class PocBattle extends Component {
             s.player.deployed ? '火力展开' : '机动射击')
           + (s.surgeWarningMs > 0 ? ' · ⚠虫潮集结 ' +
               (s.surgeWarningMs / 1000).toFixed(1) + '秒' : '')
-          + ' · 左上角切换模式 / M · 右上角换英雄 / H';
+          + (this.storageWarning ? ' · ⚠安全节点未保存' : '')
+          + ' · 上方中间恢复远征 · 左侧切模式 / M · 右侧换英雄 / H';
   }
 }

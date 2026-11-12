@@ -4,7 +4,8 @@
  * preview. It does NOT yet implement full M6 campaign/hero/meta progression.
  * No imports from cc, Phaser, DOM or wx are allowed.
  */
-import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
+import { createRunRandoms, restoreRandoms, type RunRandomStreams } from './m6/runRandom.ts';
+import { parseRunSafeSave, type RunSafeSave } from './m6/runSafeSave.ts';
 import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { xpToNext, weaponTuning } from './m6/arsenal.ts';
 import { TRAINING_LABELS, type TrainingFocus, type TrainingPlan } from './m6/autoGrowth.ts';
@@ -279,6 +280,39 @@ export class PocWorld {
   }
 
   get decision(): RunDecision | null { return this.runController.snapshot().decision; }
+  get runId(): string { return this.runController.runId; }
+
+  /** Write only true M6 safe nodes. Null means the caller MUST NOT claim a save. */
+  safeSnapshot(savedAtMs = Date.now()): RunSafeSave | null {
+    return this.runController.safeSnapshot(this.heroId,
+      this.state.suppliesCollected, this.randomStreams.combat.snapshot(), savedAtMs);
+  }
+
+  /** Recreate clean combat objects; never revive mid-wave projectiles/enemies. */
+  static fromSafeSnapshot(value: unknown, width: number, height: number): PocWorld | null {
+    const save = parseRunSafeSave(value);
+    if (!save) return null;
+    const restored = CocosRunController.fromSafeSnapshot(save);
+    if (!restored) return null;
+    const world = new PocWorld(width, height, save.campaign.seed, save.battlefieldId, {
+      weaponFrameRank: save.equipment.weaponFrameRank,
+      repairModuleRank: save.equipment.repairModuleRank,
+    }, 'marine', 'expedition');
+    world.runController = restored;
+    world.randomStreams = createRunRandoms(save.campaign.seed);
+    restoreRandoms(world.randomStreams, save.randoms);
+    Object.assign(world.state, emptyState());
+    world.state.heroId = 'marine';
+    world.state.suppliesCollected = save.suppliesCollected;
+    world.nextId = 1;
+    world.accumulatorMs = 0;
+    world.syncRunState();
+    const stage = restored.currentStage;
+    world.spawnCooldownMs = pressurePlan(stage.encounter.pressureTier, 0,
+      stage.encounter.wave.durationMs).intervalMs;
+    if (!world.decision) world.spawnEnemyAt(130, 60);
+    return world;
+  }
   /** M5.2: configure the next automatic rank only at a safe reward node. */
   setTraining(weapon: WeaponId, focus: TrainingFocus): boolean {
     if (!this.decision || !this.state.weapons.includes(weapon)
