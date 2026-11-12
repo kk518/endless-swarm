@@ -25,6 +25,11 @@
         <div class="progress-panel"><span id="wave-counter">WAVE 01 / 05</span><span id="player-level">LV.01 · XP 0/9</span><span id="arc-unlock">电弧线圈 · LV.3 解锁</span></div>
         <div class="status-bubble" id="stance">移动自动射击</div>
         <div class="bottom-tip" id="battle-message">按住下半屏滑动移动 · 静止 0.8 秒火力展开</div>
+        <section id="decision-overlay" class="decision-overlay" hidden aria-live="polite" aria-label="战术选择">
+          <div id="decision-heading" class="decision-heading">战斗已暂停 · 选择下一步</div>
+          <div id="decision-options" class="decision-options" role="group" aria-label="选择战术卡或路线"></div>
+          <p class="decision-hint">选择其中一项继续作战，波内经验升级不会打断战斗</p>
+        </section>
         <div id="end-screen" class="end-screen" hidden>
           <p>MISSION STATUS</p><strong>战士阵亡</strong>
           <span id="end-kills">已击杀 0 只虫族</span>

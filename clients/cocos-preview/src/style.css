@@ -62,3 +62,22 @@ button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:poin
 /* Playable hero selection reuses the accessible zone card controls. */
 #hero-kane.active{border-color:#f0c37b;background:linear-gradient(115deg,#443521,#253238)}
 #hero-kane.active small{color:#f1d6a8}
+
+/* True safe-node choice UI. DOM-only in the Canvas harness; Creator uses Cocos Labels. */
+.decision-overlay{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;
+ justify-content:center;gap:16px;padding:25px 12px;background:linear-gradient(180deg,#081922ed,#08141afa);
+ touch-action:manipulation;user-select:text}
+.decision-overlay[hidden]{display:none}
+.decision-heading{text-align:center;font-size:15px;line-height:1.5;font-weight:800;color:#fff1c9;
+ text-shadow:0 2px 12px #000}
+.decision-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.decision-card{display:flex;flex-direction:column;gap:9px;align-items:flex-start;min-width:0;
+ min-height:148px;padding:13px 10px;border:1px solid #4c9f99;background:#173239f2;
+ color:#e5fdf6;text-align:left;touch-action:manipulation}
+.decision-card:hover,.decision-card:focus-visible{border-color:#ffeeaa;background:#26504d;outline:2px solid #89e5d4;outline-offset:1px}
+.decision-number{color:#ebc58a;font:12px ui-monospace,Consolas,monospace}
+.decision-card strong{font-size:clamp(11px,2.6vw,14px);line-height:1.35;overflow-wrap:anywhere}
+.decision-description{font-size:11px;line-height:1.55;color:#afced1;overflow-wrap:anywhere}
+.decision-hint{margin:0;text-align:center;color:#a6c4c5;font-size:11px;line-height:1.5}
+@media(max-width:390px){.decision-overlay{padding:19px 8px}.decision-options{gap:5px}
+.decision-card{padding:11px 7px;min-height:163px}.decision-description{font-size:10px}}

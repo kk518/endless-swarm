@@ -24,3 +24,17 @@ test('migration deployment only targets child directory', () => {
   assert.match(deploy, /refs\/heads\/feature\/cocos-wechat-migration-poc/);
   assert.match(deploy, /\/var\/www\/endless-swarm\/cocos-preview\//);
 });
+
+test('safe encounter decisions have real selectable UI in both preview and Creator', () => {
+  const html = read('clients/cocos-preview/index.html');
+  const preview = read('clients/cocos-preview/src/main.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  assert.match(html, /id="decision-overlay"/);
+  assert.match(html, /id="decision-options"/);
+  assert.match(preview, /world\.chooseDecision\(index\)/);
+  assert.match(preview, /decisionOptions\.replaceChildren/);
+  assert.match(preview, /decisionOverlay\.hidden = !decision/);
+  assert.match(creator, /this\.world\.chooseDecision\(index\)/);
+  assert.match(creator, /DecisionCardLabel/);
+  assert.doesNotMatch(creator, /const decision = this\.world\.decision;[\s\S]*const decision = this\.world\.decision;/);
+});

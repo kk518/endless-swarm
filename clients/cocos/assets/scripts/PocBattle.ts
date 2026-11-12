@@ -32,6 +32,7 @@ export class PocBattle extends Component {
   private selectedHero: PocHeroId = 'marine';
   private graphic!: Graphics;
   private hud!: Label;
+  private optionLabels: Label[] = [];
   private activeTouch: number | null = null;
   private touchOrigin: Vec2 = { x: 0, y: 0 };
   private touchMove: Vec2 = { x: 0, y: 0 };
@@ -53,6 +54,19 @@ export class PocBattle extends Component {
     this.hud.fontSize = 16;
     this.hud.lineHeight = 23;
     hudNode.setPosition(0, size.height / 2 - 58, 0);
+    // Three genuine Creator UI Labels, not browser DOM nodes.
+    for (let index = 0; index < 3; index++) {
+      const labelNode = new Node('DecisionCardLabel' + index);
+      this.node.addChild(labelNode);
+      labelNode.addComponent(UITransform).setContentSize(Math.max(76, size.width / 3 - 28), 115);
+      const label = labelNode.addComponent(Label);
+      label.fontSize = 14;
+      label.lineHeight = 20;
+      label.enableWrapText = true;
+      label.overflow = Label.Overflow.SHRINK;
+      labelNode.active = false;
+      this.optionLabels.push(label);
+    }
     // Staging-only smoke-test contract. Never expose storage or player identity.
     (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
       state: () => ({
@@ -106,12 +120,17 @@ export class PocBattle extends Component {
     const p = event.getUILocation();
     const decision = this.world.decision;
     if (decision) {
-      if (p.y >= this.screenHeight * 0.08 && p.y <= this.screenHeight * 0.36) {
-        const index = Math.min(decision.options.length - 1,
-          Math.floor(p.x / this.screenWidth * decision.options.length));
-        this.world.chooseDecision(index);
+      const count = decision.options.length;
+      const gap = 8, cardWidth = (this.screenWidth - 16 - gap * (count - 1)) / count;
+      if (p.y >= 100 && p.y <= 228) {
+        for (let index = 0; index < count; index++) {
+          const left = 8 + index * (cardWidth + gap);
+          if (p.x < left || p.x > left + cardWidth) continue;
+          if (this.world.chooseDecision(index)) this.releaseInput();
+          break;
+        }
       }
-      return; // combat input is locked until the explicit encounter decision is made
+      return; // combat input stays locked until an explicit safe-node decision
     }
     if (p.y > this.screenHeight * 0.65) {
       // Top-right HUD tap changes the playable hero in the Cocos scene.
@@ -236,19 +255,22 @@ export class PocBattle extends Component {
       g.circle(x + this.touchMove.x * 40, y + this.touchMove.y * 40, 17); g.fill();
     }
     const decision = this.world.decision;
-    if (decision) {
-      const count = decision.options.length;
-      const gap = 8, cardWidth = (w - 16 - gap * (count - 1)) / count;
-      const cardHeight = 128, cardY = -h / 2 + 100;
-      for (let i = 0; i < count; i++) {
-        const x = -w / 2 + 8 + i * (cardWidth + gap);
-        g.fillColor = new Color(23, 47, 59, 238);
-        g.rect(x, cardY, cardWidth, cardHeight); g.fill();
-        g.strokeColor = new Color(91, 193, 180, 230); g.lineWidth = 2;
-        g.rect(x, cardY, cardWidth, cardHeight); g.stroke();
-      }
+    const count = decision?.options.length ?? 0;
+    const gap = 8, cardWidth = count > 0 ? (w - 16 - gap * (count - 1)) / count : 0;
+    const cardHeight = 128, cardY = -h / 2 + 100;
+    for (let i = 0; i < this.optionLabels.length; i++) {
+      const label = this.optionLabels[i];
+      label.node.active = i < count;
+      if (!decision || i >= count) continue;
+      const x = -w / 2 + 8 + i * (cardWidth + gap);
+      g.fillColor = new Color(23, 47, 59, 238);
+      g.rect(x, cardY, cardWidth, cardHeight); g.fill();
+      g.strokeColor = new Color(91, 193, 180, 230); g.lineWidth = 2;
+      g.rect(x, cardY, cardWidth, cardHeight); g.stroke();
+      label.node.setPosition(x + cardWidth / 2, cardY + cardHeight / 2, 0);
+      label.string = (i + 1) + '. ' + decision.options[i].name
+        + '\\n' + decision.options[i].description;
     }
-    const decision = this.world.decision;
     this.hud.string = s.over
       ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\\n击杀 ' : '机甲损毁 · 点击重开 / R\\n击杀 ') + s.kills
       : decision

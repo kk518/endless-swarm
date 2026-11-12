@@ -21,6 +21,10 @@ const playerLevel = document.querySelector<HTMLElement>('#player-level')!;
 const arcUnlock = document.querySelector<HTMLElement>('#arc-unlock')!;
 const stanceLabel = document.querySelector<HTMLElement>('#stance')!;
 const message = document.querySelector<HTMLElement>('#battle-message')!;
+const decisionOverlay = document.querySelector<HTMLElement>('#decision-overlay')!;
+const decisionHeading = document.querySelector<HTMLElement>('#decision-heading')!;
+const decisionOptions = document.querySelector<HTMLElement>('#decision-options')!;
+let renderedDecision = '';
 const endScreen = document.querySelector<HTMLElement>('#end-screen')!;
 const endKills = document.querySelector<HTMLElement>('#end-kills')!;
 const fpsLabel = document.querySelector<HTMLElement>('#frame-count')!;
@@ -45,6 +49,8 @@ function restart(): void {
   releaseInput();
   world = ops.createWorld();
   endScreen.hidden = true;
+  decisionOverlay.hidden = true;
+  renderedDecision = '';
 }
 document.querySelector('#restart')!.addEventListener('click', restart);
 document.querySelector('#restart-overlay')!.addEventListener('click', restart);
@@ -86,6 +92,11 @@ canvas.addEventListener('lostpointercapture', e => {
 });
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
+  if (world.decision && /^[123]$/.test(key) && !e.repeat) {
+    e.preventDefault();
+    if (world.chooseDecision(Number(key) - 1)) releaseInput();
+    return;
+  }
   if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) e.preventDefault();
   if (key === 'r' && !e.repeat) restart();
   keyboard.add(key);
@@ -278,8 +289,47 @@ function paint(dt: number): void {
   }
 }
 
+function showSafeDecision(): void {
+  const decision = world.decision;
+  decisionOverlay.hidden = !decision;
+  if (!decision) { renderedDecision = ''; return; }
+  const key = world.state.wave + ':' + decision.kind + ':' + decision.options.map(option => option.id).join(',');
+  if (renderedDecision === key) return;
+  // A previously held movement gesture must never continue after a reward.
+  releaseInput();
+  renderedDecision = key;
+  decisionHeading.textContent = decision.kind === 'card'
+    ? '第 ' + world.state.wave + ' 段完成 · 战术模块三选一'
+    : '路线分岔 · 选择安全或高风险路线';
+  const cards = decision.options.map((option, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'decision-card';
+    button.setAttribute('aria-label', option.name + '：' + option.description);
+    button.innerHTML = '';
+    const number = document.createElement('span');
+    number.className = 'decision-number';
+    number.textContent = String(index + 1).padStart(2, '0');
+    const title = document.createElement('strong');
+    title.textContent = option.name;
+    const details = document.createElement('span');
+    details.className = 'decision-description';
+    details.textContent = option.description;
+    button.append(number, title, details);
+    button.addEventListener('click', () => {
+      if (!world.chooseDecision(index)) return;
+      releaseInput();
+      decisionOverlay.hidden = true;
+      renderedDecision = '';
+    });
+    return button;
+  });
+  decisionOptions.replaceChildren(...cards);
+}
+
 function ui(): void {
   ops.settleIfOver(world);
+  showSafeDecision();
   const s = world.state;
   hpFill.style.width = Math.max(0, s.player.hp / s.player.maxHp * 100) + '%';
   killCount.textContent = String(s.kills).padStart(3,'0');
@@ -294,6 +344,7 @@ function ui(): void {
   stanceLabel.textContent = isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
   message.textContent = suspended
     ? '游戏已暂停 · 返回页面后继续'
+    : world.decision ? '波次已结束 · 请选择战术奖励或路线'
     : activePointer !== null ? '移动中 · 武器持续自动攻击'
     : '按住下半屏拖动移动 · 静止 0.8 秒火力展开';
   if (s.over) {
