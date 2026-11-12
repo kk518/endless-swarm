@@ -475,6 +475,9 @@ export class GameScene extends Phaser.Scene {
       || (chosen.weapon && !this.weaponDrivers.has(chosen.weapon))) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
+    // The card may heal or increase max HP; preserve that effect before
+    // the generic +1 field repair and stage transition.
+    this.hp = this.build.hp;
     if (chosen.weapon) installWeaponCalibration(this.growth, chosen.weapon);
     const newEvolutions = applyAutomaticEvolutions(this.build, this.growth);
     if (newEvolutions.length) {
