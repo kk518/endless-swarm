@@ -26,6 +26,7 @@ import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentC
 import { createRunRandoms, newRunSeed, restoreRandoms, snapshotRandoms, type RunRandomStreams } from './runRandom';
 import { readMetaProgress, settleStoredRun } from './metaProgression';
 import { clearRunSafeSave, parseRunSafeSave, writeRunSafeSave, type RunSafeSave } from './runSafeSave';
+import { getStoragePort } from './platformStorage';
 import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
 import { createHeroRuntimeRegistry } from './heroRuntime';
 import { eligibleRouteChoices, resolveRouteChoice, type RouteChoice } from './routeDecisions';
@@ -366,7 +367,8 @@ export class GameScene extends Phaser.Scene {
     this.pendingRoutes = [];
     this.routePressureMultiplier = 1;
     this.build = newBuild();
-    const meta = readMetaProgress(localStorage);
+    const storage = getStoragePort();
+    const meta = storage ? readMetaProgress(storage) : null;
     if (meta) {
       this.build.maxHp += meta.armorRank;
       this.build.hp += meta.armorRank;
@@ -453,7 +455,8 @@ export class GameScene extends Phaser.Scene {
       suppliesCollected: this.suppliesCollected, routePressureMultiplier: this.routePressureMultiplier,
       randoms: snapshotRandoms(this.randoms), cardOfferIds: this.rewardOptions.map(card => card.id),
     };
-    const saved = writeRunSafeSave(localStorage, save);
+    const storage = getStoragePort();
+    const saved = storage ? writeRunSafeSave(storage, save) : false;
     if (!saved) window.dispatchEvent(new Event('swarm:storage-warning'));
     return saved;
   }
@@ -1697,22 +1700,23 @@ export class GameScene extends Phaser.Scene {
     this.crosshair.setVisible(false);
     this.targetingLine.clear();
     let previous = 0;
-    try { previous = Number(localStorage.getItem('endless-swarm-best-kills')) || 0; } catch { /* private browsing */ }
+    try { previous = Number(getStoragePort()?.getItem('endless-swarm-best-kills')) || 0; } catch { /* private browsing */ }
     const record = Math.max(previous, this.kills);
-    try { localStorage.setItem('endless-swarm-best-kills', String(record)); } catch { /* optional */ }
-    const payout = settleStoredRun(localStorage, {
+    try { getStoragePort()?.setItem('endless-swarm-best-kills', String(record)); } catch { /* optional */ }
+    const storage = getStoragePort();
+    const payout = storage ? settleStoredRun(storage, {
       runId: this.runId,
       campaignId: this.campaignRun.campaignId,
       completedStages: victory ? this.currentStage.total : this.campaignRun.stageIndex,
       kills: this.kills, elapsedMs: this.timeMs, victory,
-    });
+    }) : null;
     this.settlementSaved = payout !== null;
     // Never discard a recoverable long-run checkpoint when war data did not
     // persist. If the write succeeds, the run ID is now fenced in the ledger.
     if (this.settlementSaved && this.campaign.id === THREE_ACT_BLUEPRINT.id) {
-      clearRunSafeSave(localStorage);
+      if (storage) clearRunSafeSave(storage);
     }
-    const meta = payout?.meta ?? readMetaProgress(localStorage);
+    const meta = payout?.meta ?? (storage ? readMetaProgress(storage) : null);
     const result: RunResult = {
       kills: this.kills, survived: formatTime(this.timeMs / 1000), record,
       victory, wave: this.waveNumber, weapons: [...this.build.weapons],
