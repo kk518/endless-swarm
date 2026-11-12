@@ -12,6 +12,7 @@ export interface Vec2 { x: number; y: number }
 export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'boss';
 export interface PocPlayer extends Vec2 {
   hp: number;
+  maxHp: number;
   stationaryMs: number;
   deployed: boolean;
 }
@@ -44,6 +45,12 @@ export interface PocState {
   won: boolean;
   over: boolean;
 }
+export interface PocMetaTuning {
+  armorRank?: number;
+  weaponFrameRank?: number;
+  repairModuleRank?: number;
+}
+
 export const POC = {
   fixedStepMs: 1000 / 60,
   moveSpeed: 230,
@@ -99,7 +106,7 @@ function clamp(x: number, low: number, high: number): number {
 }
 function emptyState(): PocState {
   return {
-    player: { x: 0, y: 0, hp: 6, stationaryMs: 0, deployed: false },
+    player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], bullets: [], lightning: [],
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
     xpToNext: xpRequired(1), arcUnlocked: false, bossSpawned: false,
@@ -117,6 +124,9 @@ export class PocWorld {
   readonly height: number;
   readonly zoneId: BattlefieldId;
   readonly state: PocState;
+  private readonly armorRank: number;
+  private readonly weaponFrameRank: number;
+  private readonly repairModuleRank: number;
   private accumulatorMs = 0;
   private fireCooldownMs = 0;
   private arcCooldownMs = 0;
@@ -126,17 +136,25 @@ export class PocWorld {
   private randomStreams: RunRandomStreams;
   private readonly initialSeed: number;
 
-  constructor(width = 450, height = 800, seed = 12345, zoneId: BattlefieldId = DEFAULT_BATTLEFIELD) {
+  constructor(width = 450, height = 800, seed = 12345,
+    zoneId: BattlefieldId = DEFAULT_BATTLEFIELD, tuning: PocMetaTuning = {}) {
     this.width = width;
     this.height = height;
     this.zoneId = zoneId;
+    this.armorRank = Math.max(0, Math.min(3, Math.floor(tuning.armorRank ?? 0)));
+    this.weaponFrameRank = Math.max(0, Math.min(2, Math.floor(tuning.weaponFrameRank ?? 0)));
+    this.repairModuleRank = Math.max(0, Math.min(2, Math.floor(tuning.repairModuleRank ?? 0)));
     this.initialSeed = seed >>> 0;
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.state = emptyState();
+    this.state.player.maxHp += this.armorRank;
+    this.state.player.hp = this.state.player.maxHp;
     this.spawnEnemyAt(130, 60);
   }
   reset(): void {
     Object.assign(this.state, emptyState());
+    this.state.player.maxHp += this.armorRank;
+    this.state.player.hp = this.state.player.maxHp;
     this.accumulatorMs = 0;
     this.fireCooldownMs = 0;
     this.arcCooldownMs = 0;
@@ -230,7 +248,11 @@ export class PocWorld {
     }
 
     const nextWave = Math.min(5, 1 + Math.floor(state.elapsedMs / POC.waveDurationMs));
-    if (nextWave > state.wave) state.wave = nextWave;
+    if (nextWave > state.wave) {
+      // Presentation-only PoC tuning; cost/rank rules come from M6 metaProgression.
+      player.hp = Math.min(player.maxHp, player.hp + this.repairModuleRank);
+      state.wave = nextWave;
+    }
     if (state.wave === 5 && !state.bossSpawned) {
       // Reserve the boss slot even if the previous wave reached its enemy cap.
       if (state.enemies.length >= POC.maxEnemies) {
@@ -286,7 +308,7 @@ export class PocWorld {
       let removed = bullet.remainingMs <= 0;
       if (!removed) for (const e of state.enemies) {
         if (e.hp <= 0 || squaredDistance(bullet, e) > 18 * 18) continue;
-        e.hp -= (28 + 3 * (state.level - 1)) *
+        e.hp -= (28 + 3 * (state.level - 1)) * (1 + this.weaponFrameRank * .12) *
           (player.deployed ? POC.deployDamageMultiplier : 1);
         removed = true;
         break;
