@@ -416,6 +416,8 @@ function ui(): void {
     : isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
   message.textContent = suspended
     ? '游戏已暂停 · 返回页面后继续'
+    : s.surgeWarningMs > 0
+      ? '⚠ 虫潮集结！' + (s.surgeWarningMs / 1000).toFixed(1) + ' 秒后两侧包围'
     : world.decision ? '波次已结束 · 请选择战术奖励或路线'
     : activePointer !== null ? '移动中 · 武器持续自动攻击'
     : '按住下半屏拖动移动 · 静止 0.8 秒火力展开';

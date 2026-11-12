@@ -43,8 +43,13 @@ test('M5.3 stage spawns first show a 700ms warning, then materialize outside aut
   assert.ok(Math.hypot(marker.x - world.state.player.x, marker.y - world.state.player.y) >= 140);
   assert.equal(world.state.bullets.length, 0, 'unmaterialized bug cannot be shot');
   step(world, 43);
-  assert.equal(world.state.arrivals.length, 0);
-  assert.ok(world.state.enemies.length > 0, 'arrival becomes an actual enemy after warning');
+  // A faster M3.1 grouped spawner may already have scheduled the next warning.
+  // Verify the first exact marker materialized, not that no future warning exists.
+  assert.ok(world.state.enemies.some(enemy =>
+    enemy.kind === marker.kind
+    && Math.abs(enemy.x - marker.x) < 1e-9
+    && Math.abs(enemy.y - marker.y) < 1e-9),
+    'the first warned arrival must become a real enemy after 700ms');
   assert.equal(world.state.kills, 0);
 });
 

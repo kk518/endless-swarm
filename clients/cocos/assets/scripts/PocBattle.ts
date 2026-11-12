@@ -371,6 +371,8 @@ export class PocBattle extends Component {
             + (s.evolved[id] ? ' ★' : '')).join('/')
           + ' · ' + (s.overclockMs > 0 ? '超频射击' :
             s.player.deployed ? '火力展开' : '机动射击')
+          + (s.surgeWarningMs > 0 ? ' · ⚠虫潮集结 ' +
+              (s.surgeWarningMs / 1000).toFixed(1) + '秒' : '')
           + ' · 左上角切换模式 / M · 右上角换英雄 / H';
   }
 }
