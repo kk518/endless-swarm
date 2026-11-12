@@ -1697,6 +1697,19 @@ export class GameScene extends Phaser.Scene {
     try { previous = Number(localStorage.getItem('endless-swarm-best-kills')) || 0; } catch { /* private browsing */ }
     const record = Math.max(previous, this.kills);
     try { localStorage.setItem('endless-swarm-best-kills', String(record)); } catch { /* optional */ }
+    const payout = settleStoredRun(localStorage, {
+      runId: this.runId,
+      campaignId: this.campaignRun.campaignId,
+      completedStages: victory ? this.currentStage.total : this.campaignRun.stageIndex,
+      kills: this.kills, elapsedMs: this.timeMs, victory,
+    });
+    this.settlementSaved = payout !== null;
+    // Never discard a recoverable long-run checkpoint when war data did not
+    // persist. If the write succeeds, the run ID is now fenced in the ledger.
+    if (this.settlementSaved && this.campaign.id === THREE_ACT_BLUEPRINT.id) {
+      clearRunSafeSave(localStorage);
+    }
+    const meta = payout?.meta ?? readMetaProgress(localStorage);
     const result: RunResult = {
       kills: this.kills, survived: formatTime(this.timeMs / 1000), record,
       victory, wave: this.waveNumber, weapons: [...this.build.weapons],
@@ -1705,6 +1718,8 @@ export class GameScene extends Phaser.Scene {
       evolutions: Object.entries(this.growth.evolved).filter(([, enabled]) => enabled).map(([name]) => name),
       heroId: this.heroId, campaignId: this.campaignRun.campaignId, runSeed: this.campaignRun.seed,
       totalStages: this.currentStage.total, actTitle: this.currentStage.actTitle,
+      warDataEarned: payout?.earned ?? 0, totalWarData: meta?.warData ?? 0,
+      armorRank: meta?.armorRank ?? 0, settlementSaved: this.settlementSaved,
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
