@@ -7,7 +7,9 @@ const read = (path: string): string => readFileSync(path, 'utf8');
 test('migration preview shares the Cocos PoC world source', () => {
   const source = read('clients/cocos-preview/src/main.ts');
   assert.match(source, /\.\.\/\.\.\/cocos\/assets\/scripts\/PocWorld\.ts/);
-  assert.match(source, /new PocWorld\(/);
+  assert.match(source, /new PreviewOps\(restart\)/);
+  assert.match(source, /ops\.createWorld\(\)/);
+  assert.match(read('clients/cocos-preview/src/m6Ui.ts'), /new PocWorld\(/);
   assert.doesNotMatch(source, /from ['"]phaser['"]|from ['"]cc['"]/);
 });
 test('migration preview has independent HTML and Vite build root', () => {
