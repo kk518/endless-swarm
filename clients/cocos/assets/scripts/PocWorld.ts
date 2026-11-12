@@ -250,7 +250,9 @@ export class PocWorld {
     const nextWave = Math.min(5, 1 + Math.floor(state.elapsedMs / POC.waveDurationMs));
     if (nextWave > state.wave) {
       // Presentation-only PoC tuning; cost/rank rules come from M6 metaProgression.
-      player.hp = Math.min(player.maxHp, player.hp + this.repairModuleRank);
+      if (this.repairModuleRank > 0) {
+        player.hp = Math.min(player.maxHp, player.hp + this.repairModuleRank);
+      }
       state.wave = nextWave;
     }
     if (state.wave === 5 && !state.bossSpawned) {
