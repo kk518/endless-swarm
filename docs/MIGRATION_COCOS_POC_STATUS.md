@@ -22,13 +22,15 @@
 ### 当前明确未完成
 
 - PocWorld 仍是约 100 秒的五波简化战斗，不是完整 M1，更不是 M6 三幕九遭遇。
-- 缺少完整四普通武器、四武器等级/进化、波末卡牌、M2 连杀/自爆虫、M3 精英/补给、M4.1 视听表现。
-- M5.2 自动成长训练策略和 M5.3 手机可见虫潮规则尚未完整接入。
+- 四把普通武器的攻击驱动（步枪、散射炮、电弧、喷火器）已在 PocWorld 实际触发；使用 main 的 weaponTuning、buildWeaponDamage 和 buildWeaponInterval，装备来自真实波末合法卡牌。散射炮多弹丸、喷火器扇形伤害与进化灼烧代码已接入并补充回归测试。但完整进化配方的玩家端验证、四挂载视觉、M2 自爆虫/连杀、M3 精英/补给、M4.1 完整视听表现仍未完成。
+- M5.2 的自动武器等级提升现已通过 CocosRunController 接入实际四武器伤害与冷却；训练计划交互仍需完善。M5.3 手机可见虫潮规则仍未完整接入。
 - Cocos Creator 运行时尚未接入 campaignDirector、routeDecisions、runSafeSave 和 platformStorage；Canvas 预览的 DOM/localStorage 功能不能代表 Creator 已完成。
 - Cocos Creator 中尚无完整三幕流程、路线选择、安全节点恢复、战区工坊 UI 和真实结算闭环。
 - 正式 2.5D 角色/虫族/武器美术、完整音效、微信小游戏构建、微信开发者工具导入及 Android/iOS 微信真机验证均未完成。
 
 ## 下一步
+
+P2 首批已推进：四把普通武器在 PocWorld 中依照真实波末卡牌安装并独立开火，使用主线自动等级、进化调谐、武器伤害和射速函数；需以最新 GitHub Actions 的 Node、Creator 和线上预览验收结果为准。接下来重点恢复 M2 自爆虫/连杀、M3 精英/补给以及 M5.3 可见虫潮。
 
 P1 的源码准备已完成：18 个主线纯 TypeScript 规则模块已镜像进 Cocos 工程，并扩展字节一致性检查与回归测试。当前 PocWorld 尚未调用其中大部分模块。下一步建立 Core/RunController 接口，先恢复四武器、卡牌、XP/进化和 M0–M5.3 战斗行为，再接入三幕/存档/局外闭环；暂停新增英雄与武器。
 

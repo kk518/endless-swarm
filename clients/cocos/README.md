@@ -1,18 +1,18 @@
 # 《无尽虫潮》Cocos Creator 3.8 微信小游戏迁移 PoC（开发中）
 
-> 状态：**第一批源码已提交，编辑器生成的场景与微信真机构建尚未验证。** 这不是已可直接发布的完整小游戏。
+> 状态：**Cocos Creator 3.8.8 Web Mobile 真实构建、服务器隔离部署与 Playwright 浏览器触控已验证；微信小游戏构建和微信真机仍未验证。** 目前仍为迁移纵向切片，未完成 M0–M6.1a parity。
 > 迁移功能分支：`feature/cocos-wechat-migration-poc`。原 `main` / Phaser H5 和自动部署保持原样。
 
 ## 目标与已经完成的内容
 
-- `assets/scripts/PocWorld.ts`：纯 TypeScript 的固定步长小型战斗模拟（单指移动、停步 0.8s 展开、自动射击、工虫追击、HP/击杀、种子刷怪）。
+- `assets/scripts/PocWorld.ts`：纯 TypeScript 固定步长战斗核心，已接入 main M6 的战役控制器、合法波末三选一卡牌、M5 自动升级、四普通武器攻击驱动和凯恩专武；仍缺历史自爆虫、精英、补给、可见虫潮等完整 parity。
 - `assets/scripts/PocBattle.ts`：Cocos 3.8 `Component`，使用官方 `input` 触摸/键盘事件、`Graphics` 临时绘制机甲/工虫/子弹、`Label` HUD 和前后台中断处理。
 - `tests/cocosPocWorld.test.ts`：主仓库 Node 测试覆盖相同的 **Cocos 引用的 PocWorld 模块**。无 DOM、Phaser、Cocos 依赖。
 - 这是 **G1 纵向切片源码**，不是 M5/M6 玩法等价实现。历史 Phaser 原型保持可用。
 
 ## 如何在安装了 Creator 3.8 LTS 的机器上使场景可预览
 
-**当前仓库还没有由 Cocos 编辑器生成/保存的 `Battle.scene`**，也没有经编辑器导入产生的 `.meta` UUID：不能把“脚本已提交”误当作“能直接点网页预览”。后续在装有 Creator 的开发机上完成并提交资源文件。
+仓库现已包含经 Cocos Creator 3.8.8 Web Mobile CI 实际编译的 `Battle.scene`、必要 `.meta` 和构建配置。GitHub Actions 自动编译并部署隔离的 Creator 预览入口：`https://kk518.top/swarm/cocos-preview/creator/`。这是 Web 运行证据，不代表微信真机验证。
 
 1. 安装并固定一个 **3.8.x** 具体补丁版本。用 Creator Dashboard 打开本目录 `clients/cocos`（若编辑器提示工程不完整，则使用 **空 2D 项目** 模板在临时目录生成标准工程，再把其编辑器生成配置合入这里，保留本目录的 `assets/scripts`）。
 2. 在 Creator 中使用「资源管理器 → 新建 Scene」创建 `Battle.scene`；在层级中创建 **Canvas（2D）**，并确认场景有用于 Canvas 的 UI Camera。

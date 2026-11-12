@@ -57,3 +57,18 @@ test('Kane determinism is preserved under the shared M6 combat stream', () => {
   }
   assert.deepEqual(a.state,b.state);
 });
+
+test('all four historical M5 standard weapons have canonical catalog entries and executable drivers', () => {
+  for (const id of ['rifle','scatter','arc','flame']) {
+    const definition=POC_CATALOG.weapons.get(id);
+    const runtime=POC_WEAPON_RUNTIME.get(id);
+    assert.ok(definition,'missing historical weapon '+id);
+    assert.equal(definition.slot,'standard');
+    assert.ok(runtime,'a card must never install a metadata-only weapon');
+    assert.equal(runtime.slot,'standard');
+    assert.equal(runtime.driverId,definition.driverId);
+  }
+  assert.equal(POC_CATALOG.weapons.size,5, 'four standard weapons + Kane signature');
+  assert.equal(POC_WEAPON_RUNTIME.get('scatter')?.baseIntervalMs,850);
+  assert.equal(POC_WEAPON_RUNTIME.get('flame')?.baseIntervalMs,170);
+});
