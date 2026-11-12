@@ -105,6 +105,8 @@ export class CocosRunController {
   private salvageKills = 0;
   private routePressureMultiplier = 1;
   private decision: RunDecision | null = null;
+  // Keep the full validated fork; the UI receives only currently survivable options.
+  private routeSourceOptions: readonly RouteChoice[] = [];
   private failed = false;
   private won = false;
 
@@ -218,7 +220,7 @@ export class CocosRunController {
   chooseRoute(routeId: string): boolean {
     if (this.failed || this.won || this.campaignRun.phase !== 'reward'
       || this.decision?.kind !== 'route') return false;
-    const effect = resolveRouteChoice(this.decision.options, routeId, this.hp, this.build.maxHp);
+    const effect = resolveRouteChoice(this.routeSourceOptions, routeId, this.hp, this.build.maxHp);
     if (!effect) return false;
     this.hp = effect.hp;
     this.build.hp = this.hp;
@@ -231,9 +233,10 @@ export class CocosRunController {
   private prepareDecision(): void {
     const stage = this.currentStage;
     if (stage.encounter.decision === 'route') {
+      this.routeSourceOptions = stage.encounter.routes ?? [];
       this.decision = {
         kind: 'route',
-        options: eligibleRouteChoices(stage.encounter.routes ?? [], this.hp),
+        options: eligibleRouteChoices(this.routeSourceOptions, this.hp),
       };
       if (this.decision.options.length === 0) throw new Error('No legal route choices');
       return;
@@ -263,6 +266,7 @@ export class CocosRunController {
     this.applyHealing(fieldRepair);
     this.campaignRun = advanceCampaignReward(this.campaign, this.campaignRun);
     this.decision = null;
+    this.routeSourceOptions = [];
   }
 
   private applyHealing(amount: number): void {
