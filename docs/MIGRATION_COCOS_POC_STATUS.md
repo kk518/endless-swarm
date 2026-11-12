@@ -53,3 +53,7 @@
 Canvas 预览新增“继续远征”控制和独立的 `cocos-preview-m6:` 存储命名空间，结算成功后仅清理本局 runId 的安全存档；Creator 版采用 `cocos-creator-m6:` 命名空间、屏幕顶部中央恢复入口和 `getStoragePort()` 注入式接口。两者都不能覆盖主线 `/swarm/` 的本地存档。schema-v2 当前仅接受 marine 英雄，凯恩仍需后续扩展。Creator 的工坊结算/微信原生 Storage 适配尚未完成，不可由 Web 通过推断。
 
 本项需以最新提交的 Node/Canvas/Creator 独立 CI 结果确认，不能只因代码已提交就宣称全平台验收。
+
+### 刷新防误覆盖保护
+
+主线安全节点恢复不仅要求状态合法，还要求在用户尚未点击“继续远征”时保留原有存档。新建的第 0 段远征不得覆盖另一 runId 的历史安全节点，直到新远征真正推进至奖励节点；Creator/Canvas 共享 `safeNodePolicy.ts`，并有固定 Seed/存档替换策略测试。

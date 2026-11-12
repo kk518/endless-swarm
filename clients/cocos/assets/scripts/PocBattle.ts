@@ -17,6 +17,7 @@ import {
   readRunSafeSave, writeRunSafeSave, type SafeRunStorage,
 } from './m6/runSafeSave.ts';
 import { getStoragePort } from './m6/platformStorage.ts';
+import { preservePreviousCheckpoint } from './m6/safeNodePolicy.ts';
 
 // Creator's preview and the original Phaser H5 must NEVER share save keys.
 const creatorStoragePrefix = 'cocos-creator-m6:';
@@ -253,6 +254,7 @@ export class PocBattle extends Component {
   private persistSafeNode(): void {
     const save = this.world.safeSnapshot();
     if (!save) return;
+    if (preservePreviousCheckpoint(readRunSafeSave(creatorSafeStorage), save)) return;
     const signature = JSON.stringify({ ...save, savedAtMs: 0 });
     if (signature === this.lastSavedFingerprint) return;
     if (!writeRunSafeSave(creatorSafeStorage, save)) {

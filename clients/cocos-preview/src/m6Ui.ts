@@ -14,6 +14,7 @@ import {
   readRunSafeSave, writeRunSafeSave, clearRunSafeSave,
   type RunSafeSave, type SafeRunStorage,
 } from '../../cocos/assets/scripts/m6/runSafeSave.ts';
+import { preservePreviousCheckpoint } from '../../cocos/assets/scripts/m6/safeNodePolicy.ts';
 import { PocWorld } from '../../cocos/assets/scripts/PocWorld.ts';
 import { mobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import type { CampaignMode } from '../../cocos/assets/scripts/m6/runController.ts';
@@ -150,6 +151,7 @@ export class PreviewOps {
   persistSafeNode(world: PocWorld): boolean {
     const save = world.safeSnapshot();
     if (!save) return false;
+    if (preservePreviousCheckpoint(readRunSafeSave(storage), save)) return false;
     const signature = JSON.stringify({ ...save, savedAtMs: 0 });
     if (signature === this.lastSavedFingerprint) return true;
     if (!writeRunSafeSave(storage, save)) {
