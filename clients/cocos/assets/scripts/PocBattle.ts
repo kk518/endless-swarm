@@ -51,6 +51,16 @@ export class PocBattle extends Component {
     this.hud.fontSize = 16;
     this.hud.lineHeight = 23;
     hudNode.setPosition(0, size.height / 2 - 58, 0);
+    // Staging-only smoke-test contract. Never expose storage or player identity.
+    (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
+      state: () => ({
+        initialized: true,
+        x: this.world.state.player.x, y: this.world.state.player.y,
+        hp: this.world.state.player.hp, enemies: this.world.state.enemies.length,
+        kills: this.world.state.kills, wave: this.world.state.wave,
+        level: this.world.state.level, over: this.world.state.over,
+      }),
+    };
   }
 
   onEnable(): void {
@@ -73,6 +83,7 @@ export class PocBattle extends Component {
     game.off(Game.EVENT_HIDE, this.backgrounded, this);
     game.off(Game.EVENT_SHOW, this.foregrounded, this);
     this.releaseInput();
+    delete (globalThis as typeof globalThis & { __swarmCocosDebug?: object }).__swarmCocosDebug;
   }
   private releaseInput(): void {
     this.activeTouch = null;
