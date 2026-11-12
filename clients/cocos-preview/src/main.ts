@@ -270,7 +270,7 @@ function paint(dt: number): void {
       g.fill(); g.stroke();
       g.strokeStyle = '#ffe3b5'; g.lineWidth = 3;
       g.beginPath(); g.arc(position.x, position.y, 105, -Math.PI / 2,
-        -Math.PI / 2 + (1 - enemy.windupMs / 850) * Math.PI * 2); g.stroke();
+        -Math.PI / 2 + (1 - (enemy.windupMs ?? 0) / 850) * Math.PI * 2); g.stroke();
     }
   }
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
