@@ -258,6 +258,15 @@ export class CocosRunController {
     const options = rolled.filter(card => !card.weapon || this.playableWeapons.has(card.weapon));
     const pool = eligibleCards(this.build).filter(card =>
       !card.weapon || this.playableWeapons.has(card.weapon));
+    // Canonical rollCards can pick an unimplemented weapon before our driver
+    // filter runs. Preserve its early visible-hardpoint guarantee using only
+    // executable attack drivers; metadata alone must not grant a weapon.
+    const availableWeapons = pool.filter(card => card.weapon);
+    if (stage.index < 4 && availableWeapons.length > 0 && !options.some(card => card.weapon)) {
+      const index = Math.min(availableWeapons.length - 1, Math.floor(random() * availableWeapons.length));
+      options.unshift(availableWeapons[index]);
+      if (options.length > 3) options.pop();
+    }
     while (options.length < 3) {
       const remaining = pool.filter(card => !options.some(option => option.id === card.id));
       if (remaining.length === 0) break;
