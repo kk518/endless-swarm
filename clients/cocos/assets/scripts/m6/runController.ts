@@ -27,7 +27,7 @@ import {
 import {
   battlefieldWave, DEFAULT_BATTLEFIELD, type BattlefieldId,
 } from './battlefields.ts';
-import { advanceStreak } from './streak.ts';
+import { advanceStreak, streakActive, STREAK_WINDOW_MS } from './streak.ts';
 
 export type CampaignMode = 'prototype' | 'expedition';
 export type RunDecision =
@@ -58,6 +58,7 @@ export interface RunControllerSnapshot {
   readonly timeMs: number;
   readonly kills: number;
   readonly streak: number;
+  readonly streakRemainingMs: number;
   readonly bestStreak: number;
   readonly routePressureMultiplier: number;
   readonly decision: RunDecision | null;
@@ -150,6 +151,7 @@ export class CocosRunController {
       build: cloneBuild(this.build), growth: cloneGrowth(this.growth),
       training: { ...this.training }, hp: this.hp, maxHp: this.build.maxHp,
       timeMs: this.timeMs, kills: this.kills, streak: this.streak,
+      streakRemainingMs: this.streak > 0 ? Math.max(0, STREAK_WINDOW_MS - (this.timeMs - this.lastKillMs)) : 0,
       bestStreak: this.bestStreak, routePressureMultiplier: this.routePressureMultiplier,
       decision, failed: this.failed, won: this.won,
     };
@@ -160,6 +162,7 @@ export class CocosRunController {
     if (this.failed || this.won || this.campaignRun.phase !== 'playing') return this.snapshot();
     const delta = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0;
     this.timeMs += delta;
+    if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
     this.campaignRun = tickCampaign(this.campaign, this.campaignRun, delta, bossKilled);
     if (this.campaignRun.phase === 'reward') this.prepareDecision();
     else if (this.campaignRun.phase === 'victory') this.won = true;
