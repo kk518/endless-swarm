@@ -65,3 +65,17 @@ test('M2/M3 danger circles, elite auras and supplies are rendered by both client
   assert.match(creator, /s\.supplies/);
   assert.match(creator, /s\.pulses/);
 });
+
+test('M5.3 arrivals, mobile targeting and spit/leap visuals render in both actual clients', () => {
+  const preview = read('clients/cocos-preview/src/main.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  const world = read('clients/cocos/assets/scripts/PocWorld.ts');
+  assert.match(world, /visibleEdgeSpawn\(/);
+  assert.match(world, /insideReadableView\(/);
+  assert.match(world, /ARRIVAL_WARNING_MS/);
+  assert.match(world, /private spitAcid\(/);
+  assert.match(preview, /for \(const arrival of s\.arrivals\)/);
+  assert.match(preview, /for \(const acid of s\.acids\)/);
+  assert.match(creator, /for \(const arrival of s\.arrivals\)/);
+  assert.match(creator, /for \(const acid of s\.acids\)/);
+});

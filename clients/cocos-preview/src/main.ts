@@ -182,7 +182,7 @@ function drawEnemy(x: number, y: number, time: number, kind: string, hp: number,
   }
   polygon([[-19, 4],[-15,-14],[0,-27],[16,-14],[19,7],[0,15]], '#4e2b36');
   polygon([[-14,-12],[0,-24],[12,-11],[8,5],[-7,5]],
-    kind === 'boss' ? '#df7063' : kind === 'bomber' ? '#ff4d82'
+    kind === 'boss' ? '#df7063' : kind === 'spitter' ? '#9bea6f' : kind === 'bomber' ? '#ff4d82'
       : kind === 'armored' ? '#ae8fa9' : kind === 'leaper' ? '#dd687f' : '#a04c60');
   polygon([[-6,-22],[2,-24],[12,-13],[6,-4]], '#ce7d6b');
   polygon([[-8,5],[8,5],[0,13]], '#321e2f');
@@ -263,6 +263,13 @@ function paint(dt: number): void {
       g.strokeStyle = '#ffc782'; g.lineWidth = 2.5;
       g.beginPath(); g.arc(position.x, position.y - 8, 30, 0, Math.PI * 2); g.stroke();
     }
+    if ((enemy.windupMs ?? 0) > 0 && (enemy.kind === 'leaper'
+      || enemy.kind === 'spitter' || enemy.kind === 'boss')) {
+      const radius = enemy.kind === 'boss' ? 65 : 26;
+      g.strokeStyle = enemy.kind === 'spitter' ? '#afe787' : '#ffa578';
+      g.lineWidth = 2;
+      g.beginPath();g.arc(position.x,position.y-8,radius,0,Math.PI*2);g.stroke();
+    }
     if ((enemy.windupMs ?? 0) > 0 && enemy.kind === 'bomber') {
       g.fillStyle = 'rgba(255,45,82,0.12)';
       g.strokeStyle = '#ff5d87'; g.lineWidth = 2.5;
@@ -274,6 +281,21 @@ function paint(dt: number): void {
     }
   }
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
+  // M5.3: visible 700ms arrival telegraph BEFORE a bug becomes targetable.
+  for (const arrival of s.arrivals) {
+    const spot = worldPoint(arrival.x,arrival.y);
+    const intensity = 1 - arrival.remainingMs / arrival.durationMs;
+    const radius = (arrival.kind === 'boss' ? 32 : 19) * (0.75 + intensity * 0.7);
+    g.fillStyle = 'rgba(255,131,103,0.13)';
+    g.strokeStyle = arrival.elite ? '#ffd093' : '#ff916c';
+    g.lineWidth = 2 + intensity;
+    g.beginPath();g.arc(spot.x,spot.y - 8,radius,0,Math.PI*2);g.fill();g.stroke();
+  }
+  for (const acid of s.acids) {
+    const spot = worldPoint(acid.x,acid.y);
+    ellipse(spot.x,spot.y-12,8,6,'#a8f47a');
+    ellipse(spot.x,spot.y-12,3,3,'#ecffd5');
+  }
   for (const supply of s.supplies) {
     const pos = worldPoint(supply.x, supply.y);
     const tint = supply.kind === 'repair' ? '#85f5b1' : supply.kind === 'overclock'

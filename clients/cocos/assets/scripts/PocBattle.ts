@@ -214,6 +214,7 @@ export class PocBattle extends Component {
       g.fillColor = COL.shadow; g.ellipse(enemy.x, enemy.y - 12, radius + 4, 8 * scale); g.fill();
       g.fillColor = enemy.kind === 'boss' ? new Color(204, 92, 86, 255)
         : enemy.kind === 'armored' ? new Color(133, 103, 130, 255)
+        : enemy.kind === 'spitter' ? new Color(156, 220, 113, 255)
         : enemy.kind === 'bomber' ? new Color(255, 78, 121, 255)
         : enemy.kind === 'leaper' ? new Color(180, 95, 107, 255)
         : COL.enemy;
@@ -221,6 +222,13 @@ export class PocBattle extends Component {
       if (enemy.elite) {
         g.strokeColor = new Color(255, 204, 140, 245); g.lineWidth = 3;
         g.circle(enemy.x, enemy.y + 6, 28 * scale); g.stroke();
+      }
+      if ((enemy.windupMs ?? 0) > 0
+        && (enemy.kind === 'leaper' || enemy.kind === 'spitter' || enemy.kind === 'boss')) {
+        g.strokeColor = enemy.kind === 'spitter'
+          ? new Color(173, 235, 123, 242) : new Color(255, 166, 119, 242);
+        g.lineWidth = 2.5;
+        g.circle(enemy.x, enemy.y, enemy.kind === 'boss' ? 65 : 26); g.stroke();
       }
       if (enemy.kind === 'bomber' && (enemy.windupMs ?? 0) > 0) {
         g.fillColor = new Color(255, 63, 102, 30);
@@ -237,6 +245,21 @@ export class PocBattle extends Component {
         g.rect(enemy.x - radius, enemy.y + radius + 11,
           radius * 2 * Math.max(0, enemy.hp / (enemy.maxHp ?? 1)), 5); g.fill();
       }
+    }
+    for (const arrival of s.arrivals) {
+      const fraction = 1 - arrival.remainingMs / arrival.durationMs;
+      g.fillColor = new Color(255, 112, 83, 32);
+      g.circle(arrival.x, arrival.y, 18 + fraction * 12); g.fill();
+      g.strokeColor = arrival.elite ? new Color(255, 220, 153, 255)
+        : new Color(255, 145, 104, 255);
+      g.lineWidth = 2 + fraction;
+      g.circle(arrival.x, arrival.y, 18 + fraction * 12); g.stroke();
+    }
+    for (const acid of s.acids) {
+      g.fillColor = new Color(168, 244, 122, 245);
+      g.circle(acid.x, acid.y + 8, 7); g.fill();
+      g.strokeColor = new Color(234, 255, 192, 240); g.lineWidth = 2;
+      g.circle(acid.x, acid.y + 8, 9); g.stroke();
     }
     for (const supply of s.supplies) {
       g.fillColor = supply.kind === 'repair' ? new Color(119, 245, 169, 255)

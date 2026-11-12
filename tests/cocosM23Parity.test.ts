@@ -126,12 +126,13 @@ test('M5.3 arena-edge spawns always enter beyond immediate contact/telegraph dis
     world.state.player.x = -world.width / 2 + 26;
     world.state.player.y = -world.height / 2 + 56;
     frames(world, 53);
-    assert.ok(world.state.enemies.length > 0, 'a real wave spawn occurred');
-    for (const enemy of world.state.enemies) {
-      const distance = Math.hypot(enemy.x - world.state.player.x,
-        enemy.y - world.state.player.y);
-      assert.ok(distance >= 125,
-        'enemy was clipped too close to a cornered player: ' + distance);
+    assert.ok(world.state.arrivals.length > 0, 'a real edge arrival warning occurred');
+    assert.equal(world.state.enemies.length, 0, 'warn before materializing a live enemy');
+    for (const arrival of world.state.arrivals) {
+      const distance = Math.hypot(arrival.x - world.state.player.x,
+        arrival.y - world.state.player.y);
+      assert.ok(distance >= 140,
+        'arrival marker was clipped too close to a cornered player: ' + distance);
     }
   }
 });
