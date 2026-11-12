@@ -13,14 +13,18 @@ export type PocHeroId = 'marine' | 'kane';
 export interface PocTarget { id: number; x: number; y: number; hp: number }
 export interface PocAttackPort {
   rifle(target: PocTarget, angle: number): void;
+  scatter(target: PocTarget, angle: number): void;
   arc(target: PocTarget, angle: number): void;
+  flame(target: PocTarget, angle: number): void;
   rail(target: PocTarget, angle: number): void;
 }
 
 const starter = CONTENT_CATALOG.heroes.get('marine');
 const rifle = CONTENT_CATALOG.weapons.get('rifle');
+const scatter = CONTENT_CATALOG.weapons.get('scatter');
 const arc = CONTENT_CATALOG.weapons.get('arc');
-if (!starter || !rifle || !arc) throw new Error('Canonical M6 content definitions missing');
+const flame = CONTENT_CATALOG.weapons.get('flame');
+if (!starter || !rifle || !scatter || !arc || !flame) throw new Error('Canonical M6 content definitions missing');
 
 export const POC_CATALOG: ContentCatalog = createContentCatalog(
   [
@@ -29,7 +33,7 @@ export const POC_CATALOG: ContentCatalog = createContentCatalog(
       passiveId: 'siege-specialist', signatureWeaponId: 'kane-rail' },
   ],
   [
-    rifle, arc,
+    rifle, scatter, arc, flame,
     { id: 'kane-rail', name: '攻城轨道炮', slot: 'signature',
       tags: ['kinetic','piercing','deploy'], driverId: 'rail' },
   ],
@@ -46,8 +50,12 @@ export const POC_WEAPON_RUNTIME = createWeaponRuntimeRegistry<PocTarget, PocAtta
   [
     { driverId: 'rifle', slot: 'standard', baseRange: 340, baseIntervalMs: 255,
       attack: (target, angle, port) => port.rifle(target, angle) },
+    { driverId: 'scatter', slot: 'standard', baseRange: 270, baseIntervalMs: 850,
+      attack: (target, angle, port) => port.scatter(target, angle) },
     { driverId: 'arc', slot: 'standard', baseRange: 250, baseIntervalMs: 940,
       attack: (target, angle, port) => port.arc(target, angle) },
+    { driverId: 'flame', slot: 'standard', baseRange: 190, baseIntervalMs: 170,
+      attack: (target, angle, port) => port.flame(target, angle) },
     { driverId: 'rail', slot: 'signature', baseRange: 380, baseIntervalMs: 2050,
       attack: (target, angle, port) => port.rail(target, angle) },
   ],
