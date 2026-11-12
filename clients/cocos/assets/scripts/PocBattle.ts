@@ -10,6 +10,7 @@ import {
 import { PocWorld, normalizedMove, type Vec2 } from './PocWorld';
 import { type PocHeroId } from './PocRoster.ts';
 import type { CampaignMode } from './m6/runController.ts';
+import { mobileViewport, type MobileViewport } from './PocViewport.ts';
 
 const { ccclass } = _decorator;
 const COL = {
@@ -33,6 +34,8 @@ export class PocBattle extends Component {
   private selectedHero: PocHeroId = 'marine';
   private selectedMode: CampaignMode = 'prototype';
   private graphic!: Graphics;
+  private uiGraphic!: Graphics;
+  private viewport!: MobileViewport;
   private hud!: Label;
   private optionLabels: Label[] = [];
   private activeTouch: number | null = null;
@@ -47,14 +50,27 @@ export class PocBattle extends Component {
     const size = view.getVisibleSize();
     this.screenWidth = size.width;
     this.screenHeight = size.height;
-    this.world = new PocWorld(size.width, size.height, 518, undefined, {}, this.selectedHero, this.selectedMode);
-    this.graphic = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
+    this.viewport = mobileViewport(size.width, size.height);
+    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
+      518, undefined, {}, this.selectedHero, this.selectedMode);
+    // M5.3: combat geometry is independently scaled to the 600-unit world.
+    // HUD, safe-node cards and touch joystick stay in Canvas UI coordinates.
+    const worldNode = new Node('BattleWorldGraphics');
+    this.node.addChild(worldNode);
+    worldNode.addComponent(UITransform).setContentSize(
+      this.viewport.worldWidth, this.viewport.worldHeight);
+    worldNode.setScale(this.viewport.worldScale, this.viewport.worldScale, 1);
+    this.graphic = worldNode.addComponent(Graphics);
+    const uiNode = new Node('BattleUIOverlay');
+    this.node.addChild(uiNode);
+    uiNode.addComponent(UITransform).setContentSize(size.width, size.height);
+    this.uiGraphic = uiNode.addComponent(Graphics);
     const hudNode = new Node('PocHUD');
     this.node.addChild(hudNode);
     hudNode.addComponent(UITransform).setContentSize(size.width - 20, 90);
     this.hud = hudNode.addComponent(Label);
-    this.hud.fontSize = 16;
-    this.hud.lineHeight = 23;
+    this.hud.fontSize = Math.max(12, 16 * this.viewport.hudScale);
+    this.hud.lineHeight = Math.max(17, 23 * this.viewport.hudScale);
     hudNode.setPosition(0, size.height / 2 - 58, 0);
     // Three genuine Creator UI Labels, not browser DOM nodes.
     for (let index = 0; index < 3; index++) {
@@ -77,6 +93,9 @@ export class PocBattle extends Component {
         input: { touchActive: this.activeTouch !== null, touchMove: { ...this.touchMove },
           pressedKeys: this.pressed.size, suspended: this.suspended },
         x: this.world.state.player.x, y: this.world.state.player.y,
+        worldWidth: this.world.width, worldHeight: this.world.height,
+        screenWidth: this.screenWidth, screenHeight: this.screenHeight,
+        worldScale: this.viewport.worldScale, hudScale: this.viewport.hudScale,
         hp: this.world.state.player.hp, enemies: this.world.state.enemies.length,
         kills: this.world.state.kills, wave: this.world.state.wave,
         level: this.world.state.level, over: this.world.state.over,
@@ -172,12 +191,14 @@ export class PocBattle extends Component {
   }
   private switchHero(): void {
     this.selectedHero = this.selectedHero === 'marine' ? 'kane' : 'marine';
-    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero, this.selectedMode);
+    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
+      518, undefined, {}, this.selectedHero, this.selectedMode);
     this.releaseInput();
   }
   private switchMode(): void {
     this.selectedMode = this.selectedMode === 'prototype' ? 'expedition' : 'prototype';
-    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero, this.selectedMode);
+    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
+      518, undefined, {}, this.selectedHero, this.selectedMode);
     this.releaseInput();
   }
   private keyUp(event: EventKeyboard): void { this.pressed.delete(event.keyCode); }
@@ -197,9 +218,11 @@ export class PocBattle extends Component {
   }
   private paint(): void {
     const g = this.graphic;
+    const ui = this.uiGraphic;
     const s = this.world.state;
-    const w = this.screenWidth, h = this.screenHeight;
+    const w = this.world.width, h = this.world.height;
     g.clear();
+    ui.clear();
 
     g.fillColor = COL.floor;
     g.rect(-w / 2, -h / 2, w, h);
@@ -309,24 +332,26 @@ export class PocBattle extends Component {
     g.stroke();
 
     if (this.activeTouch !== null) {
-      const x = this.touchOrigin.x - w / 2, y = this.touchOrigin.y - h / 2;
-      g.strokeColor = COL.stick; g.lineWidth = 2; g.circle(x, y, 56); g.stroke();
-      g.fillColor = COL.stick;
-      g.circle(x + this.touchMove.x * 40, y + this.touchMove.y * 40, 17); g.fill();
+      const x = this.touchOrigin.x - this.screenWidth / 2;
+      const y = this.touchOrigin.y - this.screenHeight / 2;
+      ui.strokeColor = COL.stick; ui.lineWidth = 2; ui.circle(x, y, 56); ui.stroke();
+      ui.fillColor = COL.stick;
+      ui.circle(x + this.touchMove.x * 40, y + this.touchMove.y * 40, 17); ui.fill();
     }
     const decision = this.world.decision;
     const count = decision?.options.length ?? 0;
-    const gap = 8, cardWidth = count > 0 ? (w - 16 - gap * (count - 1)) / count : 0;
-    const cardHeight = 128, cardY = -h / 2 + 100;
+    const gap = 8, cardWidth = count > 0
+      ? (this.screenWidth - 16 - gap * (count - 1)) / count : 0;
+    const cardHeight = 128, cardY = -this.screenHeight / 2 + 100;
     for (let i = 0; i < this.optionLabels.length; i++) {
       const label = this.optionLabels[i];
       label.node.active = i < count;
       if (!decision || i >= count) continue;
-      const x = -w / 2 + 8 + i * (cardWidth + gap);
-      g.fillColor = new Color(23, 47, 59, 238);
-      g.rect(x, cardY, cardWidth, cardHeight); g.fill();
-      g.strokeColor = new Color(91, 193, 180, 230); g.lineWidth = 2;
-      g.rect(x, cardY, cardWidth, cardHeight); g.stroke();
+      const x = -this.screenWidth / 2 + 8 + i * (cardWidth + gap);
+      ui.fillColor = new Color(23, 47, 59, 238);
+      ui.rect(x, cardY, cardWidth, cardHeight); ui.fill();
+      ui.strokeColor = new Color(91, 193, 180, 230); ui.lineWidth = 2;
+      ui.rect(x, cardY, cardWidth, cardHeight); ui.stroke();
       label.node.setPosition(x + cardWidth / 2, cardY + cardHeight / 2, 0);
       label.string = (i + 1) + '. ' + decision.options[i].name
         + '\n' + decision.options[i].description;

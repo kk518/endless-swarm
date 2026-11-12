@@ -4,6 +4,7 @@
  */
 import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/PocWorld.ts';
 import { PreviewOps } from './m6Ui.ts';
+import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import './style.css';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#battle');
@@ -136,22 +137,27 @@ function ellipse(x: number, y: number, rx: number, ry: number, color: string): v
   g.fillStyle = color;
   g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); g.fill();
 }
-function worldPoint(x: number, y: number): Vec2 { return { x: 225 + x, y: 400 - y }; }
+const battleViewport: MobileViewport = mobileViewport(450, 800);
+function worldPoint(x: number, y: number): Vec2 {
+  return { x: battleViewport.worldWidth / 2 + x,
+    y: battleViewport.worldHeight / 2 - y };
+}
 
 function paintBackground(elapsed: number): void {
-  const grad = g.createLinearGradient(0, 0, 450, 800);
+  const W = battleViewport.worldWidth, H = battleViewport.worldHeight;
+  const grad = g.createLinearGradient(0, 0, W, H);
   grad.addColorStop(0, '#102b36'); grad.addColorStop(.6, '#142b33'); grad.addColorStop(1, '#071820');
-  g.fillStyle = grad; g.fillRect(0, 0, 450, 800);
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
 
   g.strokeStyle = '#3e63703d'; g.lineWidth = 1;
-  for (let x = -120; x <= 570; x += 57) {
-    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 800); g.stroke();
+  for (let x = 0; x <= W; x += 57) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
   }
-  for (let y = 0; y < 800; y += 57) {
-    g.beginPath(); g.moveTo(0, y); g.lineTo(450, y); g.stroke();
+  for (let y = 0; y < H; y += 57) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
   }
   // Steel base / quarantine zone markings.
-  g.save(); g.translate(225, 400);
+  g.save(); g.translate(W / 2, H / 2);
   g.strokeStyle = '#427a785c'; g.lineWidth = 3;
   g.beginPath(); g.ellipse(0, 0, 165, 70, 0, 0, Math.PI * 2); g.stroke();
   g.strokeStyle = '#8fbba838'; g.lineWidth = 1;
@@ -242,7 +248,9 @@ function paint(dt: number): void {
   if (canvas!.width !== actualW || canvas!.height !== actualH) {
     canvas!.width = actualW; canvas!.height = actualH;
   }
-  g.setTransform(actualW / 450, 0, 0, actualH / 800, 0, 0);
+  // World layer (600 units wide) zooms out; DOM HUD remains at its design size.
+  g.setTransform(actualW / battleViewport.worldWidth, 0,
+    0, actualH / battleViewport.worldHeight, 0, 0);
   paintBackground(s.elapsedMs);
 
   const ordered = s.enemies.slice().sort((a, b) => b.y - a.y);
@@ -333,6 +341,9 @@ function paint(dt: number): void {
       : 'rgba(197,247,255,'+strength+')';
     g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo(middleX,middleY);g.lineTo(b.x,b.y-22);g.stroke();
   }
+  // Restore UI-space coordinates for joystick overlays; do not shrink HUD.
+  g.setTransform(actualW / battleViewport.uiWidth, 0,
+    0, actualH / battleViewport.uiHeight, 0, 0);
   if (activePointer !== null) {
     const j = dragOrigin;
     g.strokeStyle='#83dfc794'; g.lineWidth=2;

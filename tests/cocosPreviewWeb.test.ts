@@ -79,3 +79,18 @@ test('M5.3 arrivals, mobile targeting and spit/leap visuals render in both actua
   assert.match(creator, /for \(const arrival of s\.arrivals\)/);
   assert.match(creator, /for \(const acid of s\.acids\)/);
 });
+
+test('M5.3 viewport keeps 600-unit combat separate from 450-unit touch/HUD UI', () => {
+  const viewport = read('clients/cocos/assets/scripts/PocViewport.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  const preview = read('clients/cocos-preview/src/main.ts');
+  const ops = read('clients/cocos-preview/src/m6Ui.ts');
+  assert.match(viewport, /MOBILE_WORLD_WIDTH/);
+  assert.match(viewport, /HUD_DESIGN_WIDTH/);
+  assert.match(creator, /BattleWorldGraphics/);
+  assert.match(creator, /BattleUIOverlay/);
+  assert.match(creator, /this\.viewport\.worldWidth, this\.viewport\.worldHeight/);
+  assert.match(preview, /battleViewport\.worldWidth/);
+  assert.match(preview, /battleViewport\.uiWidth/);
+  assert.match(ops, /viewport\.worldWidth, viewport\.worldHeight/);
+});

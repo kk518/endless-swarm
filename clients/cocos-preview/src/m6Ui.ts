@@ -11,6 +11,7 @@ import {
 } from '../../cocos/assets/scripts/m6/metaProgression.ts';
 import { newRunSeed } from '../../cocos/assets/scripts/m6/runRandom.ts';
 import { PocWorld } from '../../cocos/assets/scripts/PocWorld.ts';
+import { mobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import type { CampaignMode } from '../../cocos/assets/scripts/m6/runController.ts';
 import { POC_CATALOG, POC_PLAYABLE_HEROES, type PocHeroId } from '../../cocos/assets/scripts/PocRoster.ts';
 
@@ -112,7 +113,9 @@ export class PreviewOps {
     this.currentRunId = runId();
     this.settled = false;
     const meta = readMetaProgress(storage);
-    return new PocWorld(450, 800, newRunSeed(), this.zone, {
+    const viewport = mobileViewport(450, 800);
+    return new PocWorld(viewport.worldWidth, viewport.worldHeight,
+      newRunSeed(), this.zone, {
       armorRank: meta?.armorRank ?? 0,
       weaponFrameRank: meta?.weaponFrameRank ?? 0,
       repairModuleRank: meta?.repairModuleRank ?? 0,
