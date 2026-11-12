@@ -8,12 +8,13 @@ function tick(world: PocWorld, frames: number, x = 0, y = 0): void {
   for (let n = 0; n < frames; n++) world.advance(POC.fixedStepMs, { x, y });
 }
 function tickDuration(world: PocWorld, durationMs: number, x = 0, y = 0, keepAlive = false): void {
-  let remaining = durationMs;
-  while (remaining > 0) {
+  // PocWorld deliberately caps expensive catch-up to five 60Hz steps per frame.
+  // Tests must advance by the canonical fixed step, not submit 250ms frames
+  // and incorrectly assume all 250ms were simulated.
+  const count = Math.ceil(durationMs / POC.fixedStepMs) + 2;
+  for (let frame = 0; frame < count && !world.decision && !world.state.over; frame++) {
     if (keepAlive) world.heal(1);
-    const frame = Math.min(250, remaining);
-    world.advance(frame, { x, y });
-    remaining -= frame;
+    world.advance(POC.fixedStepMs, { x, y });
   }
 }
 
