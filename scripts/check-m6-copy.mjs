@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-const names = ['progression.ts','runRandom.ts','battlefields.ts','metaProgression.ts'];
+const names = ['progression.ts','runRandom.ts','battlefields.ts','metaProgression.ts','contentCatalog.ts','heroRuntime.ts','weaponRuntime.ts'];
 const write = process.argv.includes('--write');
 const root = process.cwd();
 for(const name of names){
