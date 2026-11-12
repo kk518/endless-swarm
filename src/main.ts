@@ -4,6 +4,8 @@ import { DEFAULT_TRAINING, type TrainingFocus } from './game/autoGrowth';
 import type { WeaponId } from './game/progression';
 import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
 import { CONTENT_CATALOG } from './game/contentCatalog';
+import { readMetaProgress, purchaseStoredArmor, nextArmorCost } from './game/metaProgression';
+import { readRunSafeSave, clearRunSafeSave } from './game/runSafeSave';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
@@ -44,6 +46,11 @@ const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
 const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
 const startFocus = document.querySelector<HTMLSelectElement>('#start-training-focus')!;
 const startCampaign = document.querySelector<HTMLSelectElement>('#start-campaign')!;
+const resumeButton = document.querySelector<HTMLButtonElement>('#resume-button')!;
+const armorUpgradeButton = document.querySelector<HTMLButtonElement>('#armor-upgrade-button')!;
+const metaWallet = document.querySelector<HTMLElement>('#meta-wallet')!;
+const metaArmorStatus = document.querySelector<HTMLElement>('#meta-armor-status')!;
+const metaStorageStatus = document.querySelector<HTMLElement>('#meta-storage-status')!;
 const rewardDescription = document.querySelector<HTMLElement>('#reward-description')!;
 const rewardFooterCopy = document.querySelector<HTMLElement>('#reward-footer-copy')!;
 const rewardWeapon = document.querySelector<HTMLSelectElement>('#reward-training-weapon')!;
@@ -53,21 +60,82 @@ const cardCategory: Record<string, string> = {
   weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
 };
 
+function getSavedExpedition() {
+  try { return readRunSafeSave(localStorage); } catch { return null; }
+}
+function refreshResumeButton(): void {
+  const saved = getSavedExpedition();
+  resumeButton.classList.toggle('is-hidden', !saved);
+  if (saved) resumeButton.textContent = `继续远征 · 第 ${saved.campaign.stageIndex + 1} / 9 段`;
+  startButton.textContent = saved ? '放弃旧远征，重新出击' : '执行登陆行动';
+}
+function refreshArmory(message?: string): void {
+  let meta;
+  try { meta = readMetaProgress(localStorage); } catch { meta = null; }
+  if (!meta) {
+    metaWallet.textContent = '本地战备不可用';
+    metaArmorStatus.textContent = '无法读取本地存档';
+    armorUpgradeButton.disabled = true;
+    metaStorageStatus.textContent = message ?? '浏览器本地存储不可用，战备和远征无法可靠保存。';
+    return;
+  }
+  const cost = nextArmorCost(meta);
+  metaWallet.textContent = `战备数据 ${meta.warData}`;
+  metaArmorStatus.textContent = `装甲工坊 Lv.${meta.armorRank}/3 · 下局初始装甲上限 +${meta.armorRank}`;
+  armorUpgradeButton.disabled = cost === null || meta.warData < cost;
+  armorUpgradeButton.textContent = cost === null ? '基础装甲已强化至上限'
+    : `升级装甲至 Lv.${meta.armorRank + 1} · 消耗 ${cost} 战备`;
+  metaStorageStatus.textContent = message ?? '有效失败也可获得战备；仅保存在此浏览器，清除网站数据会丢失。';
+}
 function beginRun(): void {
-  // The scene is created during boot; if early on slow devices, wait one frame.
   if (!game.isBooted || !scene.sys.isActive()) {
     startButton.disabled = true;
     window.setTimeout(() => { startButton.disabled = false; beginRun(); }, 100);
     return;
   }
+  const saved = getSavedExpedition();
+  if (saved) {
+    if (!window.confirm('已有尚未完成的三幕远征。确定放弃存档并重新开始吗？')) return;
+    if (!clearRunSafeSave(localStorage)) {
+      refreshArmory('无法删除旧存档，请检查浏览器存储权限。');
+      return;
+    }
+  }
   scene.startRun({ weapon: DEFAULT_TRAINING.weapon, focus: startFocus.value as TrainingFocus },
     startCampaign.value === 'expedition' ? 'expedition' : 'prototype');
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
+  refreshResumeButton();
   document.querySelector<HTMLElement>('#game')?.focus();
 }
 
 startButton.addEventListener('click', beginRun);
+resumeButton.addEventListener('click', () => {
+  if (!game.isBooted || !scene.sys.isActive()) return;
+  const saved = getSavedExpedition();
+  if (!saved) { refreshResumeButton(); return; }
+  overlay.classList.add('is-hidden');
+  rewardOverlay.classList.add('is-hidden');
+  if (!scene.resumeSavedExpedition(saved)) {
+    overlay.classList.remove('is-hidden');
+    refreshArmory('远征快照版本不兼容，无法恢复，请使用重新出击。');
+    return;
+  }
+  document.querySelector<HTMLElement>('#game')?.focus();
+});
+armorUpgradeButton.addEventListener('click', () => {
+  let purchased;
+  try { purchased = purchaseStoredArmor(localStorage); } catch { purchased = null; }
+  if (!purchased) { refreshArmory('装甲购买未成功保存，请检查浏览器本地存储。'); return; }
+  refreshArmory(purchased.bought
+    ? `永久装甲已升级至 Lv.${purchased.meta.armorRank}，下次出击立即生效。`
+    : '战备不足，或装甲已经强化到上限。');
+});
+window.addEventListener('swarm:storage-warning', () => {
+  refreshArmory('警告：安全节点存档失败，本次远征刷新后可能无法恢复。');
+});
+refreshArmory();
+refreshResumeButton();
 
 window.addEventListener('swarm:reward', (event) => {
   const offer = (event as CustomEvent<RewardOffer>).detail;
@@ -154,7 +222,7 @@ window.addEventListener('swarm:route', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, totalStages, weapons, bestStreak, level, evolutions, heroId, actTitle } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, totalStages, weapons, bestStreak, level, evolutions, heroId, actTitle, warDataEarned, totalWarData, settlementSaved } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
   subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
@@ -165,12 +233,14 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/${totalStages}`, `最终进度 · ${actTitle}`), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
+  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/${totalStages}`, `最终进度 · ${actTitle}`), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'), entry(settlementSaved ? `+${warDataEarned}` : '未保存', '本局战备'), entry(String(totalWarData), '持有战备'));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
+  refreshArmory(settlementSaved ? `本局战备已结算：+${warDataEarned}` : '战备结算未保存，请检查本地存储。');
+  refreshResumeButton();
 });
 
 let muted = false;
