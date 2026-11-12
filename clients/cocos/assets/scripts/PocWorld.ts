@@ -65,6 +65,8 @@ function clamp(x: number, low: number, high: number): number {
 
 /** Fixed step, seeded spawn, one rifle, one enemy class, no presentation dependencies. */
 export class PocWorld {
+  readonly width: number;
+  readonly height: number;
   readonly state: PocState;
   private accumulatorMs = 0;
   private fireCooldownMs = 0;
@@ -74,11 +76,9 @@ export class PocWorld {
   private randomState: number;
   private readonly initialSeed: number;
 
-  constructor(
-    public readonly width = 450,
-    public readonly height = 800,
-    seed = 12345,
-  ) {
+  constructor(width = 450, height = 800, seed = 12345) {
+    this.width = width;
+    this.height = height;
     this.initialSeed = seed >>> 0;
     this.randomState = this.initialSeed;
     this.state = { player: { x: 0, y: 0, hp: 6, stationaryMs: 0, deployed: false },
