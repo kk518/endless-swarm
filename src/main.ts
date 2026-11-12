@@ -287,7 +287,7 @@ window.addEventListener('swarm:route', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, totalStages, weapons, bestStreak, level, evolutions, heroId, actTitle, warDataEarned, totalWarData, settlementSaved } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, totalStages, weapons, bestStreak, level, evolutions, heroId, actTitle, warDataEarned, totalWarData, settlementSaved, battlefieldId, materialId, materialEarned, totalMaterial } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
   subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
@@ -298,13 +298,13 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/${totalStages}`, `最终进度 · ${actTitle}`), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'), entry(settlementSaved ? `+${warDataEarned}` : '未保存', '本局战备'), entry(String(totalWarData), '持有战备'));
+  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/${totalStages}`, `最终进度 · ${actTitle}`), entry(getBattlefield(battlefieldId).name, '本局战区'), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'), entry(settlementSaved ? `+${warDataEarned}` : '未保存', '本局战备'), entry(settlementSaved ? `+${materialEarned}` : '未保存', `本局${materialId === 'alloy' ? '合金' : '样本'}`), entry(String(totalWarData), '持有战备'), entry(String(totalMaterial), `持有${materialId === 'alloy' ? '合金' : '样本'}`));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
-  refreshArmory(settlementSaved ? `本局战备已结算：+${warDataEarned}` : '战备结算未保存，请检查本地存储。');
+  refreshArmory(settlementSaved ? `本局资源已结算：战备 +${warDataEarned} · ${materialId === 'alloy' ? '合金' : '样本'} +${materialEarned}` : '资源结算未保存，请检查本地存储。');
   refreshResumeButton();
 });
 
