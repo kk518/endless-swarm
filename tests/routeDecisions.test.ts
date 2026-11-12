@@ -83,7 +83,9 @@ test('route overlay is wired to scene, has no training UI and expedition is opt-
   assert.ok(main.includes('scene.chooseRoute(choice.id)'));
   assert.ok(html.includes('<option value="prototype">'));
   assert.ok(html.includes('<option value="expedition">'));
-  assert.ok(html.includes('暂无中途存档'));
+  assert.ok(html.includes('远征会在阶段边界保存'));
+  assert.ok(html.includes('id="resume-button"'));
+  assert.ok(html.includes('id="meta-armory"'));
   assert.ok(css.includes('.reward-overlay[data-mode="route"] .wave-training { display: none; }'));
   assert.ok(!main.includes('new CustomEvent<RouteOffer>')); // only scene sends game events
 });
