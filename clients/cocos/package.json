@@ -1,0 +1,6 @@
+{
+  "name": "endless-swarm-cocos-poc",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Cocos Creator 3.8 LTS WeChat-first migration proof of concept. Editor scene setup pending."
+}
