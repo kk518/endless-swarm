@@ -204,7 +204,13 @@ test('main M5 four-weapon core supports real buckshot and continuous flame drive
     world.state.enemies.length=0;
     world.state.bullets.length=0;
     world.state.lightning.length=0;
-    world.spawnEnemyAt(world.state.player.x+90,world.state.player.y,'armored');
+    // The earlier full-wave test drives the player to the arena boundary.
+    // M5.3 deliberately refuses to aim at targets outside the inner viewport.
+    // Place the specialist target in the readable combat area before asserting
+    // immediate five-pellet scatter and flame attacks.
+    world.state.player.x=0;
+    world.state.player.y=0;
+    world.spawnEnemyAt(90,0,'armored');
     const enemy = world.state.enemies[0];
     const startHp=enemy.hp;
     world.advance(POC.fixedStepMs,{x:0,y:0});
