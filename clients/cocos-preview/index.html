@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#09141d" />
+  <meta name="description" content="无尽虫潮 Cocos 迁移过程中的共享 TypeScript 核心 Web 验证页；原版游戏保持不变。" />
+  <title>无尽虫潮 · 迁移验证战场</title>
+</head>
+<body>
+<div class="shell">
+  <header class="site-header">
+    <div class="logo"><span class="logo-symbol">✳</span><span>ENDLESS <em>SWARM</em></span></div>
+    <span class="header-sub">COCOS MIGRATION LAB / 001</span>
+  </header>
+  <main class="workspace">
+    <section class="game-wrap" aria-label="交互式战斗预览">
+      <div class="battle-header"><span class="recording-dot"></span><span>TACTICAL LIVE FEED</span><span id="wave-meta">MIGRATION / G1</span></div>
+      <div class="canvas-shell">
+        <canvas id="battle" width="450" height="800" aria-label="无尽虫潮交互式战斗场景，按 WASD 或用手指拖动移动"></canvas>
+        <div class="top-hud">
+          <div><small>ARMOR INTEGRITY</small><div class="hp-bar"><div id="hp-fill"></div></div></div>
+          <div class="kill-count"><small>ELIMINATED</small><strong id="kill-count">000</strong></div>
+        </div>
+        <div class="progress-panel"><span id="wave-counter">WAVE 01 / 05</span><span id="player-level">LV.01 · XP 0/9</span><span id="arc-unlock">电弧线圈 · LV.3 解锁</span></div>
+        <div class="status-bubble" id="stance">移动自动射击</div>
+        <div class="bottom-tip" id="battle-message">按住下半屏滑动移动 · 静止 0.8 秒火力展开</div>
+        <div id="end-screen" class="end-screen" hidden>
+          <p>MISSION STATUS</p><strong>战士阵亡</strong>
+          <span id="end-kills">已击杀 0 只虫族</span>
+          <button id="restart-overlay" type="button">再次出击</button>
+        </div>
+      </div>
+      <div class="battle-footer"><span>LIVE SIMULATION · <strong>2 HEROES / 2 STANDARD WEAPONS / 1 SIGNATURE</strong></span><span>POC <span id="frame-count">60</span> FPS</span></div>
+    </section>
+    <aside class="side-panel">
+      <div class="kicker">ENGINE MIGRATION / FIELD TEST</div>
+      <h1>新战场，<br><em>正在构建。</em></h1>
+      <p class="lead">这里是《无尽虫潮》微信小游戏迁移的独立预览。共享战斗核心现已加入五波压力递增、三类虫族、自动升级、电弧连锁武器和虫巢 Boss。</p>
+      <div class="notice">
+        <strong>当前预览说明</strong>
+        <p>本页面使用<strong>与 Cocos PoC 同一份 TypeScript 战斗核心</strong>，临时通过浏览器 Canvas 绘制；<strong>尚不是 Cocos Creator 引擎的正式 Web 构建</strong>，也不代表微信真机已经通过验证。</p>
+      </div>
+      <section class="ops-panel" aria-label="M6 战区与局外成长">
+        <div class="section-caption">M6 / 战区选择</div>
+        <p class="ops-hint">选择战场会开始新一局；不同虫群分布和材料奖励直接复用 M6 主线规则。</p>
+        <div class="zone-buttons" role="group" aria-label="选择出击战场">
+          <button type="button" id="zone-steel" class="zone-choice active">钢铁遗迹 <small>装甲虫 · 军用合金</small></button>
+          <button type="button" id="zone-nest" class="zone-choice">感染巢穴 <small>跃袭虫 · 生体样本</small></button>
+        </div>
+        <div class="ops-selected" id="zone-current">当前战区：钢铁遗迹</div>
+        <div class="section-caption">M6 / 英雄编队</div>
+        <p class="ops-hint">可用英雄必须同时具备被动逻辑和真实攻击驱动。凯恩拥有强化展开被动与独立的穿透轨道炮。</p>
+        <div class="zone-buttons" role="group" aria-label="选择出战英雄">
+          <button type="button" id="hero-marine" class="zone-choice active">星际战士 <small>电磁步枪 · 机动均衡</small></button>
+          <button type="button" id="hero-kane" class="zone-choice">凯恩 · 重装先锋 <small>强化展开 · 专武轨道炮</small></button>
+        </div>
+        <div class="ops-selected" id="hero-current">当前英雄：星际战士</div>
+
+        <div class="section-caption">M6 / 局外成长 · 本机存档</div>
+        <div class="wallet">
+          <div>战备数据 <strong id="balance-war">0</strong></div>
+          <div>军用合金 <strong id="balance-alloy">0</strong></div>
+          <div>生体样本 <strong id="balance-samples">0</strong></div>
+        </div>
+        <div class="workshop">
+          <button type="button" id="buy-armor">装甲强化 <small id="rank-armor">Lv.0</small></button>
+          <button type="button" id="buy-frame">主武器框架 <small id="rank-frame">Lv.0</small></button>
+          <button type="button" id="buy-repair">装甲修复模块 <small id="rank-repair">Lv.0</small></button>
+        </div>
+        <p class="ops-message" id="ops-message" role="status">死亡或胜利时自动结算；购买强化从下一局生效。</p>
+        <p class="ops-hint">这部分采用主线 M6.1a 的战区、资源和工坊规则，尚未接入云存档和完整三幕长局。</p>
+      </section>
+      <div class="section-caption">TACTICAL PROTOCOL</div>
+      <div class="instruction"><span>01</span><div><strong>单指控制</strong><small>按住战斗画面下半部分，朝任意方向拖动。</small></div></div>
+      <div class="instruction"><span>02</span><div><strong>自动瞄准</strong><small>步枪自动向射程内最近的活体虫族开火。</small></div></div>
+      <div class="instruction"><span>03</span><div><strong>火力展开</strong><small>停步 0.8 秒，伤害与攻击频率同时提升。</small></div></div>
+      <div class="actions">
+        <button id="restart" type="button" class="primary-action">重新开始验证 <span>↻</span></button>
+        <a href="/swarm/" class="secondary-action">返回原版游戏 <span>↗</span></a>
+      </div>
+      <p class="footnote">电脑支持 WASD / 方向键 · R 重新开始。页面切后台自动冻结模拟。</p>
+      <a class="creator-link" href="/swarm/cocos-preview/creator/" target="_blank" rel="noreferrer">查看真实 Cocos Creator Web 构建 ↗</a>
+      <div class="build-info">SOURCE <a href="https://github.com/kk518/endless-swarm/pull/15" target="_blank" rel="noreferrer">FEATURE BRANCH / PR #15 ↗</a><br>DEPLOY <code id="build-sha">preview</code></div>
+    </aside>
+  </main>
+  <footer class="site-footer"><span>ENDLESS SWARM // ORIGINAL SCI-FI SURVIVAL</span><span>ISOLATED MIGRATION PREVIEW · NOT A PRODUCTION BUILD</span></footer>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
