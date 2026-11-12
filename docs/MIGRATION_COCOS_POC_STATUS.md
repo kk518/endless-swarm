@@ -1,41 +1,33 @@
 # Cocos Creator 迁移状态
 
-> 更新日期：2026-11-12  
-> 工作分支：feature/cocos-wechat-migration-poc（PR #15，保持 Draft）  
-> 规则基线：main / M6.0a–M6.1a 集成版本  
-> 完整功能对照：见 [M0–M6.1a 历史功能迁移审计](MIGRATION_COCOS_PARITY_AUDIT.md)。
+> 更新日期：2026-11-12
+> 工作分支：feature/cocos-wechat-migration-poc（Draft PR #15）
+> 主线对照基线：main / ae04c0b9（M6.1a）
+> 历史功能审计：参见 [M0–M6.1a 功能对照](MIGRATION_COCOS_PARITY_AUDIT.md)
 
-## 当前结论
+## 技术验收
 
-**Cocos Creator 3.8.8 Web Mobile 的真实构建与浏览器触控验证已通过；M0–M6.1a 完整玩法迁移尚未完成。**
+- 已有真实 **Cocos Creator 3.8.8 Web Mobile** 构建/独立服务器部署及浏览器触摸测试通过的历史证据：[Creator CI](https://github.com/kk518/endless-swarm/actions/runs/43166896140)。
+- **当前提交 CI 必须另行核对**：Node 共享核心、Canvas 预览与 Creator 引擎运行的结果不能混为一谈。
+- 18 个主线引擎无关模块已同步到 Cocos assets/scripts/m6，CI 通过字节一致性校验避免规则分叉。
+- 本次迁移依旧保持 `main`、`/swarm/` 与 Draft PR #15 隔离；浏览器成功不代表微信小游戏/Android/iOS 真机通过。
 
-### 已有证据
+## 已接入真实战斗核心
 
-- GitHub Actions 的 Creator 3.8.8 Web Mobile 构建、独立部署、公网 SHA 校验和 Playwright 原生触摸测试通过：
-  - [Run 43166896140](https://github.com/kk518/endless-swarm/actions/runs/43166896140)
-  - 当前 PR head 的最新检查记录见 PR #15 Checks。
-- Cocos 场景使用 PocWorld 纯 TypeScript 规则；浏览器 Canvas 预览也复用同一份 PocWorld。
-- progression、runRandom、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime 十八个规则模块（combat、progression、arsenal、autoGrowth、streak、supplies、pressure、visibility、campaignDirector、routeDecisions、runRandom、runSafeSave、platformStorage、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime）通过 scripts/check-m6-copy.mjs 和 cocosM6Bridge.test.ts 做字节级同步检查。
-- PoC 有星际战士和凯恩两名可玩英雄；凯恩有部署强化被动和独立轨道炮专武。
-- Canvas 预览已接入双战区选择、独立预览存档、资源结算与工坊购买。
+1. M0：触摸/键盘移动、移动时自动射击、0.8 秒停步火力展开、固定步长与前后台输入释放。
+2. M1/M5：波末可操作三选一卡牌；五波或三幕九遭遇模式；四普通武器（步枪/散射/电弧/喷火）真实攻击驱动、等级/进化调谐与自动 XP 成长。
+3. M2：真正可避免的自爆虫 **850ms 红圈预警 / 105 半径 / 2 点伤害**；主线 streak 4.5 秒计时、连杀倍率和 Frenzy 卡牌；连杀 UI。
+4. M3：使用主线 canSpawnElite 和补给规则：精英 HP×2.3、击杀奖励与掉落，定时补给、生命修复、超频射击和 EMP 范围伤害；Cocos/Canvas 双端有可见补给/爆炸表现。
+5. M6：基础九遭遇、六次卡牌、两次路线决策；双战区权重由主线模块驱动；Canvas 预览有独立局外存档与工坊；凯恩英雄及专武留作扩展槽位验证。
 
-### 当前明确未完成
+## 尚需严格对齐的历史功能
 
-- PocWorld 仍是约 100 秒的五波简化战斗，不是完整 M1，更不是 M6 三幕九遭遇。
-- 四把普通武器的攻击驱动（步枪、散射炮、电弧、喷火器）已在 PocWorld 实际触发；使用 main 的 weaponTuning、buildWeaponDamage 和 buildWeaponInterval，装备来自真实波末合法卡牌。散射炮多弹丸、喷火器扇形伤害与进化灼烧代码已接入并补充回归测试。但完整进化配方的玩家端验证、四挂载视觉、M2 自爆虫/连杀、M3 精英/补给、M4.1 完整视听表现仍未完成。
-- M5.2 的自动武器等级提升现已通过 CocosRunController 接入实际四武器伤害与冷却；训练计划交互仍需完善。M5.3 手机可见虫潮规则仍未完整接入。
-- Cocos Creator 运行时尚未接入 campaignDirector、routeDecisions、runSafeSave 和 platformStorage；Canvas 预览的 DOM/localStorage 功能不能代表 Creator 已完成。
-- Cocos Creator 中尚无完整三幕流程、路线选择、安全节点恢复、战区工坊 UI 和真实结算闭环。
-- 正式 2.5D 角色/虫族/武器美术、完整音效、微信小游戏构建、微信开发者工具导入及 Android/iOS 微信真机验证均未完成。
+- M1/M2/M3：喷酸虫远程弹道，跃袭虫的完整预告与攻击，精英差异化行为，M3.1 虫潮节奏。
+- M4/M4.1：四武器挂载点、正式 2.5D 图像、进化光效及完整音频。
+- M5.2：波末训练计划 UI、自动进化配方可视化及完整属性反馈；M5.3：屏内索敌/边缘入场警告和手机视野细节。
+- M6：完整九遭遇战斗 parity、安全节点构筑与 RNG 快照存档恢复、Creator 端双战区工坊/局外结算。
+- 微信小游戏构建、开发者工具导入及 Android/iOS 微信真机测试尚未完成。
 
-## 下一步
+## 验收准则
 
-P2 首批已推进：四把普通武器在 PocWorld 中依照真实波末卡牌安装并独立开火，使用主线自动等级、进化调谐、武器伤害和射速函数；需以最新 GitHub Actions 的 Node、Creator 和线上预览验收结果为准。接下来重点恢复 M2 自爆虫/连杀、M3 精英/补给以及 M5.3 可见虫潮。
-
-P1 的源码准备已完成：18 个主线纯 TypeScript 规则模块已镜像进 Cocos 工程，并扩展字节一致性检查与回归测试。当前 PocWorld 尚未调用其中大部分模块。下一步建立 Core/RunController 接口，先恢复四武器、卡牌、XP/进化和 M0–M5.3 战斗行为，再接入三幕/存档/局外闭环；暂停新增英雄与武器。
-
-## 隔离要求
-
-- PR #15 保持 Draft；本状态更新不代表可合并或发布。
-- main、原 Phaser H5 入口和线上 /swarm/ 保持不变。
-- 不以 Node 测试、Vite Canvas 预览或浏览器模拟替代 Creator/微信/真机验收。
+同一 Seed 与输入序列下比较核心战斗/奖励/路线/存档结果；每一项必须有 Node 规则测试、Cocos Creator 场景接线验证，最终再完成微信真机验收。P2/M2–M3 增量需核对 **tests/cocosM23Parity.test.ts** 和最新 PR Checks；代码已提交不等于发布验收已通过。

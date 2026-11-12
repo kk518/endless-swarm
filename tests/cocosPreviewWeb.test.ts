@@ -50,3 +50,18 @@ test('both migration clients expose the genuine 5-wave/9-stage campaign choice',
   assert.match(creator, /private switchMode\(\)/);
   assert.match(creator, /KeyCode\.KEY_M/);
 });
+
+test('M2/M3 danger circles, elite auras and supplies are rendered by both clients', () => {
+  const browser = read('clients/cocos-preview/src/main.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  const world = read('clients/cocos/assets/scripts/PocWorld.ts');
+  assert.match(world, /canSpawnElite\(/);
+  assert.match(world, /SUPPLY_PERIOD_MS/);
+  assert.match(world, /withinPickupReach\(/);
+  assert.match(browser, /enemy\.windupMs/);
+  assert.match(browser, /s\.supplies/);
+  assert.match(browser, /s\.pulses/);
+  assert.match(creator, /enemy\.windupMs/);
+  assert.match(creator, /s\.supplies/);
+  assert.match(creator, /s\.pulses/);
+});
