@@ -9,13 +9,17 @@ import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { xpToNext, weaponTuning } from './m6/arsenal.ts';
 import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts';
 import type { WeaponId } from './m6/progression.ts';
+import {
+  canSpawnElite, MAX_SUPPLIES, SUPPLY_PERIOD_MS, SUPPLY_TTL_MS,
+  withinPickupReach, rollSupplyKind, overclockDurationMs, empStats, type SupplyKind,
+} from './m6/supplies.ts';
 import { CocosRunController, type CampaignMode, type RunDecision } from './m6/runController.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
   type PocHeroId, type PocAttackPort } from './PocRoster.ts';
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
 
 export interface Vec2 { x: number; y: number }
-export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'boss';
+export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'bomber' | 'boss';
 export interface PocPlayer extends Vec2 {
   hp: number;
   maxHp: number;
@@ -29,6 +33,8 @@ export interface PocEnemy extends Vec2 {
   burnTickMs?: number;
   burnDamage?: number;
   slowMs?: number;
+  elite?: boolean;
+  windupMs?: number;
   /** Optional only to keep old nearestEnemy callers source-compatible. */
   kind?: PocEnemyKind;
   maxHp?: number;
@@ -42,6 +48,15 @@ export interface PocLightning {
   fromX: number; fromY: number; toX: number; toY: number;
   remainingMs: number; kind?: 'arc' | 'rail' | 'flame';
 }
+export interface PocSupply extends Vec2 {
+  kind: SupplyKind;
+  remainingMs: number;
+}
+export interface PocPulse extends Vec2 {
+  kind: 'bomber' | 'emp';
+  radius: number;
+  remainingMs: number;
+}
 export interface PocState {
   heroId: PocHeroId;
   mode: CampaignMode;
@@ -54,6 +69,13 @@ export interface PocState {
   enemies: PocEnemy[];
   bullets: PocBullet[];
   lightning: PocLightning[];
+  supplies: PocSupply[];
+  pulses: PocPulse[];
+  overclockMs: number;
+  suppliesCollected: number;
+  streak: number;
+  bestStreak: number;
+  streakRemainingMs: number;
   kills: number;
   elapsedMs: number;
   wave: number;
@@ -118,6 +140,7 @@ export function enemyStats(kind: PocEnemyKind): { hp: number; speed: number; con
     case 'grunt': return { hp: 64, speed: 46, contactRadius: 25, xp: 1 };
     case 'leaper': return { hp: 42, speed: 88, contactRadius: 22, xp: 1 };
     case 'armored': return { hp: 180, speed: 27, contactRadius: 31, xp: 3 };
+    case 'bomber': return { hp: 56, speed: 102, contactRadius: 24, xp: 2 };
     case 'boss': return { hp: 1350, speed: 28, contactRadius: 50, xp: 20 };
   }
 }
@@ -131,7 +154,9 @@ function emptyState(): PocState {
     weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
     evolved: { rifle: false, scatter: false, arc: false, flame: false },
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
-    enemies: [], bullets: [], lightning: [],
+    enemies: [], bullets: [], lightning: [], supplies: [], pulses: [],
+    overclockMs: 0, suppliesCollected: 0,
+    streak: 0, bestStreak: 0, streakRemainingMs: 0,
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
     xpToNext: xpRequired(1), arcUnlocked: false, bossSpawned: false,
     won: false, over: false,
@@ -161,6 +186,7 @@ export class PocWorld {
   private railCooldownMs = 0;
   private spawnCooldownMs: number = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
+  private supplyCooldownMs = SUPPLY_PERIOD_MS;
   private nextId = 1;
   private randomStreams: RunRandomStreams;
   private readonly initialSeed: number;
@@ -204,6 +230,7 @@ export class PocWorld {
     this.railCooldownMs = 0;
     this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.hurtCooldownMs = 0;
+    this.supplyCooldownMs = SUPPLY_PERIOD_MS;
     this.nextId = 1;
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.syncRunState();
@@ -225,6 +252,10 @@ export class PocWorld {
     this.state.enemies.length = 0;
     this.state.bullets.length = 0;
     this.state.lightning.length = 0;
+    this.state.supplies.length = 0;
+    this.state.pulses.length = 0;
+    this.state.overclockMs = 0;
+    this.supplyCooldownMs = SUPPLY_PERIOD_MS;
     this.state.bossSpawned = false;
     this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.hurtCooldownMs = 0;
@@ -271,6 +302,9 @@ export class PocWorld {
     this.state.weaponLevels = { ...run.growth.weaponLevels };
     this.state.evolved = { ...run.growth.evolved };
     this.state.arcUnlocked = run.build.weapons.includes('arc');
+    this.state.streak = run.streak;
+    this.state.bestStreak = run.bestStreak;
+    this.state.streakRemainingMs = run.streakRemainingMs;
     this.state.kills = run.kills;
     this.state.player.hp = run.hp;
     this.state.player.maxHp = run.maxHp;
@@ -279,10 +313,20 @@ export class PocWorld {
   }
   /** Pause/resume must discard frame debt to prevent lethal catch-up damage. */
   discardFrameDebt(): void { this.accumulatorMs = 0; }
-  spawnEnemyAt(x: number, y: number, kind: PocEnemyKind = 'grunt'): void {
+  spawnEnemyAt(x: number, y: number, kind: PocEnemyKind = 'grunt', elite = false): void {
     if (this.state.enemies.length >= POC.maxEnemies || this.state.over) return;
     const stats = enemyStats(kind);
-    this.state.enemies.push({ id: this.nextId++, kind, x, y, hp: stats.hp, maxHp: stats.hp });
+    const hp = elite ? Math.round(stats.hp * 2.3) : stats.hp;
+    this.state.enemies.push({
+      id: this.nextId++, kind, x, y, elite, hp, maxHp: hp, windupMs: 0,
+    });
+  }
+  /** Testable M3 spawn port, shared with timed and elite-kill drops. */
+  spawnSupplyAt(x: number, y: number, kind?: SupplyKind): void {
+    if (this.state.over || this.state.supplies.length >= MAX_SUPPLIES) return;
+    const selected = kind ?? rollSupplyKind(
+      this.state.player.hp < this.state.player.maxHp, () => this.nextRandom());
+    this.state.supplies.push({ kind: selected, x, y, remainingMs: SUPPLY_TTL_MS });
   }
   /** Stable fixed-step update; backlog after a stall is intentionally dropped. */
   advance(frameMs: number, intent: Vec2): void {
@@ -301,10 +345,11 @@ export class PocWorld {
   }
   private spawnWaveEnemy(player: PocPlayer): void {
     const profile = this.runController.currentWave;
-    // Only three already-implemented enemy behaviors are eligible for the PoC.
-    // Original spitter/bomber definitions must wait for real attack drivers.
+    // Spitter is deferred until its projectile behavior is implemented.
+    // Bomber uses a genuine timed fuse with a visible warning and avoidance.
     const choices = profile.mix.filter(entry =>
-      entry.kind === 'grunt' || entry.kind === 'leaper' || entry.kind === 'armored');
+      entry.kind === 'grunt' || entry.kind === 'leaper'
+      || entry.kind === 'armored' || entry.kind === 'bomber');
     const total = choices.reduce((sum, entry) => sum + entry.weight, 0);
     let roll = this.nextRandom() * total;
     let kind: PocEnemyKind = 'grunt';
@@ -317,18 +362,53 @@ export class PocWorld {
     const dx = Math.cos(angle) * 185, dy = Math.sin(angle) * 215;
     const x = clamp(player.x + dx, -this.width / 2 + 20, this.width / 2 - 20);
     const y = clamp(player.y + dy, -this.height / 2 + 20, this.height / 2 - 20);
-    this.spawnEnemyAt(x, y, kind);
+    const livingElites = this.state.enemies.filter(e => e.hp > 0 && e.elite).length;
+    const elite = canSpawnElite(this.runController.currentStage.encounter.pressureTier,
+      kind, livingElites, () => this.nextRandom());
+    this.spawnEnemyAt(x, y, kind, elite);
   }
+  private updateSupplies(ms: number, magnet: boolean): void {
+    const state = this.state;
+    for (let i = state.supplies.length - 1; i >= 0; i--) {
+      const item = state.supplies[i];
+      item.remainingMs -= ms;
+      if (withinPickupReach(squaredDistance(state.player, item), magnet)) {
+        state.supplies.splice(i, 1);
+        state.suppliesCollected++;
+        if (item.kind === 'repair') {
+          this.runController.heal(2);
+          this.syncRunState();
+        } else if (item.kind === 'overclock') {
+          state.overclockMs = Math.max(state.overclockMs,
+            overclockDurationMs(this.runController.snapshot().build.surgeCell));
+        } else {
+          const stats = empStats(this.runController.snapshot().build.empArray);
+          state.pulses.push({ x: state.player.x, y: state.player.y,
+            kind: 'emp', radius: stats.radius, remainingMs: 400 });
+          const origin = { x: state.player.x, y: state.player.y };
+          for (const enemy of state.enemies) {
+            if (enemy.hp > 0 && squaredDistance(origin, enemy) <= stats.radius * stats.radius)
+              enemy.hp -= stats.damage;
+          }
+        }
+      } else if (item.remainingMs <= 0) state.supplies.splice(i, 1);
+    }
+  }
+
   private resolveDeaths(): void {
     const state = this.state;
     for (let i = state.enemies.length - 1; i >= 0; i--) {
       const e = state.enemies[i];
       if (e.hp > 0) continue;
       state.enemies.splice(i, 1);
-      this.runController.registerKill(e.kind ?? 'grunt', e.kind === 'boss');
+      if (e.kind === 'bomber' && e.windupMs === -1) continue;
+      this.runController.registerKill(e.kind ?? 'grunt', Boolean(e.elite));
       this.passiveRuntime.onEnemyKilled?.({
-        enemyKind: e.kind ?? 'grunt', elite: e.kind === 'boss', timeMs: state.elapsedMs,
+        enemyKind: e.kind ?? 'grunt', elite: Boolean(e.elite), timeMs: state.elapsedMs,
       });
+      // M3: elite deaths always drop one collectible, unless the capped
+      // supply inventory is already full.
+      if (e.elite) this.spawnSupplyAt(e.x, e.y);
       if (e.kind === 'boss') {
         this.runController.tick(0, true);
         this.syncRunState();
@@ -349,6 +429,12 @@ export class PocWorld {
     player.stationaryMs = moving ? 0 : player.stationaryMs + ms;
     player.deployed = deploymentReady(player.stationaryMs, moving);
     this.hurtCooldownMs = Math.max(0, this.hurtCooldownMs - ms);
+    state.overclockMs = Math.max(0, state.overclockMs - ms);
+    this.updateSupplies(ms, build.supplyMagnet);
+    for (let i = state.pulses.length - 1; i >= 0; i--) {
+      state.pulses[i].remainingMs -= ms;
+      if (state.pulses[i].remainingMs <= 0) state.pulses.splice(i, 1);
+    }
     for (let i = state.lightning.length - 1; i >= 0; i--) {
       const segment = state.lightning[i];
       segment.remainingMs -= ms;
@@ -366,6 +452,16 @@ export class PocWorld {
       this.spawnEnemyAt(clamp(player.x + 135, -this.width/2+30, this.width/2-30),
         clamp(player.y + 160, -this.height/2+30, this.height/2-30), 'boss');
       state.bossSpawned = state.enemies.some(e => e.kind === 'boss');
+    }
+    this.supplyCooldownMs -= ms;
+    if (this.supplyCooldownMs <= 0) {
+      this.supplyCooldownMs += SUPPLY_PERIOD_MS;
+      const angle = this.nextRandom() * Math.PI * 2;
+      const radius = 145 + this.nextRandom() * 90;
+      this.spawnSupplyAt(
+        clamp(player.x + Math.cos(angle) * radius, -this.width / 2 + 20, this.width / 2 - 20),
+        clamp(player.y + Math.sin(angle) * radius, -this.height / 2 + 20, this.height / 2 - 20),
+      );
     }
     this.spawnCooldownMs -= ms;
     if (this.spawnCooldownMs <= 0) {
@@ -389,12 +485,35 @@ export class PocWorld {
       const dx = player.x - e.x, dy = player.y - e.y;
       const distance = Math.hypot(dx, dy);
       const stats = enemyStats(e.kind ?? 'grunt');
+      // M2 self-destructing bug: a visible 850ms red radius, no instant
+      // contact damage. Killing it or moving outside 105px avoids the blast.
+      if (e.kind === 'bomber') {
+        if ((e.windupMs ?? 0) > 0) {
+          e.windupMs = Math.max(0, (e.windupMs ?? 0) - ms);
+          if (e.windupMs <= 0) {
+            state.pulses.push({ x: e.x, y: e.y, kind: 'bomber',
+              radius: 105, remainingMs: 300 });
+            e.hp = -1;
+            // Mark a detonated bomber so resolveDeaths never grants XP/kills.
+            e.windupMs = -1;
+            if (distance <= 105 && this.hurtCooldownMs <= 0) {
+              this.runController.applyDamage(2);
+              this.syncRunState();
+              this.hurtCooldownMs = GAMEPLAY.hitGraceMs;
+              if (state.player.hp <= 0) return;
+            }
+          }
+          continue;
+        }
+        if (distance < 110) { e.windupMs = 850; continue; }
+      }
       const slow = (e.slowMs ?? 0) > 0 ? 0.6 : 1;
       if (distance > 2) {
-        e.x += dx / distance * stats.speed * slow * seconds;
-        e.y += dy / distance * stats.speed * slow * seconds;
+        const eliteSpeed = e.elite ? 1.12 : 1;
+        e.x += dx / distance * stats.speed * eliteSpeed * slow * seconds;
+        e.y += dy / distance * stats.speed * eliteSpeed * slow * seconds;
       }
-      if (distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
+      if (e.kind !== 'bomber' && distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
         this.runController.applyDamage(1);
         this.syncRunState();
         this.hurtCooldownMs = GAMEPLAY.hitGraceMs;
@@ -415,7 +534,7 @@ export class PocWorld {
       const angle = Math.atan2(target.y - player.y, target.x - player.x);
       driver.attack(target, angle, this.attackPort);
       this.weaponCooldownMs[id] = buildWeaponInterval(
-        driver.baseIntervalMs, build, player.deployed, false, false,
+        driver.baseIntervalMs, build, player.deployed, false, state.overclockMs > 0,
       ) * tuning.interval;
     }
 
