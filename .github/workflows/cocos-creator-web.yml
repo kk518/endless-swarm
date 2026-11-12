@@ -1,0 +1,155 @@
+name: Build Real Cocos Creator Web Mobile (experimental)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'clients/cocos/**'
+      - 'scripts/build-cocos-macos.sh'
+      - '.github/workflows/cocos-creator-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cocos-real-build-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  creator-build:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/cocos-wechat-migration-poc' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/cocos-wechat-migration-poc')
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    env:
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      COCOS_VERSION: "3.8.8"
+      COCOS_DOWNLOAD: "https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-mac-121518.zip"
+    steps:
+      - name: Checkout exact migration commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Download official Creator 3.8.8 macOS binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cocos"
+          curl -fL --retry 2 --retry-delay 5 \
+            --connect-timeout 30 --max-time 1200 \
+            "$COCOS_DOWNLOAD" -o "$RUNNER_TEMP/cocos/editor.zip"
+          test "$(stat -f%z "$RUNNER_TEMP/cocos/editor.zip")" -gt 100000000
+          unzip -q "$RUNNER_TEMP/cocos/editor.zip" -d "$RUNNER_TEMP/cocos/unpacked"
+          find "$RUNNER_TEMP/cocos/unpacked" -maxdepth 6 -name 'CocosCreator*.app' -type d | head -n 10
+
+      - name: Locate editor and build actual Web Mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find "$RUNNER_TEMP/cocos/unpacked" -maxdepth 6 -name 'CocosCreator*.app' -type d | head -n 1)"
+          test -n "$app"
+          test -x "$app/Contents/MacOS/CocosCreator"
+          echo "Selected Creator app: $app"
+          chmod +x scripts/build-cocos-macos.sh
+          COCOS_EDITOR_APP="$app" bash scripts/build-cocos-macos.sh
+
+      - name: Upload verified Creator build
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-cocos-creator-3.8.8-web-mobile
+          path: dist/cocos-creator-web/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Preserve Creator log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-creator-build-log
+          path: dist/cocos-editor.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy-real-cocos:
+    needs: creator-build
+    if: needs.creator-build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Download actual Cocos Web Mobile output
+        uses: actions/download-artifact@v4
+        with:
+          name: real-cocos-creator-3.8.8-web-mobile
+          path: ./dist/creator
+
+      - name: Validate actual Cocos artifact (no Vite masquerading)
+        shell: bash
+        run: |
+          test -s dist/creator/index.html
+          test -s dist/creator/preview-version.json
+          grep -q 'cocos-creator-3.8.8-web-mobile' dist/creator/preview-version.json
+          grep -q "$PREVIEW_REVISION" dist/creator/preview-version.json
+
+      - name: Check SSH deployment secrets
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$SERVER_SSH_KEY"
+          test -n "$SERVER_KNOWN_HOSTS"
+
+      - name: SSH setup
+        shell: bash
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy isolated Creator experiment
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            'set -eu
+             root=/var/www/endless-swarm
+             staging="$root/cocos-preview/creator"
+             test -d "$root"
+             test -f "$root/.endless-swarm-deploy"
+             test ! -L "$root/cocos-preview"
+             test ! -L "$staging"
+             mkdir -p "$staging"
+             touch "$staging/.cocos-creator-deploy"'
+          rsync -az --delete --delay-updates --exclude='/.cocos-creator-deploy' \
+            -e "ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            dist/creator/ "$SERVER_USER@$SERVER_HOST:/var/www/endless-swarm/cocos-preview/creator/"
+
+      - name: Verify real Creator build publicly with exact SHA
+        shell: bash
+        run: |
+          curl -fsSL --retry 3 --max-time 30 'https://kk518.top/swarm/cocos-preview/creator/' \
+            | grep -qi -E 'cocos|settings|System'
+          marker="$(curl -fsSL --retry 3 --max-time 30 \
+            "https://kk518.top/swarm/cocos-preview/creator/preview-version.json?sha=$PREVIEW_REVISION")"
+          expected="$(printf '{"commit":"%s","kind":"cocos-creator-3.8.8-web-mobile","editor":"3.8.8"}' "$PREVIEW_REVISION")"
+          test "$marker" = "$expected"
+          echo "### REAL Cocos Creator build deployed and verified: https://kk518.top/swarm/cocos-preview/creator/" >> "$GITHUB_STEP_SUMMARY"
+
+# The existing Canvas harness stays the safe fallback at /swarm/cocos-preview/.
+# Only a Creator-generated build artifact may be deployed at /creator/.
