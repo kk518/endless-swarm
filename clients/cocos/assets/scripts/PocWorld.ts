@@ -141,7 +141,7 @@ export class PocWorld {
   private fireCooldownMs = 0;
   private arcCooldownMs = 0;
   private railCooldownMs = 0;
-  private spawnCooldownMs = POC.enemySpawnMs;
+  private spawnCooldownMs: number = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
   private nextId = 1;
   private randomStreams: RunRandomStreams;
@@ -272,7 +272,6 @@ export class PocWorld {
     return this.randomStreams.combat.next();
   }
   private spawnWaveEnemy(player: PocPlayer): void {
-    const wave = this.state.wave;
     const profile = this.runController.currentWave;
     // Only three already-implemented enemy behaviors are eligible for the PoC.
     // Original spitter/bomber definitions must wait for real attack drivers.
