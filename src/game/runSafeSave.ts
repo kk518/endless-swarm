@@ -73,13 +73,13 @@ export function parseRunSafeSave(raw: unknown): RunSafeSave | null {
     || !Array.isArray(build.selected) || build.selected.length > 100
     || build.selected.some((c: unknown) => !cards.has(c as CardId))
     || !Number.isInteger(build.pierce) || !Number.isInteger(build.maxHp)
-    || build.maxHp < 1 || !boundedNumber(build.hp, 1, build.maxHp)
-    || build.damage <= 0 || build.rate <= 0 || build.speed <= 0
-    || build.range <= 0 || build.deployDelay <= 0
-    || build.explosionChance > 1 || build.criticalChance > 1) return null;
+    || (build.maxHp as number) < 1 || !boundedNumber(build.hp, 1, build.maxHp as number)
+    || (build.damage as number) <= 0 || (build.rate as number) <= 0 || (build.speed as number) <= 0
+    || (build.range as number) <= 0 || (build.deployDelay as number) <= 0
+    || (build.explosionChance as number) > 1 || (build.criticalChance as number) > 1) return null;
   const growth = raw.growth;
   if (!isRecord(growth) || !uint(growth.level, MAX_RUN_LEVEL) || growth.level < 1
-    || !uint(growth.xp, 5000) || (growth.level < MAX_RUN_LEVEL && growth.xp >= xpToNext(growth.level))
+    || !uint(growth.xp, 5000) || (growth.level < MAX_RUN_LEVEL && growth.xp >= xpToNext(growth.level as number))
     || !isRecord(growth.weaponLevels) || !isRecord(growth.evolved)) return null;
   for (const id of ids) {
     const lvl = growth.weaponLevels[id];
@@ -93,7 +93,7 @@ export function parseRunSafeSave(raw: unknown): RunSafeSave | null {
   const rng = raw.randoms;
   if (!isRecord(rng) || ['combat', 'rewards', 'events', 'visuals']
     .some(k => !uint(rng[k], 0xffffffff) || rng[k] === 0)) return null;
-  if (!boundedNumber(raw.hp, 1, build.maxHp) || raw.hp !== build.hp
+  if (!boundedNumber(raw.hp, 1, build.maxHp as number) || raw.hp !== build.hp
     || !uint(raw.timeMs, 2 * 60 * 60 * 1000)
     || !uint(raw.kills, 1000000) || !uint(raw.bestStreak, 1000000)
     || !uint(raw.salvageKills, 1000000) || !uint(raw.suppliesCollected, 1000000)
