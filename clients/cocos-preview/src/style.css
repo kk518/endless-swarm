@@ -25,3 +25,13 @@ button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:poin
 .end-screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#07131de3}.end-screen[hidden]{display:none}.end-screen p{color:#f9b3a2;font:12px ui-monospace,Consolas,monospace;letter-spacing:.18em}.end-screen strong{font-size:35px}.end-screen span{color:#a8c8c8;font-size:13px}.site-footer{border-top:1px solid var(--line);padding-top:23px;padding-bottom:23px}
 @media (max-width:830px){.site-header,.site-footer{padding:13px 16px}.header-sub{font-size:9px}.workspace{grid-template-columns:minmax(0,540px);padding:12px;gap:18px}.game-wrap{margin:auto;width:100%}.canvas-shell{max-height:none}.side-panel{padding:12px 14px 30px}.site-footer{display:none}}
 @media (max-width:430px){.site-header{padding:10px 14px}.logo{font-size:12px}.header-sub{font-size:8px;max-width:140px;text-align:right}.workspace{padding:0;gap:0}.game-wrap{border-left:0;border-right:0}.battle-header,.battle-footer{height:30px;font-size:9px;padding:0 9px}.battle-footer{font-size:8px}.side-panel{padding:27px 20px}.bottom-tip{font-size:10px}.top-hud{top:15px;left:14px;right:14px}.hp-bar{width:120px}}
+
+/* Migrated battle progression HUD; safe on narrow portrait screens. */
+.progress-panel{position:absolute;top:83px;left:18px;right:18px;pointer-events:none;
+ display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+ font:11px ui-monospace,Consolas,monospace;letter-spacing:.07em;text-shadow:0 2px 6px #001}
+.progress-panel #wave-counter{color:#f5dcaa;font-weight:800;font-size:14px}
+.progress-panel #player-level{color:#d4e9df}
+.progress-panel #arc-unlock{color:#91a9aa;font-size:10px}
+.progress-panel #arc-unlock.unlocked{color:#9ddfff}
+@media(max-width:430px){.progress-panel{top:70px;left:14px;right:14px;gap:4px}}
