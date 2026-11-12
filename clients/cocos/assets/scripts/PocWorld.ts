@@ -11,7 +11,7 @@ import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts
 import type { WeaponId } from './m6/progression.ts';
 import { CocosRunController, type CampaignMode, type RunDecision } from './m6/runController.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
-  type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster.ts';
+  type PocHeroId, type PocAttackPort } from './PocRoster.ts';
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
 
 export interface Vec2 { x: number; y: number }
