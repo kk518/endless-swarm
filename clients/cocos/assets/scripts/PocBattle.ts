@@ -8,6 +8,7 @@ import {
   EventTouch, EventKeyboard, Input, KeyCode, input, game, Game, view,
 } from 'cc';
 import { PocWorld, normalizedMove, type Vec2 } from './PocWorld';
+import { type PocHeroId } from './PocRoster';
 
 const { ccclass } = _decorator;
 const COL = {
@@ -28,6 +29,7 @@ const COL = {
 @ccclass('PocBattle')
 export class PocBattle extends Component {
   private world!: PocWorld;
+  private selectedHero: PocHeroId = 'marine';
   private graphic!: Graphics;
   private hud!: Label;
   private activeTouch: number | null = null;
@@ -42,7 +44,7 @@ export class PocBattle extends Component {
     const size = view.getVisibleSize();
     this.screenWidth = size.width;
     this.screenHeight = size.height;
-    this.world = new PocWorld(size.width, size.height);
+    this.world = new PocWorld(size.width, size.height, 518, undefined, {}, this.selectedHero);
     this.graphic = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
     const hudNode = new Node('PocHUD');
     this.node.addChild(hudNode);
@@ -55,6 +57,7 @@ export class PocBattle extends Component {
     (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
       state: () => ({
         initialized: true,
+        hero: this.world.heroId, signature: this.world.heroId === 'kane' ? 'kane-rail' : null,
         input: { touchActive: this.activeTouch !== null, touchMove: { ...this.touchMove },
           pressedKeys: this.pressed.size, suspended: this.suspended },
         x: this.world.state.player.x, y: this.world.state.player.y,
@@ -100,7 +103,11 @@ export class PocBattle extends Component {
     if (this.activeTouch !== null) return;
     if (this.world.state.over) { this.world.reset(); return; }
     const p = event.getUILocation();
-    if (p.y > this.screenHeight * 0.65) return; // thumb zone near screen bottom
+    if (p.y > this.screenHeight * 0.65) {
+      // Top-right HUD tap changes the playable hero in the Cocos scene.
+      if (p.x > this.screenWidth * 0.64) this.switchHero();
+      return;
+    } // thumb zone near screen bottom
     this.activeTouch = event.getID();
     this.touchOrigin = { x: p.x, y: p.y };
     this.touchMove = { x: 0, y: 0 };
@@ -123,10 +130,16 @@ export class PocBattle extends Component {
   }
   private keyDown(event: EventKeyboard): void {
     this.pressed.add(event.keyCode);
+    if (event.keyCode === KeyCode.KEY_H) this.switchHero();
     if (event.keyCode === KeyCode.KEY_R) {
       this.world.reset();
       this.releaseInput();
     }
+  }
+  private switchHero(): void {
+    this.selectedHero = this.selectedHero === 'marine' ? 'kane' : 'marine';
+    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero);
+    this.releaseInput();
   }
   private keyUp(event: EventKeyboard): void { this.pressed.delete(event.keyCode); }
   private intent(): Vec2 {
@@ -192,7 +205,8 @@ export class PocBattle extends Component {
       g.ellipse(p.x, p.y - 8, 37, 16); g.stroke();
     }
     g.fillColor = COL.marine; g.rect(p.x - 13, p.y - 2, 26, 36); g.fill();
-    g.fillColor = COL.chest; g.rect(p.x - 10, p.y + 10, 20, 14); g.fill();
+    g.fillColor = this.world.heroId === 'kane' ? new Color(220, 177, 109, 255) : COL.chest;
+    g.rect(p.x - 10, p.y + 10, 20, 14); g.fill();
     g.fillColor = COL.marine; g.circle(p.x, p.y + 37, 10); g.fill();
     const target = s.enemies.reduce<typeof s.enemies[number] | null>((best, e) =>
       !best || Math.hypot(e.x - p.x, e.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? e : best, null);
@@ -210,9 +224,10 @@ export class PocBattle extends Component {
     }
     this.hud.string = s.over
       ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\n击杀 ' : '机甲损毁 · 点击重开 / R\n击杀 ') + s.kills
-      : '无尽虫潮 · Cocos Web · 波次 ' + s.wave + '/5 · Lv.' + s.level
-        + '\n装甲 ' + s.player.hp + '/6 · 击杀 ' + s.kills
+      : '无尽虫潮 · ' + this.world.heroName + ' · 波次 ' + s.wave + '/5 · Lv.' + s.level
+        + '\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
         + (s.arcUnlocked ? ' · 电弧已解锁' : '')
-        + ' · ' + (s.player.deployed ? '火力展开' : '机动射击');
+        + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
+        + ' · 点右上角切换英雄 / H';
   }
 }

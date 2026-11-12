@@ -183,7 +183,7 @@ function drawEnemy(x: number, y: number, time: number, kind: string, hp: number,
   g.restore();
 }
 
-function drawMarine(x: number, y: number, deployed: boolean, heading: number, time: number): void {
+function drawMarine(x: number, y: number, deployed: boolean, heading: number, time: number, heroId: string): void {
   const bob = deployed ? 0 : Math.sin(time / 130) * .7;
   g.save(); g.translate(x, y + bob);
   ellipse(0, 20, 22, 8, '#020d17b8');
@@ -198,12 +198,15 @@ function drawMarine(x: number, y: number, deployed: boolean, heading: number, ti
   }
   polygon([[-14,5],[-9,-12],[-1,-13],[-1,16],[-11,17]], '#304b55');
   polygon([[3,-13],[11,-13],[15,4],[11,18],[3,16]], '#284955');
-  polygon([[-19,-17],[-17,-39],[-8,-47],[10,-46],[18,-33],[17,-8],[4,3],[-9,0]], '#2a505d');
-  polygon([[-14,-34],[-10,-41],[10,-40],[14,-30],[8,-15],[-6,-15]], '#77a5a0');
+  polygon([[-19,-17],[-17,-39],[-8,-47],[10,-46],[18,-33],[17,-8],[4,3],[-9,0]],
+    heroId === 'kane' ? '#74664c' : '#2a505d');
+  polygon([[-14,-34],[-10,-41],[10,-40],[14,-30],[8,-15],[-6,-15]],
+    heroId === 'kane' ? '#d1b783' : '#77a5a0');
   polygon([[-8,-34],[8,-33],[4,-20],[-4,-21]], '#243a48');
   polygon([[-19,-29],[-27,-36],[-23,-46],[-11,-46],[-8,-32]], '#446f82');
   polygon([[12,-45],[23,-46],[29,-37],[22,-24],[10,-31]], '#39647b');
-  polygon([[-13,-51],[-9,-63],[9,-63],[15,-52],[11,-43],[-10,-43]], '#789e99');
+  polygon([[-13,-51],[-9,-63],[9,-63],[15,-52],[11,-43],[-10,-43]],
+    heroId === 'kane' ? '#b5a682' : '#789e99');
   polygon([[-7,-57],[11,-55],[7,-49],[-8,-48]], deployed ? '#ffd68e' : '#6df0da');
   strokeLine([[-23,-39],[-11,-43]], '#a5d6ce', 2);
   strokeLine([[14,-41],[24,-38]], '#b2d7d0', 2);
@@ -239,13 +242,13 @@ function paint(dt: number): void {
   for (const enemy of ordered) {
     const position = worldPoint(enemy.x, enemy.y);
     if (!marineDrawn && position.y > p.y) {
-      drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs);
+      drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
       marineDrawn = true;
     }
     drawEnemy(position.x, position.y, s.elapsedMs,
       enemy.kind ?? 'grunt', enemy.hp, enemy.maxHp ?? 64);
   }
-  if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs);
+  if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
   for (const bullet of s.bullets) {
     const b = worldPoint(bullet.x, bullet.y);
     ellipse(b.x, b.y - 15, 7, 3, '#ff9e52b0');
@@ -281,6 +284,7 @@ function ui(): void {
   arcUnlock.textContent = s.arcUnlocked ? '⚡ 电弧线圈 · 连锁攻击已激活' : '电弧线圈 · LV.3 解锁';
   arcUnlock.classList.toggle('unlocked',s.arcUnlocked);
   const isDeployed = s.player.deployed;
+  // Hero-specific attacks are resolved in the shared world, not this Canvas renderer.
   stanceLabel.classList.toggle('active', isDeployed);
   stanceLabel.textContent = isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
   message.textContent = suspended

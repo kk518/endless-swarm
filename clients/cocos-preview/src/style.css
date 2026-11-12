@@ -58,3 +58,7 @@ button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:poin
 .creator-link{display:block;margin-top:17px;padding:11px;border:1px solid #397875;color:#9ff1da;font-size:12px;text-decoration:none}
 .creator-link:hover{background:#173a39}
 @media(max-width:400px){.zone-buttons{gap:6px}.zone-choice{padding:11px 8px;font-size:12px}.wallet{gap:5px}.wallet strong{font-size:18px}}
+
+/* Playable hero selection reuses the accessible zone card controls. */
+#hero-kane.active{border-color:#f0c37b;background:linear-gradient(115deg,#443521,#253238)}
+#hero-kane.active small{color:#f1d6a8}

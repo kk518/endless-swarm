@@ -31,7 +31,7 @@
           <button id="restart-overlay" type="button">再次出击</button>
         </div>
       </div>
-      <div class="battle-footer"><span>LIVE SIMULATION · <strong>5 WAVES / 3 BUG TYPES / 2 WEAPONS</strong></span><span>POC <span id="frame-count">60</span> FPS</span></div>
+      <div class="battle-footer"><span>LIVE SIMULATION · <strong>2 HEROES / 2 STANDARD WEAPONS / 1 SIGNATURE</strong></span><span>POC <span id="frame-count">60</span> FPS</span></div>
     </section>
     <aside class="side-panel">
       <div class="kicker">ENGINE MIGRATION / FIELD TEST</div>
@@ -49,6 +49,13 @@
           <button type="button" id="zone-nest" class="zone-choice">感染巢穴 <small>跃袭虫 · 生体样本</small></button>
         </div>
         <div class="ops-selected" id="zone-current">当前战区：钢铁遗迹</div>
+        <div class="section-caption">M6 / 英雄编队</div>
+        <p class="ops-hint">可用英雄必须同时具备被动逻辑和真实攻击驱动。凯恩拥有强化展开被动与独立的穿透轨道炮。</p>
+        <div class="zone-buttons" role="group" aria-label="选择出战英雄">
+          <button type="button" id="hero-marine" class="zone-choice active">星际战士 <small>电磁步枪 · 机动均衡</small></button>
+          <button type="button" id="hero-kane" class="zone-choice">凯恩 · 重装先锋 <small>强化展开 · 专武轨道炮</small></button>
+        </div>
+        <div class="ops-selected" id="hero-current">当前英雄：星际战士</div>
 
         <div class="section-caption">M6 / 局外成长 · 本机存档</div>
         <div class="wallet">

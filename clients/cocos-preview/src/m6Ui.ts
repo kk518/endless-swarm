@@ -11,9 +11,11 @@ import {
 } from '../../cocos/assets/scripts/m6/metaProgression.ts';
 import { newRunSeed } from '../../cocos/assets/scripts/m6/runRandom.ts';
 import { PocWorld } from '../../cocos/assets/scripts/PocWorld.ts';
+import { POC_CATALOG, POC_PLAYABLE_HEROES, type PocHeroId } from '../../cocos/assets/scripts/PocRoster.ts';
 
 const STORAGE_PREFIX = 'cocos-preview-m6:';
 const ZONE_KEY = STORAGE_PREFIX + 'zone';
+const HERO_KEY = STORAGE_PREFIX + 'hero';
 const storage: MetaStorage = {
   getItem(key: string): string | null {
     try { return localStorage.getItem(STORAGE_PREFIX + key); }
@@ -35,6 +37,12 @@ function initialZone(): BattlefieldId {
     return isBattlefieldId(stored) ? stored : DEFAULT_BATTLEFIELD;
   } catch { return DEFAULT_BATTLEFIELD; }
 }
+function initialHero(): PocHeroId {
+  try {
+    const stored = localStorage.getItem(HERO_KEY);
+    return stored === 'kane' ? 'kane' : 'marine';
+  } catch { return 'marine'; }
+}
 function runId(): string {
   // Non-financial local demo ID; the M6 settlement ledger prevents repeat claims.
   const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -45,6 +53,7 @@ function runId(): string {
 
 export class PreviewOps {
   private zone: BattlefieldId = initialZone();
+  private heroId: PocHeroId = initialHero();
   private currentRunId = '';
   private settled = false;
   private report = '结算后自动写入预览版独立存档；升级下一局生效。';
@@ -52,6 +61,8 @@ export class PreviewOps {
   constructor(onRestart: () => void) {
     el<HTMLButtonElement>('zone-steel').addEventListener('click', () => this.selectZone('steel-ruins', onRestart));
     el<HTMLButtonElement>('zone-nest').addEventListener('click', () => this.selectZone('infested-nest', onRestart));
+    el<HTMLButtonElement>('hero-marine').addEventListener('click', () => this.selectHero('marine', onRestart));
+    el<HTMLButtonElement>('hero-kane').addEventListener('click', () => this.selectHero('kane', onRestart));
     el<HTMLButtonElement>('buy-armor').addEventListener('click', () => this.purchase('armor'));
     el<HTMLButtonElement>('buy-frame').addEventListener('click', () => this.purchase('weapon-frame'));
     el<HTMLButtonElement>('buy-repair').addEventListener('click', () => this.purchase('repair-module'));
@@ -67,6 +78,16 @@ export class PreviewOps {
     this.report = '已切换至' + getBattlefield(next).name + '，重新出击。';
     this.render();
   }
+  private selectHero(next: PocHeroId, onRestart: () => void): void {
+    if (this.heroId === next) return;
+    if (!POC_PLAYABLE_HEROES.includes(next)) throw new Error('Hero not registered');
+    this.heroId = next;
+    try { localStorage.setItem(HERO_KEY, next); }
+    catch { this.report = '英雄选择仅保留在当前会话：浏览器存储不可写。'; }
+    onRestart(); // a hero change starts a new run without settlement
+    this.report = '已切换出战英雄：' + POC_CATALOG.heroes.get(next)!.name;
+    this.render();
+  }
   createWorld(): PocWorld {
     this.currentRunId = runId();
     this.settled = false;
@@ -75,7 +96,7 @@ export class PreviewOps {
       armorRank: meta?.armorRank ?? 0,
       weaponFrameRank: meta?.weaponFrameRank ?? 0,
       repairModuleRank: meta?.repairModuleRank ?? 0,
-    });
+    }, this.heroId);
   }
   settleIfOver(world: PocWorld): void {
     if (!world.state.over || this.settled) return;
@@ -121,6 +142,12 @@ export class PreviewOps {
       button.classList.toggle('active', this.zone === zone.id);
       button.setAttribute('aria-pressed', String(this.zone === zone.id));
     }
+    for (const heroId of POC_PLAYABLE_HEROES) {
+      const button = el<HTMLButtonElement>('hero-' + heroId);
+      button.classList.toggle('active', this.heroId === heroId);
+      button.setAttribute('aria-pressed', String(this.heroId === heroId));
+    }
+    el('hero-current').textContent = '当前英雄：' + POC_CATALOG.heroes.get(this.heroId)!.name;
     el('zone-current').textContent = '当前战区：' + getBattlefield(this.zone).name
       + ' · ' + getBattlefield(this.zone).enemyTrait;
     el('balance-war').textContent = String(shown.warData);
