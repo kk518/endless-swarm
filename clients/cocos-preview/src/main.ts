@@ -5,7 +5,7 @@
 import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/PocWorld.ts';
 import { PreviewOps } from './m6Ui.ts';
 import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
-import { TRAINING_LABELS, type TrainingFocus } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
+import { TRAINING_LABELS } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
 import type { WeaponId } from '../../cocos/assets/scripts/m6/progression.ts';
 import './style.css';
 
