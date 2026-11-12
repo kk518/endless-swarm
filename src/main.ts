@@ -6,6 +6,7 @@ import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
 import { CONTENT_CATALOG } from './game/contentCatalog';
 import { readMetaProgress, purchaseStoredArmor, nextArmorCost } from './game/metaProgression';
 import { readRunSafeSave, clearRunSafeSave } from './game/runSafeSave';
+import { getStoragePort } from './game/platformStorage';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
@@ -61,7 +62,8 @@ const cardCategory: Record<string, string> = {
 };
 
 function getSavedExpedition() {
-  try { return readRunSafeSave(localStorage); } catch { return null; }
+  const storage = getStoragePort();
+  return storage ? readRunSafeSave(storage) : null;
 }
 function refreshResumeButton(): void {
   const saved = getSavedExpedition();
@@ -71,7 +73,8 @@ function refreshResumeButton(): void {
 }
 function refreshArmory(message?: string): void {
   let meta;
-  try { meta = readMetaProgress(localStorage); } catch { meta = null; }
+  const storage = getStoragePort();
+  meta = storage ? readMetaProgress(storage) : null;
   if (!meta) {
     metaWallet.textContent = '本地战备不可用';
     metaArmorStatus.textContent = '无法读取本地存档';
@@ -96,7 +99,8 @@ function beginRun(): void {
   const saved = getSavedExpedition();
   if (saved) {
     if (!window.confirm('已有尚未完成的三幕远征。确定放弃存档并重新开始吗？')) return;
-    if (!clearRunSafeSave(localStorage)) {
+    const storage = getStoragePort();
+    if (!storage || !clearRunSafeSave(storage)) {
       refreshArmory('无法删除旧存档，请检查浏览器存储权限。');
       return;
     }
@@ -125,7 +129,8 @@ resumeButton.addEventListener('click', () => {
 });
 armorUpgradeButton.addEventListener('click', () => {
   let purchased;
-  try { purchased = purchaseStoredArmor(localStorage); } catch { purchased = null; }
+  const storage = getStoragePort();
+  purchased = storage ? purchaseStoredArmor(storage) : null;
   if (!purchased) { refreshArmory('装甲购买未成功保存，请检查浏览器本地存储。'); return; }
   refreshArmory(purchased.bought
     ? `永久装甲已升级至 Lv.${purchased.meta.armorRank}，下次出击立即生效。`
