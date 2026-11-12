@@ -8,6 +8,9 @@ import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
 import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { xpToNext, weaponTuning } from './m6/arsenal.ts';
 import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts';
+import {
+  ARRIVAL_WARNING_MS, insideReadableView, visibleEdgeSpawn, type ViewRect,
+} from './m6/visibility.ts';
 import type { WeaponId } from './m6/progression.ts';
 import {
   canSpawnElite, MAX_SUPPLIES, SUPPLY_PERIOD_MS, SUPPLY_TTL_MS,
@@ -19,7 +22,7 @@ import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
 
 export interface Vec2 { x: number; y: number }
-export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'bomber' | 'boss';
+export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'spitter' | 'bomber' | 'boss';
 export interface PocPlayer extends Vec2 {
   hp: number;
   maxHp: number;
@@ -35,6 +38,7 @@ export interface PocEnemy extends Vec2 {
   slowMs?: number;
   elite?: boolean;
   windupMs?: number;
+  attackCooldownMs?: number;
   /** Optional only to keep old nearestEnemy callers source-compatible. */
   kind?: PocEnemyKind;
   maxHp?: number;
@@ -43,6 +47,13 @@ export interface PocBullet extends Vec2 {
   vx: number; vy: number; remainingMs: number;
   damage: number; source: WeaponId; pierce: number; hitIds: number[];
   knockback?: number;
+}
+export interface PocArrival extends Vec2 {
+  kind: PocEnemyKind; elite: boolean;
+  remainingMs: number; durationMs: number;
+}
+export interface PocAcid extends Vec2 {
+  vx: number; vy: number; remainingMs: number;
 }
 export interface PocLightning {
   fromX: number; fromY: number; toX: number; toY: number;
@@ -67,6 +78,8 @@ export interface PocState {
   evolved: Record<WeaponId, boolean>;
   player: PocPlayer;
   enemies: PocEnemy[];
+  arrivals: PocArrival[];
+  acids: PocAcid[];
   bullets: PocBullet[];
   lightning: PocLightning[];
   supplies: PocSupply[];
@@ -129,6 +142,12 @@ export function nearestEnemy(origin: Vec2, enemies: readonly PocEnemy[], range: 
   }
   return result;
 }
+/** Ordinary locks wait until a bug enters the readable inner mobile viewport. */
+export function readableNearestEnemy(
+  origin: Vec2, enemies: readonly PocEnemy[], range: number, view: ViewRect,
+): PocEnemy | null {
+  return nearestEnemy(origin, enemies.filter(e => insideReadableView(e, view)), range);
+}
 export function deploymentReady(stationaryMs: number, moving: boolean): boolean {
   return !moving && stationaryMs >= POC.deployDelayMs;
 }
@@ -140,6 +159,7 @@ export function enemyStats(kind: PocEnemyKind): { hp: number; speed: number; con
     case 'grunt': return { hp: 64, speed: 46, contactRadius: 25, xp: 1 };
     case 'leaper': return { hp: 42, speed: 88, contactRadius: 22, xp: 1 };
     case 'armored': return { hp: 180, speed: 27, contactRadius: 31, xp: 3 };
+    case 'spitter': return { hp: 65, speed: 62, contactRadius: 26, xp: 2 };
     case 'bomber': return { hp: 56, speed: 102, contactRadius: 24, xp: 2 };
     case 'boss': return { hp: 1350, speed: 28, contactRadius: 50, xp: 20 };
   }
@@ -154,7 +174,7 @@ function emptyState(): PocState {
     weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
     evolved: { rifle: false, scatter: false, arc: false, flame: false },
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
-    enemies: [], bullets: [], lightning: [], supplies: [], pulses: [],
+    enemies: [], arrivals: [], acids: [], bullets: [], lightning: [], supplies: [], pulses: [],
     overclockMs: 0, suppliesCollected: 0,
     streak: 0, bestStreak: 0, streakRemainingMs: 0,
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
@@ -250,6 +270,8 @@ export class PocWorld {
       : this.runController.chooseRoute(option.id);
     if (!accepted) return false;
     this.state.enemies.length = 0;
+    this.state.arrivals.length = 0;
+    this.state.acids.length = 0;
     this.state.bullets.length = 0;
     this.state.lightning.length = 0;
     this.state.supplies.length = 0;
@@ -319,6 +341,8 @@ export class PocWorld {
     const hp = elite ? Math.round(stats.hp * 2.3) : stats.hp;
     this.state.enemies.push({
       id: this.nextId++, kind, x, y, elite, hp, maxHp: hp, windupMs: 0,
+      attackCooldownMs: kind === 'leaper' || kind === 'spitter' || kind === 'boss'
+        ? 1900 + this.nextRandom() * 1500 : 0,
     });
   }
   /** Testable M3 spawn port, shared with timed and elite-kill drops. */
@@ -345,11 +369,10 @@ export class PocWorld {
   }
   private spawnWaveEnemy(player: PocPlayer): void {
     const profile = this.runController.currentWave;
-    // Spitter is deferred until its projectile behavior is implemented.
-    // Bomber uses a genuine timed fuse with a visible warning and avoidance.
+    // All historical main enemy families now have executable behaviors.
     const choices = profile.mix.filter(entry =>
-      entry.kind === 'grunt' || entry.kind === 'leaper'
-      || entry.kind === 'armored' || entry.kind === 'bomber');
+      entry.kind === 'grunt' || entry.kind === 'leaper' || entry.kind === 'armored'
+      || entry.kind === 'spitter' || entry.kind === 'bomber');
     const total = choices.reduce((sum, entry) => sum + entry.weight, 0);
     let roll = this.nextRandom() * total;
     let kind: PocEnemyKind = 'grunt';
@@ -358,28 +381,76 @@ export class PocWorld {
       if (roll <= 0) { kind = entry.kind as PocEnemyKind; break; }
     }
     const angle = this.nextRandom() * Math.PI * 2;
-    // M5.3 safety: clipping a nominal off-screen spawn to the arena boundary
-    // can place it directly on a hero standing at that same boundary.
-    // Try evenly distributed sectors with NO extra RNG rolls, so fixed seeds
-    // are stable while at least 140 world units of player clearance is kept.
-    let location: Vec2 = { x: 0, y: 0 };
-    let farthestSq = -1;
+    // M5.3's visibleEdgeSpawn uses positive square-world coordinates.
+    // Translate the local Cocos arena into that coordinate space, preserving
+    // the canonical readable view, 16px entrance inset and >=140px clearance.
+    const offset = Math.max(this.width, this.height) + 400;
+    const view = this.combatView();
+    const shiftedView: ViewRect = {
+      left: view.left + offset, right: view.right + offset,
+      top: view.top + offset, bottom: view.bottom + offset,
+    };
+    let location: Vec2 | null = null;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const sector = angle + attempt * Math.PI / 4;
-      const candidate = {
-        x: clamp(player.x + Math.cos(sector) * 185, -this.width / 2 + 20, this.width / 2 - 20),
-        y: clamp(player.y + Math.sin(sector) * 215, -this.height / 2 + 20, this.height / 2 - 20),
-      };
-      const distanceSq = squaredDistance(candidate, player);
-      if (distanceSq > farthestSq) { location = candidate; farthestSq = distanceSq; }
-      if (distanceSq >= 140 * 140) { location = candidate; break; }
+      const candidate = visibleEdgeSpawn(
+        { x: player.x + offset, y: player.y + offset }, shiftedView,
+        angle + attempt * Math.PI / 4, offset * 3, 410, 140, 16,
+      );
+      if (candidate) { location = { x: candidate.x - offset, y: candidate.y - offset }; break; }
     }
-    const { x, y } = location;
-    const livingElites = this.state.enemies.filter(e => e.hp > 0 && e.elite).length;
+    if (!location || this.state.enemies.length + this.state.arrivals.length >= POC.maxEnemies) return;
+    const livingElites = this.state.enemies.filter(e => e.hp > 0 && e.elite).length
+      + this.state.arrivals.filter(e => e.elite).length;
     const elite = canSpawnElite(this.runController.currentStage.encounter.pressureTier,
       kind, livingElites, () => this.nextRandom());
-    this.spawnEnemyAt(x, y, kind, elite);
+    this.state.arrivals.push({
+      kind, elite, ...location, remainingMs: ARRIVAL_WARNING_MS, durationMs: ARRIVAL_WARNING_MS,
+    });
   }
+
+  private combatView(): ViewRect {
+    return { left: -this.width / 2, top: -this.height / 2,
+      right: this.width / 2, bottom: this.height / 2 };
+  }
+
+  private updateArrivals(ms: number): void {
+    const state = this.state;
+    for (let i = state.arrivals.length - 1; i >= 0; i--) {
+      const arrival = state.arrivals[i];
+      arrival.remainingMs -= ms;
+      if (arrival.remainingMs > 0) continue;
+      state.arrivals.splice(i, 1);
+      this.spawnEnemyAt(arrival.x, arrival.y, arrival.kind, arrival.elite);
+    }
+  }
+
+  private spitAcid(enemy: PocEnemy, player: PocPlayer): void {
+    const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+    this.state.acids.push({
+      x: enemy.x, y: enemy.y,
+      vx: Math.cos(angle) * 230, vy: Math.sin(angle) * 230,
+      remainingMs: 2200,
+    });
+  }
+
+  private updateAcids(ms: number): void {
+    const state = this.state, seconds = ms / 1000;
+    for (let i = state.acids.length - 1; i >= 0; i--) {
+      const acid = state.acids[i];
+      acid.x += acid.vx * seconds;
+      acid.y += acid.vy * seconds;
+      acid.remainingMs -= ms;
+      const hit = squaredDistance(acid, state.player) < 24 * 24;
+      if (hit && this.hurtCooldownMs <= 0) {
+        this.runController.applyDamage(1);
+        this.syncRunState();
+        this.hurtCooldownMs = GAMEPLAY.hitGraceMs;
+      }
+      if (hit || acid.remainingMs <= 0) state.acids.splice(i, 1);
+      if (state.over) return;
+    }
+  }
+
   private updateSupplies(ms: number, magnet: boolean): void {
     const state = this.state;
     for (let i = state.supplies.length - 1; i >= 0; i--) {
@@ -466,6 +537,7 @@ export class PocWorld {
         clamp(player.y + 160, -this.height/2+30, this.height/2-30), 'boss');
       state.bossSpawned = state.enemies.some(e => e.kind === 'boss');
     }
+    this.updateArrivals(ms);
     this.supplyCooldownMs -= ms;
     if (this.supplyCooldownMs <= 0) {
       this.supplyCooldownMs += SUPPLY_PERIOD_MS;
@@ -520,11 +592,36 @@ export class PocWorld {
         }
         if (distance < 110) { e.windupMs = 850; continue; }
       }
-      const slow = (e.slowMs ?? 0) > 0 ? 0.6 : 1;
+      // M1 special enemy telegraphs are real combat mechanics, not visual-only.
+      const special = e.kind === 'leaper' || e.kind === 'spitter' || e.kind === 'boss';
+      if (special) {
+        e.attackCooldownMs = (e.attackCooldownMs ?? 0) - ms;
+        if ((e.windupMs ?? 0) > 0) {
+          e.windupMs = Math.max(0, (e.windupMs ?? 0) - ms);
+          if (e.windupMs <= 0) {
+            if (e.kind === 'spitter') this.spitAcid(e, player);
+            else {
+              const leap = e.kind === 'boss' ? 125 : 102;
+              const length = Math.max(0.1, distance);
+              e.x = clamp(e.x + dx / length * leap, -this.width / 2 + 20, this.width / 2 - 20);
+              e.y = clamp(e.y + dy / length * leap, -this.height / 2 + 20, this.height / 2 - 20);
+            }
+            e.attackCooldownMs = e.kind === 'boss' ? 2700 : e.kind === 'spitter' ? 3100 : 3600;
+          }
+          continue;
+        }
+        if ((e.attackCooldownMs ?? 0) <= 0) {
+          e.windupMs = e.kind === 'boss' ? 900 : e.kind === 'spitter' ? 700 : 530;
+          continue;
+        }
+      }
+      const preferred = e.kind === 'spitter' ? 270 : 19;
+      const direction = distance > preferred ? 1 : e.kind === 'spitter' && distance < 180 ? -0.75 : 0.2;
+      const slow = (e.slowMs ?? 0) > 0 ? 0.7 : 1;
       if (distance > 2) {
         const eliteSpeed = e.elite ? 1.12 : 1;
-        e.x += dx / distance * stats.speed * eliteSpeed * slow * seconds;
-        e.y += dy / distance * stats.speed * eliteSpeed * slow * seconds;
+        e.x += dx / distance * stats.speed * eliteSpeed * slow * direction * seconds;
+        e.y += dy / distance * stats.speed * eliteSpeed * slow * direction * seconds;
       }
       if (e.kind !== 'bomber' && distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
         this.runController.applyDamage(1);
@@ -534,6 +631,9 @@ export class PocWorld {
       }
     }
 
+    this.updateAcids(ms);
+    if (state.over) return;
+
     // Each equipped *ordinary* weapon owns its cooldown and main-M6 tuning.
     // No free Lv.3 arc unlocks: installation requires a legal encounter card.
     for (const id of build.weapons) {
@@ -542,7 +642,7 @@ export class PocWorld {
       if (!driver) throw new Error('Missing executable weapon driver: ' + id);
       const tuning = weaponTuning(run.growth, id);
       const range = driver.baseRange * build.range * tuning.range;
-      const target = nearestEnemy(player, state.enemies, range);
+      const target = readableNearestEnemy(player, state.enemies, range, this.combatView());
       if (!target || this.weaponCooldownMs[id] > 0) continue;
       const angle = Math.atan2(target.y - player.y, target.x - player.x);
       driver.attack(target, angle, this.attackPort);
@@ -584,7 +684,7 @@ export class PocWorld {
 
     if (this.heroId === 'kane') {
       this.railCooldownMs -= ms;
-      const target = nearestEnemy(player, state.enemies, 380);
+      const target = readableNearestEnemy(player, state.enemies, 380, this.combatView());
       if (target && this.railCooldownMs <= 0) {
         const angle = Math.atan2(target.y - player.y, target.x - player.x);
         POC_WEAPON_RUNTIME.get('kane-rail')!.attack(target, angle, this.attackPort);
@@ -597,6 +697,8 @@ export class PocWorld {
       this.syncRunState();
       if (this.decision) {
         state.enemies.length = 0;
+        state.arrivals.length = 0;
+        state.acids.length = 0;
         state.bullets.length = 0;
         state.lightning.length = 0;
       }
