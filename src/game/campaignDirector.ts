@@ -1,8 +1,9 @@
 import { WAVES, type WaveDef } from './progression.ts';
+import { FIRST_FORK_ROUTES, SECOND_FORK_ROUTES, validateRouteChoices, type RouteChoice } from './routeDecisions.ts';
 
 /**
  * Data-driven encounter director. The live 5-wave prototype remains the
- * default; the 3-act blueprint has no reward-route UI or stage content yet.
+ * default; a gated experimental 3-act campaign provides real route choices.
  */
 export type EncounterKind = 'survival' | 'boss';
 export type EncounterDecision = 'card' | 'route' | 'none';
@@ -16,6 +17,7 @@ export interface EncounterDefinition {
   /** The current legacy spawner still consumes this pressure/mix profile. */
   readonly wave: WaveDef;
   readonly pressureTier: number;
+  readonly routes?: readonly RouteChoice[];
 }
 export interface ActDefinition {
   readonly id: string;
@@ -73,6 +75,8 @@ export function validateCampaign(campaign: CampaignDefinition): void {
         throw new Error(`Invalid encounter: ${item.id}`);
       }
       encounters.add(item.id);
+      if (item.decision === 'route') validateRouteChoices(item.routes ?? []);
+      else if (item.routes?.length) throw new Error(`Non-route encounter cannot have routes: ${item.id}`);
       if (!Number.isInteger(item.pressureTier) || item.pressureTier < 1 || item.pressureTier > 5
         || !Number.isFinite(item.wave.durationMs) || item.wave.durationMs <= 0
         || !Number.isFinite(item.wave.spawnIntervalMs) || item.wave.spawnIntervalMs <= 0
@@ -157,9 +161,9 @@ export function fromCheckpoint(campaign: CampaignDefinition, value: unknown): Ca
 }
 
 function stage(id: string, title: string, pressureTier: number, durationMs: number,
-  decision: EncounterDecision, boss = false): EncounterDefinition {
+  decision: EncounterDecision, boss = false, routes?: readonly RouteChoice[]): EncounterDefinition {
   const reference = WAVES[Math.min(4, pressureTier - 1)];
-  return { id, title, kind: boss ? 'boss' : 'survival', decision, pressureTier,
+  return { id, title, kind: boss ? 'boss' : 'survival', decision, pressureTier, routes,
     wave: { ...reference, durationMs } };
 }
 
@@ -183,8 +187,8 @@ export const PROTOTYPE_CAMPAIGN: CampaignDefinition = {
 };
 
 /**
- * Content blueprint only. Do NOT select it in GameScene until route decisions,
- * encounter events, rewards and safe-node restoration are implemented.
+ * Opt-in experimental expedition with working encounter transitions and forks.
+ * Still NOT a production long-run mode: no persistent recovery or meta economy.
  * 980 seconds of planned combat, excluding player-driven choice time.
  */
 export const THREE_ACT_BLUEPRINT: CampaignDefinition = {
@@ -193,12 +197,12 @@ export const THREE_ACT_BLUEPRINT: CampaignDefinition = {
   acts: [
     { id: 'act-1', title: '第一幕 · 登陆', encounters: [
       stage('landing', '降落区', 1, 100000, 'card'),
-      stage('breakthrough', '突破防线', 2, 105000, 'route'),
+      stage('breakthrough', '突破防线', 2, 105000, 'route', false, FIRST_FORK_ROUTES),
       stage('vanguard-elite', '先遣精英', 3, 110000, 'card'),
     ] },
     { id: 'act-2', title: '第二幕 · 深入', encounters: [
       stage('suppression', '污染压制', 3, 105000, 'card'),
-      stage('fork', '巢穴分岔', 3, 110000, 'route'),
+      stage('fork', '巢穴分岔', 3, 110000, 'route', false, SECOND_FORK_ROUTES),
       stage('middle-elite', '核心精英', 4, 110000, 'card'),
     ] },
     { id: 'act-3', title: '第三幕 · 终局', encounters: [
