@@ -1,10 +1,10 @@
-# 《无尽虫潮》产品总纲 PRD v2.4
+# 《无尽虫潮》产品总纲 PRD v2.5
 
 > 文档类型：**产品北极星与跨版本需求基线（规划稿）**  
 > 日期：2026-11-11 · 负责人：独立游戏项目 · 平台：手机竖屏 H5（桌面仅用于调试）  
 > 当前代码基线：**M5.2 无打断升级 + M5.3 可见虫潮** · 游戏入口：https://kk518.top/swarm/  
 > 状态：**待试玩验证，不代表后续功能已开发或批准发布**  
-> 相关文档：[历史 MVP PRD](PRD.md) · [M5 成长系统](PRD_M5.md) · [M5.1 四武器进化](PRD_M5_1.md) · [下一阶段路线图](ROADMAP_M6_M8.md) · [试玩与验收计划](PLAYTEST_PLAN.md) · [M7 局外成长详细 PRD](PRD_META_PROGRESSION.md) · [核心 Roguelite 循环](PRD_ROGUELITE_CORE_LOOP.md) · [M5.2 无打断升级](PRD_M5_2_NONBLOCKING.md) · [战区与资源装备](PRD_BATTLEFIELDS_EQUIPMENT.md) · [手机战斗视野](PRD_MOBILE_VISIBILITY.md) · [英雄与武器系统](PRD_HERO_WEAPON_SYSTEM.md) · [首批英雄 Build 可玩切片](PRD_HERO_BUILD_VERTICAL_SLICE.md)
+> 相关文档：[历史 MVP PRD](PRD.md) · [M5 成长系统](PRD_M5.md) · [M5.1 四武器进化](PRD_M5_1.md) · [下一阶段路线图](ROADMAP_M6_M8.md) · [试玩与验收计划](PLAYTEST_PLAN.md) · [M7 局外成长详细 PRD](PRD_META_PROGRESSION.md) · [核心 Roguelite 循环](PRD_ROGUELITE_CORE_LOOP.md) · [M5.2 无打断升级](PRD_M5_2_NONBLOCKING.md) · [战区与资源装备](PRD_BATTLEFIELDS_EQUIPMENT.md) · [手机战斗视野](PRD_MOBILE_VISIBILITY.md) · [英雄与武器系统](PRD_HERO_WEAPON_SYSTEM.md) · [首批英雄 Build 可玩切片](PRD_HERO_BUILD_VERTICAL_SLICE.md) · [英雄军械库与奖池](PRD_HERO_ARMORY_AND_DRAFT.md)
 
 ## 0. 文档与需求优先级
 
@@ -116,14 +116,14 @@
 
 ### 6.1 英雄 × 武器 × 模组 × 融合的构筑架构
 
-- **英雄**是战术身份：专属被动 + 一把自动触发的英雄级专属武器。初期规划 6 位原创英雄，首批只开发凯恩、灰烬、伊芙，确保每位真有不同打法；
+- **英雄**是战术身份：专属被动 + 一把自动触发的英雄级专属武器。初期规划 6 位原创英雄，首批只开发凯恩、灰烬、伊芙；局外通过可达成就或通用战备解锁，英雄身份不是按价格排列的战力阶梯；
 - **机甲底盘**是独立可选的移动/装甲配置，允许任一英雄驾驶哨兵、游隼或壁垒，不把英雄身份与机甲型号绑定；
-- **普通武器**保持最多四槽、现有四种武器与进化规则不丢失；逐步扩充有真实机制差异的武器池，最终目标约 12 把，先验证 6 把；
+- **普通武器**保持最多四槽、现有四种武器与进化规则不丢失；新武器通过永久蓝图解锁未来局内候选资格，**不是解锁即开局装满**；目标约 12 把，先验证 6 把；
 - **英雄专属武器位**固定一槽、不挤占普通武器槽，有独立蓄能/冷却和终极觉醒，不是免费的第五把满频大炮；
 - **局内模组**提供状态标签、稀有机制与两武器协同；每局规划一个主要融合 Build，例如雷霜封锁/炼狱引爆；
 - 升级层次明确区分：局内 XP 武器 Lv.1–5、专属武器觉醒、临时模组、局外工坊装备等级与永久科技。
 
-具体英雄、专属枪械、武器池、稀有度、被动规则和验收请见 [英雄武器详细 PRD](PRD_HERO_WEAPON_SYSTEM.md)。
+具体英雄、专属枪械、武器池、稀有度、被动规则和验收请见 [英雄武器详细 PRD](PRD_HERO_WEAPON_SYSTEM.md)；首批可玩内容见 [垂直切片](PRD_HERO_BUILD_VERTICAL_SLICE.md)，英雄解锁/武器蓝图/阶段奖池见 [军械库 PRD](PRD_HERO_ARMORY_AND_DRAFT.md)。
 
 ### 6.2 关键设计：自动小升级，亲手选大的
 - XP 升级：自动分配到战前/幕间设定的主武器与倾向；不中断战斗。
