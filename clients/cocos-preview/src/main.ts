@@ -182,7 +182,8 @@ function drawEnemy(x: number, y: number, time: number, kind: string, hp: number,
   }
   polygon([[-19, 4],[-15,-14],[0,-27],[16,-14],[19,7],[0,15]], '#4e2b36');
   polygon([[-14,-12],[0,-24],[12,-11],[8,5],[-7,5]],
-    kind === 'boss' ? '#df7063' : kind === 'armored' ? '#ae8fa9' : kind === 'leaper' ? '#dd687f' : '#a04c60');
+    kind === 'boss' ? '#df7063' : kind === 'bomber' ? '#ff4d82'
+      : kind === 'armored' ? '#ae8fa9' : kind === 'leaper' ? '#dd687f' : '#a04c60');
   polygon([[-6,-22],[2,-24],[12,-13],[6,-4]], '#ce7d6b');
   polygon([[-8,5],[8,5],[0,13]], '#321e2f');
   ellipse(-7,-2,3,2,'#ffcf7a'); ellipse(7,-2,3,2,'#ffcf7a');
@@ -258,8 +259,35 @@ function paint(dt: number): void {
     }
     drawEnemy(position.x, position.y, s.elapsedMs,
       enemy.kind ?? 'grunt', enemy.hp, enemy.maxHp ?? 64);
+    if (enemy.elite) {
+      g.strokeStyle = '#ffc782'; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(position.x, position.y - 8, 30, 0, Math.PI * 2); g.stroke();
+    }
+    if ((enemy.windupMs ?? 0) > 0 && enemy.kind === 'bomber') {
+      g.fillStyle = 'rgba(255,45,82,0.12)';
+      g.strokeStyle = '#ff5d87'; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(position.x, position.y, 105, 0, Math.PI * 2);
+      g.fill(); g.stroke();
+      g.strokeStyle = '#ffe3b5'; g.lineWidth = 3;
+      g.beginPath(); g.arc(position.x, position.y, 105, -Math.PI / 2,
+        -Math.PI / 2 + (1 - enemy.windupMs / 850) * Math.PI * 2); g.stroke();
+    }
   }
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
+  for (const supply of s.supplies) {
+    const pos = worldPoint(supply.x, supply.y);
+    const tint = supply.kind === 'repair' ? '#85f5b1' : supply.kind === 'overclock'
+      ? '#ffd47a' : '#8cb7ff';
+    g.strokeStyle = tint; g.lineWidth = 2;
+    g.beginPath();g.arc(pos.x,pos.y-12,18,0,Math.PI*2);g.stroke();
+    ellipse(pos.x,pos.y-12,10,10,tint);
+  }
+  for (const pulse of s.pulses) {
+    const pos = worldPoint(pulse.x,pulse.y);
+    g.strokeStyle = pulse.kind === 'bomber' ? '#ff657d' : '#8ab7ff';
+    g.lineWidth = 5 * Math.min(1,pulse.remainingMs/140);
+    g.beginPath();g.arc(pos.x,pos.y,pulse.radius,0,Math.PI*2);g.stroke();
+  }
   for (const bullet of s.bullets) {
     const b = worldPoint(bullet.x, bullet.y);
     const buckshot = bullet.source === 'scatter';
@@ -337,7 +365,9 @@ function ui(): void {
   showSafeDecision();
   const s = world.state;
   hpFill.style.width = Math.max(0, s.player.hp / s.player.maxHp * 100) + '%';
-  killCount.textContent = String(s.kills).padStart(3,'0');
+  killCount.textContent = String(s.kills).padStart(3,'0')
+    + (s.streak >= 2 ? ' · ' + s.streak + '连杀' : '')
+    + (s.suppliesCollected > 0 ? ' · +' + s.suppliesCollected + '补给' : '');
   waveCounter.textContent = (s.mode === 'expedition' ? 'EXPEDITION ' : 'WAVE ')
     + String(s.wave).padStart(2,'0') + ' / ' + String(s.totalStages).padStart(2,'0');
   playerLevel.textContent = 'LV.' + String(s.level).padStart(2,'0')
@@ -349,7 +379,8 @@ function ui(): void {
   const isDeployed = s.player.deployed;
   // Hero-specific attacks are resolved in the shared world, not this Canvas renderer.
   stanceLabel.classList.toggle('active', isDeployed);
-  stanceLabel.textContent = isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
+  stanceLabel.textContent = s.overclockMs > 0 ? '⚡ 补给超频 · 射速 +45%'
+    : isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
   message.textContent = suspended
     ? '游戏已暂停 · 返回页面后继续'
     : world.decision ? '波次已结束 · 请选择战术奖励或路线'

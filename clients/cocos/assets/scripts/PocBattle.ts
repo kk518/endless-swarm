@@ -214,9 +214,20 @@ export class PocBattle extends Component {
       g.fillColor = COL.shadow; g.ellipse(enemy.x, enemy.y - 12, radius + 4, 8 * scale); g.fill();
       g.fillColor = enemy.kind === 'boss' ? new Color(204, 92, 86, 255)
         : enemy.kind === 'armored' ? new Color(133, 103, 130, 255)
+        : enemy.kind === 'bomber' ? new Color(255, 78, 121, 255)
         : enemy.kind === 'leaper' ? new Color(180, 95, 107, 255)
         : COL.enemy;
       g.circle(enemy.x, enemy.y + 8 * scale, radius); g.fill();
+      if (enemy.elite) {
+        g.strokeColor = new Color(255, 204, 140, 245); g.lineWidth = 3;
+        g.circle(enemy.x, enemy.y + 6, 28 * scale); g.stroke();
+      }
+      if (enemy.kind === 'bomber' && (enemy.windupMs ?? 0) > 0) {
+        g.fillColor = new Color(255, 63, 102, 30);
+        g.circle(enemy.x, enemy.y, 105); g.fill();
+        g.strokeColor = new Color(255, 101, 133, 250); g.lineWidth = 3;
+        g.circle(enemy.x, enemy.y, 105); g.stroke();
+      }
       g.strokeColor = COL.claw; g.lineWidth = 3;
       g.moveTo(enemy.x - 12, enemy.y + 4); g.lineTo(enemy.x - 23, enemy.y - 8); g.stroke();
       g.moveTo(enemy.x + 12, enemy.y + 4); g.lineTo(enemy.x + 23, enemy.y - 8); g.stroke();
@@ -226,6 +237,20 @@ export class PocBattle extends Component {
         g.rect(enemy.x - radius, enemy.y + radius + 11,
           radius * 2 * Math.max(0, enemy.hp / (enemy.maxHp ?? 1)), 5); g.fill();
       }
+    }
+    for (const supply of s.supplies) {
+      g.fillColor = supply.kind === 'repair' ? new Color(119, 245, 169, 255)
+        : supply.kind === 'overclock' ? new Color(255, 208, 115, 255)
+        : new Color(136, 186, 255, 255);
+      g.circle(supply.x, supply.y + 8, 12); g.fill();
+      g.strokeColor = new Color(238, 250, 246, 215); g.lineWidth = 2;
+      g.circle(supply.x, supply.y + 8, 20); g.stroke();
+    }
+    for (const pulse of s.pulses) {
+      g.strokeColor = pulse.kind === 'bomber'
+        ? new Color(255, 86, 115, 235) : new Color(136, 186, 255, 235);
+      g.lineWidth = 5 * Math.min(1, pulse.remainingMs / 140);
+      g.circle(pulse.x, pulse.y, pulse.radius); g.stroke();
     }
     for (const arc of s.lightning) {
       const rail = arc.kind === 'rail', flame = arc.kind === 'flame';
@@ -292,9 +317,12 @@ export class PocBattle extends Component {
         : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
           + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages + ' · Lv.' + s.level
           + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
+          + (s.streak >= 2 ? ' · ' + s.streak + '连杀' : '')
+          + (s.suppliesCollected ? ' · 补给' + s.suppliesCollected : '')
           + ' · ' + s.weapons.map(id => id + ' Lv.' + s.weaponLevels[id]
             + (s.evolved[id] ? ' ★' : '')).join('/')
-          + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
+          + ' · ' + (s.overclockMs > 0 ? '超频射击' :
+            s.player.deployed ? '火力展开' : '机动射击')
           + ' · 左上角切换模式 / M · 右上角换英雄 / H';
   }
 }
