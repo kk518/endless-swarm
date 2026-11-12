@@ -14,7 +14,7 @@ import {
 } from '../clients/cocos/assets/scripts/m6/runRandom.ts';
 
 test('Cocos M6 mirrored rules remain byte-identical to canonical TS modules', () => {
-  for (const path of ['progression.ts', 'runRandom.ts', 'battlefields.ts', 'metaProgression.ts']) {
+  for (const path of ["progression.ts","runRandom.ts","battlefields.ts","metaProgression.ts","contentCatalog.ts","heroRuntime.ts","weaponRuntime.ts","combat.ts","pressure.ts","visibility.ts","streak.ts","supplies.ts","arsenal.ts","autoGrowth.ts","campaignDirector.ts","routeDecisions.ts","runSafeSave.ts","platformStorage.ts"]) {
     const canonical = readFileSync('src/game/' + path, 'utf8');
     const mirror = readFileSync('clients/cocos/assets/scripts/m6/' + path, 'utf8');
     assert.equal(mirror, canonical, 'drift in ' + path);
