@@ -1,8 +1,9 @@
 name: Build Real Cocos Creator Web Mobile (experimental)
 
 on:
-  push:
-    branches: [feature/cocos-wechat-migration-poc]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
     paths:
       - 'clients/cocos/**'
       - 'scripts/build-cocos-macos.sh'
@@ -18,18 +19,18 @@ concurrency:
 
 jobs:
   creator-build:
-    if: github.ref == 'refs/heads/feature/cocos-wechat-migration-poc'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/cocos-wechat-migration-poc' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
-      PREVIEW_REVISION: ${{ github.sha }}
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
       COCOS_VERSION: "3.8.8"
       COCOS_DOWNLOAD: "https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-mac-121518.zip"
     steps:
       - name: Checkout exact migration commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Download official Creator 3.8.8 macOS binary
         shell: bash
@@ -77,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      PREVIEW_REVISION: ${{ github.sha }}
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Download actual Cocos Web Mobile output
         uses: actions/download-artifact@v4
