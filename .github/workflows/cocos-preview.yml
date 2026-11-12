@@ -1,8 +1,9 @@
 name: Deploy Cocos Migration Web Preview
 
 on:
-  push:
-    branches: [feature/cocos-wechat-migration-poc]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -14,11 +15,15 @@ concurrency:
 
 jobs:
   build-test-deploy:
-    if: github.ref == 'refs/heads/feature/cocos-wechat-migration-poc'
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/cocos-wechat-migration-poc' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/cocos-wechat-migration-poc')
     runs-on: ubuntu-latest
+    env:
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout migration branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Node.js
         uses: actions/setup-node@v4
@@ -41,7 +46,7 @@ jobs:
         shell: bash
         run: |
           test -s dist/cocos-preview/index.html
-          printf '{"commit":"%s","kind":"cocos-core-web-harness"}\n' "$GITHUB_SHA" > dist/cocos-preview/preview-version.json
+          printf '{"commit":"%s","kind":"cocos-core-web-harness"}\n' "$PREVIEW_REVISION" > dist/cocos-preview/preview-version.json
 
       - name: Archive browser preview
         uses: actions/upload-artifact@v4
@@ -116,13 +121,13 @@ jobs:
             echo '::error::Preview URL does not serve the migration HTML.'
             exit 1
           fi
-          marker="$(curl -fsSL --retry 3 --retry-delay 2 --max-time 20 "https://kk518.top/swarm/cocos-preview/preview-version.json?commit=$GITHUB_SHA")"
-          expected="$(printf '{"commit":"%s","kind":"cocos-core-web-harness"}' "$GITHUB_SHA")"
+          marker="$(curl -fsSL --retry 3 --retry-delay 2 --max-time 20 "https://kk518.top/swarm/cocos-preview/preview-version.json?commit=$PREVIEW_REVISION")"
+          expected="$(printf '{"commit":"%s","kind":"cocos-core-web-harness"}' "$PREVIEW_REVISION")"
           if [[ "$marker" != "$expected" ]]; then
             echo '::error::Preview URL returned the wrong SHA.'
             exit 1
           fi
-          echo "### Verified https://kk518.top/swarm/cocos-preview/ at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Verified https://kk518.top/swarm/cocos-preview/ at $PREVIEW_REVISION" >> "$GITHUB_STEP_SUMMARY"
 
 # WARNING: old production main deployment rsync --delete targets the parent root.
 # A future main redeploy may remove /cocos-preview/. Since main is frozen,
