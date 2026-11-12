@@ -25,6 +25,8 @@ import {
 import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
 import { createRunRandoms, newRunSeed, restoreRandoms, snapshotRandoms, type RunRandomStreams } from './runRandom';
 import { readMetaProgress, settleStoredRun } from './metaProgression';
+import { DEFAULT_BATTLEFIELD, battlefieldWave, getBattlefield,
+  type BattlefieldId, type MaterialId } from './battlefields';
 import { clearRunSafeSave, parseRunSafeSave, writeRunSafeSave, type RunSafeSave } from './runSafeSave';
 import { getStoragePort } from './platformStorage';
 import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
@@ -114,6 +116,7 @@ export interface RunResult {
   heroId: string; campaignId: string; runSeed: number;
   totalStages: number; actTitle: string;
   warDataEarned: number; totalWarData: number; armorRank: number; settlementSaved: boolean;
+  battlefieldId: BattlefieldId; materialId: MaterialId; materialEarned: number; totalMaterial: number;
 }
 export interface RewardOffer {
   wave: number; options: CardDef[]; nextWave: number; equipped: WeaponId[];
@@ -165,6 +168,9 @@ export class GameScene extends Phaser.Scene {
   private rewardOptions: CardDef[] = [];
   private pendingRoutes: readonly RouteChoice[] = [];
   private routePressureMultiplier = 1;
+  private battlefieldId: BattlefieldId = DEFAULT_BATTLEFIELD;
+  private weaponFrameRank = 0;
+  private repairModuleRank = 0;
   private runId = 'not-started';
   private settlementSaved = false;
   private campaign: CampaignDefinition = PROTOTYPE_CAMPAIGN;
@@ -183,7 +189,7 @@ export class GameScene extends Phaser.Scene {
     {
       driverId: 'rifle', slot: 'standard', baseRange: GAMEPLAY.fireRange, baseIntervalMs: fireIntervalMs(false),
       attack: (_target, angle, tuning) => this.fire(angle,
-        this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage),
+        this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage * (1 + this.weaponFrameRank * 0.025)),
         this.build.pierce + tuning.pierce, this.growth.evolved.rifle ? 1.65 : 1,
         this.growth.evolved.rifle ? 0xffd7a2 : WEAPON_LIGHT.rifle),
     },
@@ -320,7 +326,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Called by the HTML start/retry button; safe for repeated sessions. */
-  startRun(training: TrainingPlan = DEFAULT_TRAINING, mode: CampaignMode = 'prototype', persistOnStart = true): void {
+  startRun(training: TrainingPlan = DEFAULT_TRAINING, mode: CampaignMode = 'prototype',
+    persistOnStart = true, battlefieldId: BattlefieldId = DEFAULT_BATTLEFIELD): void {
     if (!this.ready) return;
     this.training = { ...DEFAULT_TRAINING };
     this.removeProjectilesAndEnemies();
@@ -347,6 +354,7 @@ export class GameScene extends Phaser.Scene {
     this.overclockMs = 0;
     this.suppliesCollected = 0;
     this.weaponCooldowns = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
+    this.battlefieldId = battlefieldId;
     this.campaign = mode === 'expedition' ? THREE_ACT_BLUEPRINT : PROTOTYPE_CAMPAIGN;
     this.campaignRun = beginCampaign(this.campaign, newRunSeed());
     this.randoms = createRunRandoms(this.campaignRun.seed);
@@ -369,6 +377,8 @@ export class GameScene extends Phaser.Scene {
     this.build = newBuild();
     const storage = getStoragePort();
     const meta = storage ? readMetaProgress(storage) : null;
+    this.weaponFrameRank = meta?.weaponFrameRank ?? 0;
+    this.repairModuleRank = meta?.repairModuleRank ?? 0;
     if (meta) {
       this.build.maxHp += meta.armorRank;
       this.build.hp += meta.armorRank;
@@ -392,8 +402,8 @@ export class GameScene extends Phaser.Scene {
     this.lockedTarget = null;
     this.introFadeMs = 4600;
     this.introHint.setText(mode === 'expedition'
-      ? '三幕远征 · 安全节点自动保存 · 松手展开火力'
-      : '经验自动升级 · 松手展开火力 · 波末选择构筑').setAlpha(1);
+      ? `${getBattlefield(this.battlefieldId).name} · 三幕远征 · 安全节点保存`
+      : `${getBattlefield(this.battlefieldId).name} · 五波封锁 · 自动 XP 成长`).setAlpha(1);
     this.stateLabel.setText('机动射击');
     this.releaseJoystick();
     this.soundFx.unlock();
@@ -411,7 +421,7 @@ export class GameScene extends Phaser.Scene {
   resumeSavedExpedition(value: unknown): boolean {
     const save = parseRunSafeSave(value);
     if (!save || !this.ready) return false;
-    this.startRun(save.training, 'expedition', false);
+    this.startRun(save.training, 'expedition', false, save.battlefieldId);
     const restored = fromCheckpoint(THREE_ACT_BLUEPRINT, save.campaign);
     if (!restored) return false;
     this.campaignRun = restored;
@@ -419,6 +429,8 @@ export class GameScene extends Phaser.Scene {
     restoreRandoms(this.randoms, save.randoms);
     this.runId = save.runId;
     this.heroId = save.heroId;
+    this.weaponFrameRank = save.equipment.weaponFrameRank;
+    this.repairModuleRank = save.equipment.repairModuleRank;
     this.build = { ...save.build, weapons: [...save.build.weapons], selected: [...save.build.selected] };
     this.growth = { ...save.growth, weaponLevels: { ...save.growth.weaponLevels },
       evolved: { ...save.growth.evolved } };
@@ -445,7 +457,9 @@ export class GameScene extends Phaser.Scene {
   private saveSafeNode(): boolean {
     if (this.campaign.id !== THREE_ACT_BLUEPRINT.id) return true;
     const save: RunSafeSave = {
-      schemaVersion: 1, runId: this.runId, heroId: this.heroId,
+      schemaVersion: 2, runId: this.runId, heroId: this.heroId,
+      battlefieldId: this.battlefieldId,
+      equipment: { weaponFrameRank: this.weaponFrameRank, repairModuleRank: this.repairModuleRank },
       savedAtMs: Date.now(), campaign: toCheckpoint(this.campaignRun),
       build: { ...this.build, weapons: [...this.build.weapons], selected: [...this.build.selected] },
       growth: { ...this.growth, weaponLevels: { ...this.growth.weaponLevels },
@@ -495,7 +509,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (cardId === 'salvage') this.salvageKills = 0;
     this.routePressureMultiplier = 1; // The previous route challenge ends with this encounter.
-    this.advanceAfterDecision(chosen.name, 1);
+    this.advanceAfterDecision(chosen.name, 1 + this.repairModuleRank);
     return true;
   }
 
@@ -915,7 +929,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnPack(count: number, radius: number): void {
-    const wave = this.currentStage.encounter.wave;
+    const wave = battlefieldWave(this.battlefieldId, this.currentStage.encounter.wave);
     const heading = Number.isFinite(this.movementHeading) ? this.movementHeading
       : this.randoms.combat.next() * Math.PI * 2;
     const sector = heading + (this.randoms.combat.next() - 0.5) * 0.55;
@@ -1709,6 +1723,7 @@ export class GameScene extends Phaser.Scene {
       campaignId: this.campaignRun.campaignId,
       completedStages: victory ? this.currentStage.total : this.campaignRun.stageIndex,
       kills: this.kills, elapsedMs: this.timeMs, victory,
+      zoneId: this.battlefieldId,
     }) : null;
     this.settlementSaved = payout !== null;
     // Never discard a recoverable long-run checkpoint when war data did not
@@ -1727,6 +1742,10 @@ export class GameScene extends Phaser.Scene {
       totalStages: this.currentStage.total, actTitle: this.currentStage.actTitle,
       warDataEarned: payout?.earned ?? 0, totalWarData: meta?.warData ?? 0,
       armorRank: meta?.armorRank ?? 0, settlementSaved: this.settlementSaved,
+      battlefieldId: this.battlefieldId,
+      materialId: getBattlefield(this.battlefieldId).resource,
+      materialEarned: payout?.materialEarned ?? 0,
+      totalMaterial: meta?.[getBattlefield(this.battlefieldId).resource] ?? 0,
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
