@@ -99,10 +99,13 @@ test('kill XP auto-levels without a modal; a weapon is unlocked by a legal encou
   const decision = world.decision;
   assert.equal(decision?.kind, 'card');
   if (decision?.kind !== 'card') throw new Error('expected a card offer');
-  const arc = decision.options.findIndex(option => option.id === 'arc-kit');
-  assert.ok(arc >= 0);
-  assert.equal(world.chooseDecision(arc), true);
-  assert.equal(world.state.arcUnlocked, true);
+  const weaponIndex = decision.options.findIndex(option => option.weapon && option.weapon !== 'rifle');
+  assert.ok(weaponIndex >= 0, 'early reward must offer a real installed weapon driver');
+  const weapon = decision.options[weaponIndex].weapon!;
+  assert.equal(world.chooseDecision(weaponIndex), true);
+  assert.ok(world.state.weapons.includes(weapon), 'the installed weapon is now playable');
+  assert.equal(world.state.weaponLevels[weapon], 2, 'new weapon starts with main-M5 calibration');
+  assert.equal(world.state.arcUnlocked, weapon === 'arc');
 });
 test('prototype encounter pauses for a three-card decision and advances only after selection', () => {
   const world = new PocWorld();
@@ -163,4 +166,71 @@ test('expedition PoC is selectable and really reaches a route decision in Cocos 
   assert.equal(world.chooseDecision(0), true);
   assert.equal(world.state.wave, 3);
   assert.equal(world.state.campaignId, 'k09-three-act-draft');
+});
+
+test('main M5 four-weapon core supports real buckshot and continuous flame drivers', async () => {
+  const { CocosRunController } = await import('../clients/cocos/assets/scripts/m6/runController.ts');
+  for (const weapon of ['scatter','flame'] as const) {
+    // Reward RNG is isolated from combat RNG; find a seed which legally offers
+    // this historical weapon instead of mutating private build state.
+    let seed = -1;
+    for (let candidate = 1; candidate <= 300; candidate++) {
+      const run = new CocosRunController({
+        seed: candidate, runId: 'weapon-seed-' + String(candidate).padStart(4, '0'),
+        playableWeapons: ['rifle','scatter','arc','flame'],
+      });
+      run.tick(run.currentWave.durationMs);
+      if (run.snapshot().decision?.kind === 'card'
+        && run.snapshot().decision?.options.some(c => c.weapon === weapon)) {
+        seed = candidate;
+        break;
+      }
+    }
+    assert.ok(seed > 0, 'expected early legal card for ' + weapon);
+    const world = new PocWorld(450,800,seed);
+    tickDuration(world,world.currentWaveDurationMs,1,0,true);
+    const decision = world.decision;
+    assert.equal(decision?.kind,'card');
+    if (decision?.kind !== 'card') throw new Error('expected card picker');
+    const index = decision.options.findIndex(c => c.weapon === weapon);
+    assert.ok(index >= 0, 'reward stream preserved after combat kills for ' + weapon);
+    assert.equal(world.chooseDecision(index),true);
+    assert.ok(world.state.weapons.includes(weapon));
+    assert.equal(world.state.weaponLevels[weapon],2);
+    world.state.enemies.length=0;
+    world.state.bullets.length=0;
+    world.state.lightning.length=0;
+    world.spawnEnemyAt(world.state.player.x+90,world.state.player.y,'armored');
+    const enemy = world.state.enemies[0];
+    const startHp=enemy.hp;
+    world.advance(POC.fixedStepMs,{x:0,y:0});
+    if(weapon==='scatter'){
+      assert.ok(world.state.bullets.filter(b=>b.source==='scatter').length>=5,
+        'scatter attack emitted the actual five-pellet salvo');
+    }else{
+      assert.ok(world.state.lightning.some(line=>line.kind==='flame'),
+        'flame emitted real area attack feedback');
+      assert.ok(enemy.hp<startHp,'flame cone applied damage directly to a target');
+    }
+  }
+});
+
+test('kill XP upgrades actual rifle projectiles while no mid-wave modal interrupts combat', () => {
+  const world=new PocWorld(450,800,111);
+  for(let i=0;i<85;i++){
+    world.state.enemies.length=0;
+    world.spawnEnemyAt(125,40,'grunt');
+    world.state.enemies[0].hp=0;
+    world.advance(POC.fixedStepMs,{x:0,y:0});
+  }
+  assert.equal(world.state.weaponLevels.rifle,5);
+  assert.equal(world.decision,null);
+  world.state.enemies.length=0;
+  world.state.bullets.length=0;
+  world.spawnEnemyAt(145,0,'armored');
+  for(let i=0;i<30&&!world.state.bullets.some(b=>b.source==='rifle');i++)
+    world.advance(POC.fixedStepMs,{x:0,y:0});
+  const bullet=world.state.bullets.find(b=>b.source==='rifle');
+  assert.ok(bullet,'rifle must remain firing while auto-leveled');
+  assert.ok(bullet.damage>28,'M5 weapon rank modifies actual bullet damage');
 });
