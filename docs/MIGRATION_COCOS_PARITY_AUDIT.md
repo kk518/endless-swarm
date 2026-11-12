@@ -11,7 +11,7 @@ Cocos 迁移已经完成真实 Creator 3.8.8 Web Mobile 构建和浏览器触控
 
 当前代码分成三个层次，必须明确区分：
 
-1. **已复用的规则模块**：progression、runRandom、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime 七个模块在 Cocos assets/scripts/m6 中与 main 的 src/game 对应文件逐字节一致，CI 有 check-m6-copy.mjs 防漂移。
+1. **已复用的规则模块**：combat、progression、arsenal、autoGrowth、streak、supplies、pressure、visibility、campaignDirector、routeDecisions、runRandom、runSafeSave、platformStorage、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime 共 18 个模块在 Cocos assets/scripts/m6 中与 main 的 src/game 对应文件逐字节一致，CI 有 check-m6-copy.mjs 防漂移。
 2. **Cocos 运行时实际接线**：PocWorld 仍是约 100 秒的五波简化战斗；只有步枪、电弧和凯恩轨道炮的 PoC 攻击路径，没有完整的主线战斗状态机、卡牌选择、四武器成长/进化或三幕流程。
 3. **浏览器 Canvas 预览专属功能**：clients/cocos-preview 的 m6Ui.ts 已接入战区选择、预览独立存档、资源结算和工坊购买；这些 DOM/localStorage 页面并不是 Cocos Creator 场景，不能作为 Cocos 或微信端已完成的证据。
 
@@ -57,7 +57,7 @@ Cocos 迁移已经完成真实 Creator 3.8.8 Web Mobile 构建和浏览器触控
 - 局外与恢复：battlefields、metaProgression、runSafeSave、platformStorage。
 - 表现边界：Art、Sound、GameScene 中的 Phaser 对象和 DOM UI 不直接复制；应通过 Cocos Presenter、Input、Audio、Storage、UI Adapter 重建。
 
-现有七个镜像模块保持 main 为唯一权威来源。若 Cocos Creator 要求 assets/scripts 内存在源码副本，则必须通过同步脚本和字节级校验生成，不允许人工维护两套规则。
+现有十八个镜像模块保持 main 为唯一权威来源。11 个此前缺失的纯 TypeScript 模块已在本轮补入 Cocos assets/scripts/m6，并扩展字节级同步脚本与回归测试；这完成的是源码镜像，不代表 PocWorld 已调用全部规则。若 Cocos Creator 要求 assets/scripts 内存在源码副本，则必须通过同步脚本和字节级校验生成，不允许人工维护两套规则。
 
 ## 4. 迁移执行顺序
 
@@ -67,9 +67,9 @@ Cocos 迁移已经完成真实 Creator 3.8.8 Web Mobile 构建和浏览器触控
 - 保留 PR #15 原有提交历史，不覆盖 main，不合并 PR，不改动现有 /swarm/ 生产部署。
 - 更新迁移状态文档和本审计表，后续每完成一个系统都更新证据。
 
-### P1：完整 Core 规则进入 Cocos 工程
+### P1：完整 Core 规则进入 Cocos 工程（源码镜像已补齐，运行时接线未完成）
 
-按主线逐项接入纯 TypeScript 模块：combat、progression、arsenal、autoGrowth、streak、supplies、pressure、visibility、campaignDirector、routeDecisions、runRandom、runSafeSave、metaProgression、battlefields、platformStorage、contentCatalog、heroRuntime、weaponRuntime。
+已将主线 18 个引擎无关模块镜像到 Cocos assets/scripts/m6，并把 scripts/check-m6-copy.mjs 与 cocosM6Bridge.test.ts 扩展到全部 18 个模块。下一步要建立稳定的 Core API 和可序列化状态，再逐项接入：combat、progression、arsenal、autoGrowth、streak、supplies、pressure、visibility、campaignDirector、routeDecisions、runRandom、runSafeSave、metaProgression、battlefields、platformStorage、contentCatalog、heroRuntime、weaponRuntime。
 
 先建立稳定的 Core API 和可序列化状态；不把 Phaser GameScene 搬进 Cocos，也不允许 Cocos UI 自己计算奖励、阶段或经济。
 
