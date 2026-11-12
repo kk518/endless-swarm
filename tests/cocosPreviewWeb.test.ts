@@ -36,5 +36,6 @@ test('safe encounter decisions have real selectable UI in both preview and Creat
   assert.match(preview, /decisionOverlay\.hidden = !decision/);
   assert.match(creator, /this\.world\.chooseDecision\(index\)/);
   assert.match(creator, /DecisionCardLabel/);
-  assert.doesNotMatch(creator, /const decision = this\.world\.decision;[\s\S]*const decision = this\.world\.decision;/);
+  // One in touch handling and one in paint: no duplicate binding inside paint.
+  assert.equal((creator.match(/const decision = this\.world\.decision;/g) ?? []).length, 2);
 });
