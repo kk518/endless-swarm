@@ -11,11 +11,13 @@ import {
 } from '../../cocos/assets/scripts/m6/metaProgression.ts';
 import { newRunSeed } from '../../cocos/assets/scripts/m6/runRandom.ts';
 import { PocWorld } from '../../cocos/assets/scripts/PocWorld.ts';
+import type { CampaignMode } from '../../cocos/assets/scripts/m6/runController.ts';
 import { POC_CATALOG, POC_PLAYABLE_HEROES, type PocHeroId } from '../../cocos/assets/scripts/PocRoster.ts';
 
 const STORAGE_PREFIX = 'cocos-preview-m6:';
 const ZONE_KEY = STORAGE_PREFIX + 'zone';
 const HERO_KEY = STORAGE_PREFIX + 'hero';
+const MODE_KEY = STORAGE_PREFIX + 'mode';
 const storage: MetaStorage = {
   getItem(key: string): string | null {
     try { return localStorage.getItem(STORAGE_PREFIX + key); }
@@ -43,6 +45,10 @@ function initialHero(): PocHeroId {
     return stored === 'kane' ? 'kane' : 'marine';
   } catch { return 'marine'; }
 }
+function initialMode(): CampaignMode {
+  try { return localStorage.getItem(MODE_KEY) === 'expedition' ? 'expedition' : 'prototype'; }
+  catch { return 'prototype'; }
+}
 function runId(): string {
   // Non-financial local demo ID; the M6 settlement ledger prevents repeat claims.
   const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -54,6 +60,7 @@ function runId(): string {
 export class PreviewOps {
   private zone: BattlefieldId = initialZone();
   private heroId: PocHeroId = initialHero();
+  private mode: CampaignMode = initialMode();
   private currentRunId = '';
   private settled = false;
   private report = '结算后自动写入预览版独立存档；升级下一局生效。';
@@ -63,6 +70,8 @@ export class PreviewOps {
     el<HTMLButtonElement>('zone-nest').addEventListener('click', () => this.selectZone('infested-nest', onRestart));
     el<HTMLButtonElement>('hero-marine').addEventListener('click', () => this.selectHero('marine', onRestart));
     el<HTMLButtonElement>('hero-kane').addEventListener('click', () => this.selectHero('kane', onRestart));
+    el<HTMLButtonElement>('mode-prototype').addEventListener('click', () => this.selectMode('prototype', onRestart));
+    el<HTMLButtonElement>('mode-expedition').addEventListener('click', () => this.selectMode('expedition', onRestart));
     el<HTMLButtonElement>('buy-armor').addEventListener('click', () => this.purchase('armor'));
     el<HTMLButtonElement>('buy-frame').addEventListener('click', () => this.purchase('weapon-frame'));
     el<HTMLButtonElement>('buy-repair').addEventListener('click', () => this.purchase('repair-module'));
@@ -88,6 +97,17 @@ export class PreviewOps {
     this.report = '已切换出战英雄：' + POC_CATALOG.heroes.get(next)!.name;
     this.render();
   }
+  private selectMode(next: CampaignMode, onRestart: () => void): void {
+    if (next === this.mode) return;
+    this.mode = next;
+    try { localStorage.setItem(MODE_KEY, next); }
+    catch { this.report = '出击模式只在当前页面有效：存储不可写。'; }
+    onRestart();
+    this.report = next === 'expedition'
+      ? '已切换到三幕远征：九段、六次选卡、两次风险路线（迁移测试版）。'
+      : '已切换到五波封锁模式。';
+    this.render();
+  }
   createWorld(): PocWorld {
     this.currentRunId = runId();
     this.settled = false;
@@ -96,14 +116,14 @@ export class PreviewOps {
       armorRank: meta?.armorRank ?? 0,
       weaponFrameRank: meta?.weaponFrameRank ?? 0,
       repairModuleRank: meta?.repairModuleRank ?? 0,
-    }, this.heroId);
+    }, this.heroId, this.mode);
   }
   settleIfOver(world: PocWorld): void {
     if (!world.state.over || this.settled) return;
     this.settled = true;
     const s = world.state;
     const result = settleStoredRun(storage, {
-      runId: this.currentRunId, campaignId: 'cocos-migration-poc',
+      runId: this.currentRunId, campaignId: s.campaignId,
       completedStages: Math.max(0, s.wave - 1 + Number(s.won)),
       kills: s.kills, elapsedMs: Math.floor(s.elapsedMs),
       victory: s.won, zoneId: this.zone,
@@ -142,6 +162,14 @@ export class PreviewOps {
       button.classList.toggle('active', this.zone === zone.id);
       button.setAttribute('aria-pressed', String(this.zone === zone.id));
     }
+    for (const mode of ['prototype', 'expedition'] as const) {
+      const button = el<HTMLButtonElement>('mode-' + mode);
+      button.classList.toggle('active', this.mode === mode);
+      button.setAttribute('aria-pressed', String(this.mode === mode));
+    }
+    el('mode-current').textContent = this.mode === 'expedition'
+      ? '当前模式：三幕远征 · 九遭遇 · 六卡二路线'
+      : '当前模式：五波封锁 · 四次波末选卡';
     for (const heroId of POC_PLAYABLE_HEROES) {
       const button = el<HTMLButtonElement>('hero-' + heroId);
       button.classList.toggle('active', this.heroId === heroId);

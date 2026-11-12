@@ -147,3 +147,20 @@ test('reset clears modern wave/XP/lightning/boss state without losing starting r
   assert.equal(world.state.won, false);
   assert.equal(world.state.enemies.length, 1);
 });
+
+test('expedition PoC is selectable and really reaches a route decision in Cocos core', () => {
+  const world = new PocWorld(450, 800, 518, 'steel-ruins', {}, 'marine', 'expedition');
+  assert.equal(world.state.mode, 'expedition');
+  assert.equal(world.state.totalStages, 9);
+  tickDuration(world, world.currentWaveDurationMs, 1, 0, true);
+  assert.equal(world.decision?.kind, 'card');
+  assert.equal(world.chooseDecision(0), true);
+  tickDuration(world, world.currentWaveDurationMs, 1, 0, true);
+  const fork = world.decision;
+  assert.equal(fork?.kind, 'route');
+  if (fork?.kind !== 'route') throw new Error('expected the genuine M6 fork');
+  assert.equal(fork.options.length, 2);
+  assert.equal(world.chooseDecision(0), true);
+  assert.equal(world.state.wave, 3);
+  assert.equal(world.state.campaignId, 'k09-three-act-draft');
+});

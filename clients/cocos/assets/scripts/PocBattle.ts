@@ -9,6 +9,7 @@ import {
 } from 'cc';
 import { PocWorld, normalizedMove, type Vec2 } from './PocWorld';
 import { type PocHeroId } from './PocRoster.ts';
+import type { CampaignMode } from './m6/runController.ts';
 
 const { ccclass } = _decorator;
 const COL = {
@@ -30,6 +31,7 @@ const COL = {
 export class PocBattle extends Component {
   private world!: PocWorld;
   private selectedHero: PocHeroId = 'marine';
+  private selectedMode: CampaignMode = 'prototype';
   private graphic!: Graphics;
   private hud!: Label;
   private optionLabels: Label[] = [];
@@ -45,7 +47,7 @@ export class PocBattle extends Component {
     const size = view.getVisibleSize();
     this.screenWidth = size.width;
     this.screenHeight = size.height;
-    this.world = new PocWorld(size.width, size.height, 518, undefined, {}, this.selectedHero);
+    this.world = new PocWorld(size.width, size.height, 518, undefined, {}, this.selectedHero, this.selectedMode);
     this.graphic = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
     const hudNode = new Node('PocHUD');
     this.node.addChild(hudNode);
@@ -78,6 +80,7 @@ export class PocBattle extends Component {
         hp: this.world.state.player.hp, enemies: this.world.state.enemies.length,
         kills: this.world.state.kills, wave: this.world.state.wave,
         level: this.world.state.level, over: this.world.state.over,
+        mode: this.world.state.mode, totalStages: this.world.state.totalStages,
         decision: this.world.decision?.kind ?? null,
       }),
     };
@@ -133,8 +136,9 @@ export class PocBattle extends Component {
       return; // combat input stays locked until an explicit safe-node decision
     }
     if (p.y > this.screenHeight * 0.65) {
-      // Top-right HUD tap changes the playable hero in the Cocos scene.
-      if (p.x > this.screenWidth * 0.64) this.switchHero();
+      // Temporary migration controls: left switches 5-wave / 3-act, right hero.
+      if (p.x < this.screenWidth * 0.36) this.switchMode();
+      else if (p.x > this.screenWidth * 0.64) this.switchHero();
       return;
     } // thumb zone near screen bottom
     this.activeTouch = event.getID();
@@ -160,6 +164,7 @@ export class PocBattle extends Component {
   private keyDown(event: EventKeyboard): void {
     this.pressed.add(event.keyCode);
     if (event.keyCode === KeyCode.KEY_H) this.switchHero();
+    if (event.keyCode === KeyCode.KEY_M) this.switchMode();
     if (event.keyCode === KeyCode.KEY_R) {
       this.world.reset();
       this.releaseInput();
@@ -167,7 +172,12 @@ export class PocBattle extends Component {
   }
   private switchHero(): void {
     this.selectedHero = this.selectedHero === 'marine' ? 'kane' : 'marine';
-    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero);
+    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero, this.selectedMode);
+    this.releaseInput();
+  }
+  private switchMode(): void {
+    this.selectedMode = this.selectedMode === 'prototype' ? 'expedition' : 'prototype';
+    this.world = new PocWorld(this.screenWidth, this.screenHeight, 518, undefined, {}, this.selectedHero, this.selectedMode);
     this.releaseInput();
   }
   private keyUp(event: EventKeyboard): void { this.pressed.delete(event.keyCode); }
@@ -277,10 +287,11 @@ export class PocBattle extends Component {
         ? (decision.kind === 'card' ? '遭遇结束 · 选择战术卡' : '路线分岔 · 选择前进路线')
           + '\\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
           + '\\n点击下方对应选项继续'
-        : '无尽虫潮 · ' + this.world.heroName + ' · 波次 ' + s.wave + '/5 · Lv.' + s.level
+        : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
+          + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages + ' · Lv.' + s.level
           + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
           + (s.arcUnlocked ? ' · 电弧已解锁' : '')
           + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
-          + ' · 点右上角切换英雄 / H';
+          + ' · 左上角切换模式 / M · 右上角换英雄 / H';
   }
 }

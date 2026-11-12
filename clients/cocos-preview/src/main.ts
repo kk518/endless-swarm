@@ -333,10 +333,11 @@ function ui(): void {
   const s = world.state;
   hpFill.style.width = Math.max(0, s.player.hp / s.player.maxHp * 100) + '%';
   killCount.textContent = String(s.kills).padStart(3,'0');
-  waveCounter.textContent = 'WAVE ' + String(s.wave).padStart(2,'0') + ' / 05';
+  waveCounter.textContent = (s.mode === 'expedition' ? 'EXPEDITION ' : 'WAVE ')
+    + String(s.wave).padStart(2,'0') + ' / ' + String(s.totalStages).padStart(2,'0');
   playerLevel.textContent = 'LV.' + String(s.level).padStart(2,'0')
     + ' · XP ' + s.xp + '/' + s.xpToNext;
-  arcUnlock.textContent = s.arcUnlocked ? '⚡ 电弧线圈 · 连锁攻击已激活' : '电弧线圈 · LV.3 解锁';
+  arcUnlock.textContent = s.arcUnlocked ? '⚡ 电弧线圈 · 连锁攻击已激活' : '电弧线圈 · 从波末战术卡安装';
   arcUnlock.classList.toggle('unlocked',s.arcUnlocked);
   const isDeployed = s.player.deployed;
   // Hero-specific attacks are resolved in the shared world, not this Canvas renderer.

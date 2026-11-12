@@ -39,3 +39,14 @@ test('safe encounter decisions have real selectable UI in both preview and Creat
   // One in touch handling and one in paint: no duplicate binding inside paint.
   assert.equal((creator.match(/const decision = this\.world\.decision;/g) ?? []).length, 2);
 });
+
+test('both migration clients expose the genuine 5-wave/9-stage campaign choice', () => {
+  const html = read('clients/cocos-preview/index.html');
+  const ops = read('clients/cocos-preview/src/m6Ui.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  assert.match(html, /id="mode-expedition"/);
+  assert.match(ops, /this\.selectMode\('expedition'/);
+  assert.match(ops, /this\.heroId, this\.mode/);
+  assert.match(creator, /private switchMode\(\)/);
+  assert.match(creator, /KeyCode\.KEY_M/);
+});

@@ -36,6 +36,9 @@ export interface PocLightning {
 }
 export interface PocState {
   heroId: PocHeroId;
+  mode: CampaignMode;
+  campaignId: string;
+  totalStages: number;
   player: PocPlayer;
   enemies: PocEnemy[];
   bullets: PocBullet[];
@@ -112,7 +115,7 @@ function clamp(x: number, low: number, high: number): number {
 }
 function emptyState(): PocState {
   return {
-    heroId: 'marine',
+    heroId: 'marine', mode: 'prototype', campaignId: '', totalStages: 5,
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], bullets: [], lightning: [],
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
@@ -238,6 +241,9 @@ export class PocWorld {
   private syncRunState(): void {
     const run = this.runController.snapshot();
     this.state.elapsedMs = run.timeMs;
+    this.state.mode = run.mode;
+    this.state.campaignId = run.campaign.campaignId;
+    this.state.totalStages = run.stage.total;
     this.state.wave = run.stage.index + 1;
     this.state.level = run.growth.level;
     this.state.xp = run.growth.xp;
