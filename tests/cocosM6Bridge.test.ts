@@ -89,14 +89,30 @@ test('PoC simulator accepts M6 battlefield and permanent equipment rank inputs',
 test('zone choice influences live spawned enemy distribution via real M6 mix', () => {
   const steel = new PocWorld(450, 800, 518, 'steel-ruins');
   const nest = new PocWorld(450, 800, 518, 'infested-nest');
-  for(const world of [steel, nest]){
-    world.state.player.hp = 1000;
-    world.state.player.maxHp = 1000;
-    world.state.wave = 3;
-    world.state.elapsedMs = 2*POC.waveDurationMs + 1;
-    for(let i=0;i<600;i++) world.advance(POC.fixedStepMs, {x:0, y:0});
+  const histories: string[][] = [];
+  for (const world of [steel, nest]) {
+    // Reach stage 3 through REAL encounter decisions. Mutating the public
+    // rendering snapshot can no longer move the canonical Campaign Director.
+    for (let stage = 0; stage < 2; stage++) {
+      const frames = Math.ceil(world.currentWaveDurationMs / POC.fixedStepMs) + 2;
+      for (let i = 0; i < frames && !world.decision && !world.state.over; i++) {
+        world.heal(1);
+        world.advance(POC.fixedStepMs, { x: 1, y: 0 });
+      }
+      assert.equal(world.decision?.kind, 'card');
+      assert.equal(world.chooseDecision(0), true);
+    }
+    assert.equal(world.state.wave, 3);
+    const seen: string[] = [];
+    for (let i = 0; i < 700 && !world.state.over; i++) {
+      world.heal(1);
+      world.advance(POC.fixedStepMs, { x: 1, y: 0 });
+      if (i % 50 === 0) seen.push(...world.state.enemies.map(e => e.kind ?? 'grunt'));
+    }
+    histories.push(seen);
   }
-  assert.notDeepEqual(steel.state.enemies.map(e=>e.kind), nest.state.enemies.map(e=>e.kind));
+  assert.ok(histories.every(history => history.length > 0));
+  assert.notDeepEqual(histories[0], histories[1]);
 });
 test('preview has a private meta storage namespace separate from production H5', () => {
   const source = readFileSync('clients/cocos-preview/src/m6Ui.ts','utf8');
