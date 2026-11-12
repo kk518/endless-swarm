@@ -1,25 +1,43 @@
 /**
- * Cocos migration PoC: pure TypeScript battle rules.
- * This file deliberately imports NO 'cc', Phaser, browser DOM, or WeChat API.
- * Node tests import this same file; Cocos imports it from PocBattle.
- *
- * IMPORTANT: this is a minimal implementation for engine/platform proof,
- * not a replacement for the production M5/M6 combat rules. Full parity is G2/G3.
+ * 《无尽虫潮》migration vertical slice: deterministic, engine-independent combat.
+ * This source is imported by BOTH the Cocos Creator component and the browser
+ * preview. It does NOT yet implement full M6 campaign/hero/meta progression.
+ * No imports from cc, Phaser, DOM or wx are allowed.
  */
 export interface Vec2 { x: number; y: number }
+export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'boss';
 export interface PocPlayer extends Vec2 {
   hp: number;
   stationaryMs: number;
   deployed: boolean;
 }
-export interface PocEnemy extends Vec2 { id: number; hp: number }
-export interface PocBullet extends Vec2 { vx: number; vy: number; remainingMs: number }
+export interface PocEnemy extends Vec2 {
+  id: number;
+  hp: number;
+  /** Optional only to keep old nearestEnemy callers source-compatible. */
+  kind?: PocEnemyKind;
+  maxHp?: number;
+}
+export interface PocBullet extends Vec2 {
+  vx: number; vy: number; remainingMs: number;
+}
+export interface PocLightning {
+  fromX: number; fromY: number; toX: number; toY: number; remainingMs: number;
+}
 export interface PocState {
   player: PocPlayer;
   enemies: PocEnemy[];
   bullets: PocBullet[];
+  lightning: PocLightning[];
   kills: number;
   elapsedMs: number;
+  wave: number;
+  level: number;
+  xp: number;
+  xpToNext: number;
+  arcUnlocked: boolean;
+  bossSpawned: boolean;
+  won: boolean;
   over: boolean;
 }
 export const POC = {
@@ -31,9 +49,11 @@ export const POC = {
   deployDelayMs: 800,
   deployDamageMultiplier: 1.35,
   deployRateMultiplier: 1.25,
-  maxEnemies: 9,
+  maxEnemies: 40,
   enemySpeed: 46,
   enemySpawnMs: 1750,
+  waveDurationMs: 20000,
+  maxLevel: 12,
 } as const;
 
 export function normalizedMove(x: number, y: number): Vec2 {
@@ -59,17 +79,42 @@ export function nearestEnemy(origin: Vec2, enemies: readonly PocEnemy[], range: 
 export function deploymentReady(stationaryMs: number, moving: boolean): boolean {
   return !moving && stationaryMs >= POC.deployDelayMs;
 }
+export function xpRequired(level: number): number {
+  return 6 + 3 * Math.max(1, Math.floor(level));
+}
+export function enemyStats(kind: PocEnemyKind): { hp: number; speed: number; contactRadius: number; xp: number } {
+  switch (kind) {
+    case 'grunt': return { hp: 64, speed: 46, contactRadius: 25, xp: 1 };
+    case 'leaper': return { hp: 42, speed: 88, contactRadius: 22, xp: 1 };
+    case 'armored': return { hp: 180, speed: 27, contactRadius: 31, xp: 3 };
+    case 'boss': return { hp: 1350, speed: 28, contactRadius: 50, xp: 20 };
+  }
+}
 function clamp(x: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, x));
 }
+function emptyState(): PocState {
+  return {
+    player: { x: 0, y: 0, hp: 6, stationaryMs: 0, deployed: false },
+    enemies: [], bullets: [], lightning: [],
+    kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
+    xpToNext: xpRequired(1), arcUnlocked: false, bossSpawned: false,
+    won: false, over: false,
+  };
+}
 
-/** Fixed step, seeded spawn, one rifle, one enemy class, no presentation dependencies. */
+/**
+ * A small reproducible "five-wave / two weapon" combat slice.
+ * There are NO forced XP choice modals; progression is deterministic and
+ * intentionally simpler than M6's future hero/weapon progression contract.
+ */
 export class PocWorld {
   readonly width: number;
   readonly height: number;
   readonly state: PocState;
   private accumulatorMs = 0;
   private fireCooldownMs = 0;
+  private arcCooldownMs = 0;
   private spawnCooldownMs = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
   private nextId = 1;
@@ -81,32 +126,28 @@ export class PocWorld {
     this.height = height;
     this.initialSeed = seed >>> 0;
     this.randomState = this.initialSeed;
-    this.state = { player: { x: 0, y: 0, hp: 6, stationaryMs: 0, deployed: false },
-      enemies: [], bullets: [], kills: 0, elapsedMs: 0, over: false };
+    this.state = emptyState();
     this.spawnEnemyAt(130, 60);
   }
   reset(): void {
-    this.state.player = { x: 0, y: 0, hp: 6, stationaryMs: 0, deployed: false };
-    this.state.enemies = [];
-    this.state.bullets = [];
-    this.state.kills = 0;
-    this.state.elapsedMs = 0;
-    this.state.over = false;
+    Object.assign(this.state, emptyState());
     this.accumulatorMs = 0;
     this.fireCooldownMs = 0;
+    this.arcCooldownMs = 0;
     this.spawnCooldownMs = POC.enemySpawnMs;
     this.hurtCooldownMs = 0;
     this.nextId = 1;
     this.randomState = this.initialSeed;
     this.spawnEnemyAt(130, 60);
   }
-  /** Pause/resume must discard frame debt to prevent catch-up damage/bullets. */
+  /** Pause/resume must discard frame debt to prevent lethal catch-up damage. */
   discardFrameDebt(): void { this.accumulatorMs = 0; }
-  spawnEnemyAt(x: number, y: number): void {
+  spawnEnemyAt(x: number, y: number, kind: PocEnemyKind = 'grunt'): void {
     if (this.state.enemies.length >= POC.maxEnemies || this.state.over) return;
-    this.state.enemies.push({ id: this.nextId++, x, y, hp: 64 });
+    const stats = enemyStats(kind);
+    this.state.enemies.push({ id: this.nextId++, kind, x, y, hp: stats.hp, maxHp: stats.hp });
   }
-  /** At most five sim steps per render frame; old backlog is discarded. */
+  /** Stable fixed-step update; backlog after a stall is intentionally dropped. */
   advance(frameMs: number, intent: Vec2): void {
     if (this.state.over) return;
     if (!Number.isFinite(frameMs) || frameMs <= 0) return;
@@ -121,36 +162,83 @@ export class PocWorld {
     this.randomState = (Math.imul(1664525, this.randomState) + 1013904223) >>> 0;
     return this.randomState / 0x100000000;
   }
-  private step(ms: number, move: Vec2): void {
+  private addXp(amount: number): void {
+    const s = this.state;
+    s.xp += amount;
+    while (s.level < POC.maxLevel && s.xp >= s.xpToNext) {
+      s.xp -= s.xpToNext;
+      s.level++;
+      s.xpToNext = xpRequired(s.level);
+      if (s.level >= 3) s.arcUnlocked = true; // independent auto-fire lightning coil
+    }
+    if (s.level >= POC.maxLevel) s.xp = Math.min(s.xp, s.xpToNext);
+  }
+  private spawnWaveEnemy(player: PocPlayer): void {
+    const wave = this.state.wave;
+    const roll = this.nextRandom();
+    const kind: PocEnemyKind =
+      wave >= 4 && roll < .22 ? 'armored'
+      : wave >= 2 && roll < .50 ? 'leaper'
+      : 'grunt';
+    const angle = this.nextRandom() * Math.PI * 2;
+    // Keep spawn points off the player's feet; clip to readable arena.
+    const dx = Math.cos(angle) * 185, dy = Math.sin(angle) * 215;
+    const x = clamp(player.x + dx, -this.width / 2 + 20, this.width / 2 - 20);
+    const y = clamp(player.y + dy, -this.height / 2 + 20, this.height / 2 - 20);
+    this.spawnEnemyAt(x, y, kind);
+  }
+  private resolveDeaths(): void {
     const state = this.state;
-    const player = state.player;
+    for (let i = state.enemies.length - 1; i >= 0; i--) {
+      const e = state.enemies[i];
+      if (e.hp > 0) continue;
+      state.enemies.splice(i, 1);
+      state.kills++;
+      this.addXp(enemyStats(e.kind ?? 'grunt').xp);
+      if (e.kind === 'boss') { state.won = true; state.over = true; }
+    }
+  }
+  private step(ms: number, move: Vec2): void {
+    const state = this.state, player = state.player;
     state.elapsedMs += ms;
     const seconds = ms / 1000;
     const moving = Math.hypot(move.x, move.y) > 0.07;
-    player.x = clamp(player.x + move.x * POC.moveSpeed * seconds, -this.width / 2 + 26, this.width / 2 - 26);
-    player.y = clamp(player.y + move.y * POC.moveSpeed * seconds, -this.height / 2 + 56, this.height / 2 - 90);
+    player.x = clamp(player.x + move.x * POC.moveSpeed * seconds,
+      -this.width / 2 + 26, this.width / 2 - 26);
+    player.y = clamp(player.y + move.y * POC.moveSpeed * seconds,
+      -this.height / 2 + 56, this.height / 2 - 90);
     player.stationaryMs = moving ? 0 : player.stationaryMs + ms;
     player.deployed = deploymentReady(player.stationaryMs, moving);
     this.hurtCooldownMs = Math.max(0, this.hurtCooldownMs - ms);
-
-    this.spawnCooldownMs -= ms;
-    if (this.spawnCooldownMs <= 0) {
-      this.spawnCooldownMs += POC.enemySpawnMs;
-      const angle = this.nextRandom() * Math.PI * 2;
-      this.spawnEnemyAt(
-        clamp(player.x + Math.cos(angle) * 180, -this.width / 2 + 15, this.width / 2 - 15),
-        clamp(player.y + Math.sin(angle) * 220, -this.height / 2 + 15, this.height / 2 - 15),
-      );
+    for (let i = state.lightning.length - 1; i >= 0; i--) {
+      const segment = state.lightning[i];
+      segment.remainingMs -= ms;
+      if (segment.remainingMs <= 0) state.lightning.splice(i, 1);
     }
 
-    for (const enemy of state.enemies) {
-      const dx = player.x - enemy.x, dy = player.y - enemy.y;
+    const nextWave = Math.min(5, 1 + Math.floor(state.elapsedMs / POC.waveDurationMs));
+    if (nextWave > state.wave) state.wave = nextWave;
+    if (state.wave === 5 && !state.bossSpawned) {
+      state.bossSpawned = true;
+      this.spawnEnemyAt(clamp(player.x + 135, -this.width/2+30, this.width/2-30),
+        clamp(player.y + 160, -this.height/2+30, this.height/2-30), 'boss');
+    }
+    this.spawnCooldownMs -= ms;
+    if (this.spawnCooldownMs <= 0) {
+      this.spawnCooldownMs += Math.max(370, POC.enemySpawnMs - (state.wave - 1) * 270);
+      const batch = state.wave >= 4 ? 3 : state.wave >= 2 ? 2 : 1;
+      for (let i = 0; i < batch; i++) this.spawnWaveEnemy(player);
+    }
+
+    for (const e of state.enemies) {
+      const dx = player.x - e.x, dy = player.y - e.y;
       const distance = Math.hypot(dx, dy);
+      const stats = enemyStats(e.kind ?? 'grunt');
       if (distance > 2) {
-        enemy.x += dx / distance * POC.enemySpeed * seconds;
-        enemy.y += dy / distance * POC.enemySpeed * seconds;
+        e.x += dx / distance * stats.speed * seconds;
+        e.y += dy / distance * stats.speed * seconds;
       }
-      if (distance < 25 && this.hurtCooldownMs === 0) {
+      if (distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
         player.hp--;
         this.hurtCooldownMs = 750;
         if (player.hp <= 0) { state.over = true; return; }
@@ -162,33 +250,53 @@ export class PocWorld {
     if (target && this.fireCooldownMs <= 0) {
       const dx = target.x - player.x, dy = target.y - player.y;
       const distance = Math.max(1, Math.hypot(dx, dy));
-      const interval = POC.shotIntervalMs / (player.deployed ? POC.deployRateMultiplier : 1);
+      const rateBonus = 1 + (state.level - 1) * .025;
+      const interval = POC.shotIntervalMs / (rateBonus * (player.deployed ? POC.deployRateMultiplier : 1));
       this.fireCooldownMs = interval;
       state.bullets.push({
         x: player.x, y: player.y,
-        vx: dx / distance * POC.bulletSpeed,
-        vy: dy / distance * POC.bulletSpeed,
+        vx: dx / distance * POC.bulletSpeed, vy: dy / distance * POC.bulletSpeed,
         remainingMs: 800,
       });
     }
 
     for (let i = state.bullets.length - 1; i >= 0; i--) {
       const bullet = state.bullets[i];
-      bullet.x += bullet.vx * seconds; bullet.y += bullet.vy * seconds;
+      bullet.x += bullet.vx * seconds;
+      bullet.y += bullet.vy * seconds;
       bullet.remainingMs -= ms;
       let removed = bullet.remainingMs <= 0;
-      if (!removed) for (const enemy of state.enemies) {
-        if (squaredDistance(bullet, enemy) > 18 * 18) continue;
-        enemy.hp -= 28 * (player.deployed ? POC.deployDamageMultiplier : 1);
+      if (!removed) for (const e of state.enemies) {
+        if (e.hp <= 0 || squaredDistance(bullet, e) > 18 * 18) continue;
+        e.hp -= (28 + 3 * (state.level - 1)) *
+          (player.deployed ? POC.deployDamageMultiplier : 1);
         removed = true;
         break;
       }
       if (removed) state.bullets.splice(i, 1);
     }
-    for (let i = state.enemies.length - 1; i >= 0; i--) {
-      if (state.enemies[i].hp > 0) continue;
-      state.enemies.splice(i, 1);
-      state.kills++;
+
+    if (state.arcUnlocked) {
+      this.arcCooldownMs -= ms;
+      if (this.arcCooldownMs <= 0) {
+        const first = nearestEnemy(player, state.enemies, 250);
+        if (first) {
+          const victims = state.enemies.filter(e => e.hp > 0 && e.id !== first.id
+            && squaredDistance(first, e) < 125 * 125)
+            .sort((a,b) => squaredDistance(first,a) - squaredDistance(first,b));
+          const chain = [first, ...victims.slice(0, state.level >= 6 ? 2 : 1)];
+          let from: Vec2 = player;
+          for (const e of chain) {
+            state.lightning.push({
+              fromX: from.x, fromY: from.y, toX: e.x, toY: e.y, remainingMs: 160,
+            });
+            e.hp -= 19 + (state.level - 1) * 2;
+            from = e;
+          }
+          this.arcCooldownMs = 940 / (player.deployed ? POC.deployRateMultiplier : 1);
+        }
+      }
     }
+    this.resolveDeaths();
   }
 }
