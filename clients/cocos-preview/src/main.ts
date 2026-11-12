@@ -13,6 +13,9 @@ const g = context;
 const world = new PocWorld(450, 800, 518);
 const hpFill = document.querySelector<HTMLElement>('#hp-fill')!;
 const killCount = document.querySelector<HTMLElement>('#kill-count')!;
+const waveCounter = document.querySelector<HTMLElement>('#wave-counter')!;
+const playerLevel = document.querySelector<HTMLElement>('#player-level')!;
+const arcUnlock = document.querySelector<HTMLElement>('#arc-unlock')!;
 const stanceLabel = document.querySelector<HTMLElement>('#stance')!;
 const message = document.querySelector<HTMLElement>('#battle-message')!;
 const endScreen = document.querySelector<HTMLElement>('#end-screen')!;
@@ -150,9 +153,11 @@ function paintBackground(elapsed: number): void {
   g.font = '11px monospace'; g.fillStyle = '#92adad8c'; g.fillText('QUARANTINE K-09', 26, 762);
 }
 
-function drawEnemy(x: number, y: number, time: number): void {
+function drawEnemy(x: number, y: number, time: number, kind: string, hp: number, maxHp: number): void {
   const bob = Math.sin(time / 170 + x * .12) * 1.8;
   g.save(); g.translate(x, y + bob);
+  const scale = kind === 'boss' ? 2.4 : kind === 'armored' ? 1.35 : kind === 'leaper' ? .86 : 1;
+  g.scale(scale, scale);
   ellipse(0, 11, 21, 8, '#020d15ad');
   // legs, spines and shell to imply depth without 3D models.
   for (const side of [-1, 1]) {
@@ -162,10 +167,16 @@ function drawEnemy(x: number, y: number, time: number): void {
     }
   }
   polygon([[-19, 4],[-15,-14],[0,-27],[16,-14],[19,7],[0,15]], '#4e2b36');
-  polygon([[-14,-12],[0,-24],[12,-11],[8,5],[-7,5]], '#a04c60');
+  polygon([[-14,-12],[0,-24],[12,-11],[8,5],[-7,5]],
+    kind === 'boss' ? '#df7063' : kind === 'armored' ? '#ae8fa9' : kind === 'leaper' ? '#dd687f' : '#a04c60');
   polygon([[-6,-22],[2,-24],[12,-13],[6,-4]], '#ce7d6b');
   polygon([[-8,5],[8,5],[0,13]], '#321e2f');
   ellipse(-7,-2,3,2,'#ffcf7a'); ellipse(7,-2,3,2,'#ffcf7a');
+  if (kind === 'boss' || kind === 'armored') {
+    g.fillStyle='#081117'; g.fillRect(-22,-37,44,5);
+    g.fillStyle=kind === 'boss' ? '#ffab86' : '#a6e9d8';
+    g.fillRect(-22,-37,44 * Math.max(0,hp / maxHp),5);
+  }
   g.restore();
 }
 
@@ -228,13 +239,22 @@ function paint(dt: number): void {
       drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs);
       marineDrawn = true;
     }
-    drawEnemy(position.x, position.y, s.elapsedMs);
+    drawEnemy(position.x, position.y, s.elapsedMs,
+      enemy.kind ?? 'grunt', enemy.hp, enemy.maxHp ?? 64);
   }
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs);
   for (const bullet of s.bullets) {
     const b = worldPoint(bullet.x, bullet.y);
     ellipse(b.x, b.y - 15, 7, 3, '#ff9e52b0');
     ellipse(b.x, b.y - 17, 4, 2, '#fff3b4');
+  }
+  for (const arc of s.lightning) {
+    const a = worldPoint(arc.fromX, arc.fromY), b = worldPoint(arc.toX, arc.toY);
+    const strength = Math.min(1, arc.remainingMs/90);
+    g.lineWidth=5; g.strokeStyle='rgba(77,189,238,'+(strength*.45)+')';
+    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo((a.x+b.x)/2+7,(a.y+b.y)/2-35);g.lineTo(b.x,b.y-22);g.stroke();
+    g.lineWidth=2;g.strokeStyle='rgba(197,247,255,'+strength+')';
+    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo((a.x+b.x)/2+7,(a.y+b.y)/2-35);g.lineTo(b.x,b.y-22);g.stroke();
   }
   if (activePointer !== null) {
     const j = dragOrigin;
@@ -251,6 +271,11 @@ function ui(): void {
   const s = world.state;
   hpFill.style.width = Math.max(0, s.player.hp / 6 * 100) + '%';
   killCount.textContent = String(s.kills).padStart(3,'0');
+  waveCounter.textContent = 'WAVE ' + String(s.wave).padStart(2,'0') + ' / 05';
+  playerLevel.textContent = 'LV.' + String(s.level).padStart(2,'0')
+    + ' · XP ' + s.xp + '/' + s.xpToNext;
+  arcUnlock.textContent = s.arcUnlocked ? '⚡ 电弧线圈 · 连锁攻击已激活' : '电弧线圈 · LV.3 解锁';
+  arcUnlock.classList.toggle('unlocked',s.arcUnlocked);
   const isDeployed = s.player.deployed;
   stanceLabel.classList.toggle('active', isDeployed);
   stanceLabel.textContent = isDeployed ? '⚡ 火力展开 · 伤害与射速提升' : '机动射击 · 松手展开';
@@ -259,7 +284,9 @@ function ui(): void {
     : activePointer !== null ? '移动中 · 武器持续自动攻击'
     : '按住下半屏拖动移动 · 静止 0.8 秒火力展开';
   if (s.over) {
-    endKills.textContent = '已击杀 ' + s.kills + ' 只虫族';
+    endScreen.querySelector('p')!.textContent = s.won ? 'MISSION COMPLETE' : 'MISSION FAILED';
+    endScreen.querySelector('strong')!.textContent = s.won ? '虫巢巨兽已歼灭' : '战士阵亡';
+    endKills.textContent = '第 ' + s.wave + ' 波 · 已击杀 ' + s.kills + ' 只虫族';
     endScreen.hidden = false;
   }
 }
