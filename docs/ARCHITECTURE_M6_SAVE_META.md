@@ -41,6 +41,12 @@
 
 **不保存 Phaser 的敌人、精灵、子弹、特效**；继续时在安全节点附近重建干净战场。这是有意的产品设计，不是无限制即时存档。
 
+### 平台存储适配层
+
+`src/game/platformStorage.ts` 提供 `GameStoragePort`（`getItem/setItem/removeItem`）与 `configureStoragePort()`。网页版默认适配浏览器 `localStorage`；核心快照/货币模块只接收可注入接口，不直接依赖 DOM、Phaser 或微信 API。
+
+**微信小游戏/Cocos Creator 迁移时**，应实现这个接口的 `wx.getStorageSync/setStorageSync/removeStorageSync` 适配，并单独完成同步 API、错误、容量、并发和存档迁移测试。**本轮没有编写或验证任何微信适配器**。迁移 RFC 见 [微信小游戏优先的引擎迁移讨论](https://github.com/kk518/endless-swarm/issues/12)。
+
 ### 存储位置及风险
 - `localStorage` 键：`endless-swarm-expedition-safe-v1`。
 - 仅本机同源浏览器，**非云同步**；清除浏览器数据、无痕窗口、跨设备或迁移域名时可能丢档。
