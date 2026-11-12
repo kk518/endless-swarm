@@ -35,3 +35,26 @@ button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:poin
 .progress-panel #arc-unlock{color:#91a9aa;font-size:10px}
 .progress-panel #arc-unlock.unlocked{color:#9ddfff}
 @media(max-width:430px){.progress-panel{top:70px;left:14px;right:14px;gap:4px}}
+
+/* M6 migration hangar: deliberately separate from the battle canvas. */
+.ops-panel{margin-top:22px}
+.ops-panel .section-caption{margin-top:23px}
+.ops-hint{font-size:12px;line-height:1.75;color:#9ab9bc;margin:12px 0 15px}
+.zone-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.zone-choice{min-height:70px;padding:13px 11px;background:#101f27;color:#c9dedd;border:1px solid #37545c;text-align:left;font-size:13px;font-weight:700}
+.zone-choice small{display:block;margin-top:6px;font-size:11px;color:#86aeb2;font-weight:400}
+.zone-choice:hover,.zone-choice:focus-visible{border-color:#8becd6}
+.zone-choice.active{border-color:#73e9cc;background:linear-gradient(120deg,#173c3e,#122d34);color:#e8fff8}
+.ops-selected{font:11px ui-monospace,Consolas,monospace;color:#89dcca;letter-spacing:.02em;margin:12px 0 3px}
+.wallet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 15px}
+.wallet>div{border:1px solid var(--line);background:#0d242b;padding:9px 7px;font-size:11px;color:#a6c8c9}
+.wallet strong{display:block;margin-top:7px;font:700 20px ui-monospace,Consolas,monospace;color:#e5dcad}
+.workshop{display:grid;gap:7px}
+.workshop button{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:10px 11px;background:#173034;border:1px solid #3c6668;color:#e2f6e9;text-align:left;font-size:12px;font-weight:700}
+.workshop button small{font-size:10px;font-weight:400;color:#d4d2b4;text-align:right}
+.workshop button:not(:disabled):hover,.workshop button:not(:disabled):focus-visible{background:#23514c;border-color:#78e6cb}
+.workshop button:disabled{opacity:.5;cursor:not-allowed}
+.ops-message{min-height:37px;font-size:12px;line-height:1.6;color:#ded0a9;border-left:2px solid #c6a368;padding-left:11px;margin:13px 0}
+.creator-link{display:block;margin-top:17px;padding:11px;border:1px solid #397875;color:#9ff1da;font-size:12px;text-decoration:none}
+.creator-link:hover{background:#173a39}
+@media(max-width:400px){.zone-buttons{gap:6px}.zone-choice{padding:11px 8px;font-size:12px}.wallet{gap:5px}.wallet strong{font-size:18px}}
