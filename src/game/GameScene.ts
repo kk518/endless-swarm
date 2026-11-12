@@ -18,13 +18,14 @@ import {
 } from './progression';
 import { advanceStreak, streakActive, streakDamageMultiplier } from './streak';
 import {
-  PROTOTYPE_CAMPAIGN, advanceCampaignReward, beginCampaign, getEncounter, tickCampaign,
-  type CampaignRunState,
+  PROTOTYPE_CAMPAIGN, THREE_ACT_BLUEPRINT, advanceCampaignReward, beginCampaign, getEncounter, tickCampaign,
+  type CampaignDefinition, type CampaignRunState,
 } from './campaignDirector';
 import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
 import { createRunRandoms, newRunSeed, type RunRandomStreams } from './runRandom';
 import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
 import { createHeroRuntimeRegistry } from './heroRuntime';
+import { eligibleRouteChoices, resolveRouteChoice, type RouteChoice } from './routeDecisions';
 import {
   canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
   SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
@@ -114,6 +115,11 @@ export interface RewardOffer {
   training: TrainingPlan;
   actTitle: string; encounterTitle: string; totalStages: number;
 }
+export interface RouteOffer {
+  wave: number; actTitle: string; encounterTitle: string; totalStages: number;
+  options: readonly RouteChoice[];
+}
+export type CampaignMode = 'prototype' | 'expedition';
 
 /** An immediately playable mobile vertical slice of Endless Swarm. */
 export class GameScene extends Phaser.Scene {
@@ -152,6 +158,9 @@ export class GameScene extends Phaser.Scene {
   private active = false;
   private awaitingReward = false;
   private rewardOptions: CardDef[] = [];
+  private pendingRoutes: readonly RouteChoice[] = [];
+  private routePressureMultiplier = 1;
+  private campaign: CampaignDefinition = PROTOTYPE_CAMPAIGN;
   private campaignRun: CampaignRunState = beginCampaign(PROTOTYPE_CAMPAIGN, 1);
   private randoms: RunRandomStreams = createRunRandoms(1);
   private heroId = CURRENT_HERO_ID;
@@ -186,7 +195,7 @@ export class GameScene extends Phaser.Scene {
   ]);
   private get waveNumber(): number { return this.campaignRun.stageIndex + 1; }
   private get waveElapsedMs(): number { return this.campaignRun.elapsedMs; }
-  private get currentStage() { return getEncounter(PROTOTYPE_CAMPAIGN, this.campaignRun.stageIndex); }
+  private get currentStage() { return getEncounter(this.campaign, this.campaignRun.stageIndex); }
   private bossSpawned = false;
   private bossKilled = false;
   private build: RunBuild = newBuild();
@@ -304,7 +313,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Called by the HTML start/retry button; safe for repeated sessions. */
-  startRun(training: TrainingPlan = DEFAULT_TRAINING): void {
+  startRun(training: TrainingPlan = DEFAULT_TRAINING, mode: CampaignMode = 'prototype'): void {
     if (!this.ready) return;
     this.training = { ...DEFAULT_TRAINING };
     this.removeProjectilesAndEnemies();
@@ -331,7 +340,8 @@ export class GameScene extends Phaser.Scene {
     this.overclockMs = 0;
     this.suppliesCollected = 0;
     this.weaponCooldowns = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
-    this.campaignRun = beginCampaign(PROTOTYPE_CAMPAIGN, newRunSeed());
+    this.campaign = mode === 'expedition' ? THREE_ACT_BLUEPRINT : PROTOTYPE_CAMPAIGN;
+    this.campaignRun = beginCampaign(this.campaign, newRunSeed());
     this.randoms = createRunRandoms(this.campaignRun.seed);
     const loadout = resolveHeroLoadout(CONTENT_CATALOG, CURRENT_HERO_ID);
     // Future catalog entries need runtime attack and passive drivers before
@@ -345,6 +355,8 @@ export class GameScene extends Phaser.Scene {
     this.bossKilled = false;
     this.awaitingReward = false;
     this.rewardOptions = [];
+    this.pendingRoutes = [];
+    this.routePressureMultiplier = 1;
     this.build = newBuild();
     this.growth = newGrowth();
     this.setTraining(training.weapon, training.focus);
@@ -364,7 +376,9 @@ export class GameScene extends Phaser.Scene {
     this.hp = this.build.hp;
     this.lockedTarget = null;
     this.introFadeMs = 4600;
-    this.introHint.setText('经验自动升级 · 松手展开火力 · 波末选择构筑').setAlpha(1);
+    this.introHint.setText(mode === 'expedition'
+      ? '三幕远征实验 · 无中途存档或局外奖励 · 松手展开火力'
+      : '经验自动升级 · 松手展开火力 · 波末选择构筑').setAlpha(1);
     this.stateLabel.setText('机动射击');
     this.releaseJoystick();
     this.soundFx.unlock();
@@ -403,11 +417,34 @@ export class GameScene extends Phaser.Scene {
       this.addCombatVisual('ring', this.player.x, this.player.y, this.player.x, this.player.y, color, 74, 240);
     }
     if (cardId === 'salvage') this.salvageKills = 0;
+    this.routePressureMultiplier = 1; // The previous route challenge ends with this encounter.
+    this.advanceAfterDecision(chosen.name, 1);
+    return true;
+  }
+
+  /** Route options have a real risk/reward cost and never open a second modal. */
+  chooseRoute(routeId: string): boolean {
+    if (!this.awaitingReward || this.campaignRun.phase !== 'reward'
+      || this.currentStage.encounter.decision !== 'route') return false;
+    const chosen = this.pendingRoutes.find(option => option.id === routeId);
+    if (!chosen) return false;
+    const effect = resolveRouteChoice(this.pendingRoutes, routeId, this.hp, this.build.maxHp);
+    if (!effect) return false;
+    this.hp = effect.hp;
+    this.build.hp = this.hp;
+    this.build.damage *= effect.runDamageMultiplier;
+    this.advanceAfterDecision(chosen.name, 0);
+    this.routePressureMultiplier = effect.nextPressureMultiplier;
+    return true;
+  }
+
+  /** Shared, single-use transition for a card or a route fork. */
+  private advanceAfterDecision(label: string, fieldRepair: number): void {
     this.streak = 0;
     this.lastKillMs = -10000;
-    this.hp = Math.min(this.build.maxHp, this.build.hp + 1); // field repair between waves
+    this.hp = Math.min(this.build.maxHp, this.hp + fieldRepair);
     this.build.hp = this.hp;
-    this.campaignRun = advanceCampaignReward(PROTOTYPE_CAMPAIGN, this.campaignRun);
+    this.campaignRun = advanceCampaignReward(this.campaign, this.campaignRun);
     this.nextSurgeAtMs = SURGE_PERIOD_MS;
     this.surgeWarningMs = 0;
     this.surgePending = 0;
@@ -419,14 +456,14 @@ export class GameScene extends Phaser.Scene {
     this.bossKilled = false;
     this.awaitingReward = false;
     this.rewardOptions = [];
+    this.pendingRoutes = [];
     this.simAccumulatorMs = 0;
     this.releaseJoystick();
     this.introFadeMs = 3500;
-    this.introHint.setText(`强化生效：${chosen.name} · ${this.currentStage.actTitle}第 ${this.waveNumber} 段`).setAlpha(1);
+    this.introHint.setText(`${label} · ${this.currentStage.actTitle} / ${this.currentStage.encounter.title}`).setAlpha(1);
     this.spawnSparks(this.player.x, this.player.y, 18, 0x79f8dc, 170);
     this.active = true;
     this.updateHUD();
-    return true;
   }
 
   setMuted(muted: boolean): void { this.soundFx.setMuted(muted); }
@@ -722,8 +759,9 @@ export class GameScene extends Phaser.Scene {
     const wave = this.currentStage.encounter.wave;
     const pressure = pressurePlan(this.currentStage.encounter.pressureTier, this.waveElapsedMs, wave.durationMs);
     this.spawnAccumulator += ms;
-    if (this.spawnAccumulator >= pressure.intervalMs) {
-      this.spawnAccumulator -= pressure.intervalMs;
+    const actualSpawnInterval = pressure.intervalMs / this.routePressureMultiplier;
+    if (this.spawnAccumulator >= actualSpawnInterval) {
+      this.spawnAccumulator -= actualSpawnInterval;
       this.spawnPack(pressure.groupSize, pressure.spawnRadius);
     }
     if (this.waveElapsedMs >= this.nextSurgeAtMs && this.surgePending === 0) {
@@ -748,7 +786,7 @@ export class GameScene extends Phaser.Scene {
         this.introFadeMs = 2800;
       }
     }
-    this.campaignRun = tickCampaign(PROTOTYPE_CAMPAIGN, this.campaignRun, 0, this.bossKilled);
+    this.campaignRun = tickCampaign(this.campaign, this.campaignRun, 0, this.bossKilled);
     const phase = this.campaignRun.phase;
     if (phase === 'victory') this.finishRun(true);
     else if (phase === 'timeout') this.finishRun(false);
@@ -757,20 +795,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endWave(): void {
-    if (this.currentStage.encounter.decision !== 'card') {
-      throw new Error('Encounter needs a route decision UI before it can be activated');
-    }
+    const stage = this.currentStage;
+    if (stage.encounter.decision === 'none') throw new Error('Final encounter has no stage reward');
     this.active = false;
     this.awaitingReward = true;
     this.releaseJoystick();
     this.removeProjectilesAndEnemies();
     this.lockedTarget = null;
-    this.rewardOptions = rollCards(this.build, this.waveNumber, () => this.randoms.rewards.next(), evolutionRecipeTargets(this.build, this.growth));
+    this.rewardOptions = [];
+    this.pendingRoutes = [];
+    if (stage.encounter.decision === 'route') {
+      this.pendingRoutes = eligibleRouteChoices(stage.encounter.routes ?? [], this.hp);
+      if (this.pendingRoutes.length === 0) throw new Error('No legal route options');
+      const detail: RouteOffer = {
+        wave: this.waveNumber, actTitle: stage.actTitle,
+        encounterTitle: stage.encounter.title, totalStages: stage.total, options: this.pendingRoutes,
+      };
+      window.dispatchEvent(new CustomEvent<RouteOffer>('swarm:route', { detail }));
+      return;
+    }
+    this.rewardOptions = rollCards(this.build, this.waveNumber,
+      () => this.randoms.rewards.next(), evolutionRecipeTargets(this.build, this.growth));
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
       equipped: [...this.build.weapons], training: this.currentTraining(),
-      actTitle: this.currentStage.actTitle, encounterTitle: this.currentStage.encounter.title,
-      totalStages: this.currentStage.total,
+      actTitle: stage.actTitle, encounterTitle: stage.encounter.title,
+      totalStages: stage.total,
     };
     window.dispatchEvent(new CustomEvent<RewardOffer>('swarm:reward', { detail }));
   }
