@@ -24,6 +24,7 @@ import {
 import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
 import { createRunRandoms, newRunSeed, type RunRandomStreams } from './runRandom';
 import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
+import { createHeroRuntimeRegistry } from './heroRuntime';
 import {
   canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
   SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
@@ -152,6 +153,9 @@ export class GameScene extends Phaser.Scene {
   private campaignRun: CampaignRunState = beginCampaign(PROTOTYPE_CAMPAIGN, 1);
   private randoms: RunRandomStreams = createRunRandoms(1);
   private heroId = CURRENT_HERO_ID;
+  private readonly heroRuntimes = createHeroRuntimeRegistry(CONTENT_CATALOG, [
+    { heroId: CURRENT_HERO_ID, passiveId: null },
+  ]);
   /**
    * Combat wiring for the four currently implemented hardpoints.
    * Future weapons register a driver here; catalog metadata alone cannot
@@ -363,6 +367,7 @@ export class GameScene extends Phaser.Scene {
     this.releaseJoystick();
     this.soundFx.unlock();
     this.active = true;
+    this.heroRuntimes.get(this.heroId)?.onRunStart?.();
     this.updateHUD();
   }
 
@@ -636,6 +641,7 @@ export class GameScene extends Phaser.Scene {
     const dt = ms / 1000;
     this.timeMs += ms;
     this.campaignRun.elapsedMs += ms;
+    this.heroRuntimes.get(this.heroId)?.onCombatTick?.(ms);
     this.overclockMs = Math.max(0, this.overclockMs - ms);
     if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
     this.growthNoticeMs = Math.max(0, this.growthNoticeMs - ms);
@@ -1463,6 +1469,7 @@ export class GameScene extends Phaser.Scene {
 
   private registerKill(kind: EnemyKind, elite: boolean): void {
     this.kills++;
+    this.heroRuntimes.get(this.heroId)?.onEnemyKilled?.({ enemyKind: kind, elite, timeMs: this.timeMs });
     const reward = grantExperience(this.growth, killExperience(kind, elite));
     this.growth = reward.state;
     if (reward.gainedLevels > 0) {
