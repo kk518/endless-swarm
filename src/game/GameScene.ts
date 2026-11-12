@@ -13,10 +13,16 @@ import {
   FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget,
 } from './combat';
 import {
-  applyCard, newBuild, nextPhase, pickEnemyKind, rollCards, WAVES,
+  applyCard, newBuild, pickEnemyKind, rollCards,
   type CardDef, type CardId, type EnemyKind, type RunBuild, type WeaponId,
 } from './progression';
 import { advanceStreak, streakActive, streakDamageMultiplier } from './streak';
+import {
+  PROTOTYPE_CAMPAIGN, advanceCampaignReward, beginCampaign, getEncounter, tickCampaign,
+  type CampaignRunState,
+} from './campaignDirector';
+import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
+import { createRunRandoms, newRunSeed, type RunRandomStreams } from './runRandom';
 import {
   canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
   SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
@@ -98,6 +104,7 @@ export interface RunResult {
   kills: number; survived: string; record: number;
   victory: boolean; wave: number; weapons: WeaponId[]; cards: string[]; bestStreak: number;
   level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
+  heroId: string; campaignId: string; runSeed: number;
 }
 export interface RewardOffer {
   wave: number; options: CardDef[]; nextWave: number; equipped: WeaponId[];
@@ -141,8 +148,12 @@ export class GameScene extends Phaser.Scene {
   private active = false;
   private awaitingReward = false;
   private rewardOptions: CardDef[] = [];
-  private waveNumber = 1;
-  private waveElapsedMs = 0;
+  private campaignRun: CampaignRunState = beginCampaign(PROTOTYPE_CAMPAIGN, 1);
+  private randoms: RunRandomStreams = createRunRandoms(1);
+  private heroId = CURRENT_HERO_ID;
+  private get waveNumber(): number { return this.campaignRun.stageIndex + 1; }
+  private get waveElapsedMs(): number { return this.campaignRun.elapsedMs; }
+  private get currentStage() { return getEncounter(PROTOTYPE_CAMPAIGN, this.campaignRun.stageIndex); }
   private bossSpawned = false;
   private bossKilled = false;
   private build: RunBuild = newBuild();
@@ -287,8 +298,15 @@ export class GameScene extends Phaser.Scene {
     this.overclockMs = 0;
     this.suppliesCollected = 0;
     this.weaponCooldowns = { rifle: 0, scatter: 0, arc: 0, flame: 0 };
-    this.waveNumber = 1;
-    this.waveElapsedMs = 0;
+    this.campaignRun = beginCampaign(PROTOTYPE_CAMPAIGN, newRunSeed());
+    this.randoms = createRunRandoms(this.campaignRun.seed);
+    const loadout = resolveHeroLoadout(CONTENT_CATALOG, CURRENT_HERO_ID);
+    // Future catalog entries need runtime attack and passive drivers before
+    // they can be chosen; the present renderer supports the base marine.
+    if (loadout.standardWeaponIds[0] !== 'rifle' || loadout.signatureWeaponId !== null) {
+      throw new Error('Hero runtime adapter has no attack driver for this loadout');
+    }
+    this.heroId = loadout.heroId;
     this.bossSpawned = false;
     this.bossKilled = false;
     this.awaitingReward = false;
@@ -353,8 +371,7 @@ export class GameScene extends Phaser.Scene {
     this.lastKillMs = -10000;
     this.hp = Math.min(this.build.maxHp, this.build.hp + 1); // field repair between waves
     this.build.hp = this.hp;
-    this.waveNumber++;
-    this.waveElapsedMs = 0;
+    this.campaignRun = advanceCampaignReward(PROTOTYPE_CAMPAIGN, this.campaignRun);
     this.nextSurgeAtMs = SURGE_PERIOD_MS;
     this.surgeWarningMs = 0;
     this.surgePending = 0;
@@ -369,7 +386,7 @@ export class GameScene extends Phaser.Scene {
     this.simAccumulatorMs = 0;
     this.releaseJoystick();
     this.introFadeMs = 3500;
-    this.introHint.setText(`强化生效：${chosen.name} · 第 ${this.waveNumber} 波`).setAlpha(1);
+    this.introHint.setText(`强化生效：${chosen.name} · ${this.currentStage.actTitle}第 ${this.waveNumber} 段`).setAlpha(1);
     this.spawnSparks(this.player.x, this.player.y, 18, 0x79f8dc, 170);
     this.active = true;
     this.updateHUD();
@@ -502,7 +519,7 @@ export class GameScene extends Phaser.Scene {
     this.hudText(30, 21, 'A R M O R  /  装甲', '12px', '#bed1c5');
     this.clockLabel = this.hudText(VIEW_W - 27, 21, '00:00', '26px', '#f3faf5').setOrigin(1, 0);
     this.killLabel = this.hudText(VIEW_W - 28, 55, '击杀 000', '14px', '#92d8c2').setOrigin(1, 0);
-    this.waveLabel = this.hudText(VIEW_W / 2, 94, '第 1 / 5 波', '17px', '#ffbd78').setOrigin(0.5, 0);
+    this.waveLabel = this.hudText(VIEW_W / 2, 94, '前沿登陆 · 1/5', '17px', '#ffbd78').setOrigin(0.5, 0);
     this.xpLabel = this.hudText(31, 140, 'LV.1 | 0/8 XP', '12px', '#a9f1d9');
     this.growthLabel = this.hudText(VIEW_W / 2, 179, '', '12px', '#f6d08a').setOrigin(0.5, 0);
     this.stateLabel = this.hudText(VIEW_W / 2, this.hudHeight - 123, '机动射击', '18px', '#c1f7e7').setOrigin(0.5, 0.5);
@@ -590,7 +607,7 @@ export class GameScene extends Phaser.Scene {
     }
     const dt = ms / 1000;
     this.timeMs += ms;
-    this.waveElapsedMs += ms;
+    this.campaignRun.elapsedMs += ms;
     this.overclockMs = Math.max(0, this.overclockMs - ms);
     if (!streakActive(this.streak, this.lastKillMs, this.timeMs)) this.streak = 0;
     this.growthNoticeMs = Math.max(0, this.growthNoticeMs - ms);
@@ -665,8 +682,8 @@ export class GameScene extends Phaser.Scene {
       this.supplyElapsedMs -= SUPPLY_PERIOD_MS;
       this.spawnSupplyNearPlayer();
     }
-    const wave = WAVES[this.waveNumber - 1];
-    const pressure = pressurePlan(this.waveNumber, this.waveElapsedMs, wave.durationMs);
+    const wave = this.currentStage.encounter.wave;
+    const pressure = pressurePlan(this.currentStage.encounter.pressureTier, this.waveElapsedMs, wave.durationMs);
     this.spawnAccumulator += ms;
     if (this.spawnAccumulator >= pressure.intervalMs) {
       this.spawnAccumulator -= pressure.intervalMs;
@@ -687,14 +704,15 @@ export class GameScene extends Phaser.Scene {
         this.spawnSparks(this.player.x, this.player.y, 10, 0xffa564, 130);
       }
     }
-    if (this.waveNumber === 5 && !this.bossSpawned && this.waveElapsedMs > 2500) {
+    if (this.currentStage.encounter.kind === 'boss' && !this.bossSpawned && this.waveElapsedMs > 2500) {
       this.bossSpawned = this.spawnEnemy('boss');
       if (this.bossSpawned) {
         this.introHint.setText('警告：虫巢巨兽接近！').setAlpha(1);
         this.introFadeMs = 2800;
       }
     }
-    const phase = nextPhase(this.waveNumber, this.bossKilled, this.waveElapsedMs);
+    this.campaignRun = tickCampaign(PROTOTYPE_CAMPAIGN, this.campaignRun, 0, this.bossKilled);
+    const phase = this.campaignRun.phase;
     if (phase === 'victory') this.finishRun(true);
     else if (phase === 'timeout') this.finishRun(false);
     else if (phase === 'reward') this.endWave();
@@ -707,7 +725,7 @@ export class GameScene extends Phaser.Scene {
     this.releaseJoystick();
     this.removeProjectilesAndEnemies();
     this.lockedTarget = null;
-    this.rewardOptions = rollCards(this.build, this.waveNumber, Math.random, evolutionRecipeTargets(this.build, this.growth));
+    this.rewardOptions = rollCards(this.build, this.waveNumber, () => this.randoms.rewards.next(), evolutionRecipeTargets(this.build, this.growth));
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
       equipped: [...this.build.weapons], training: this.currentTraining(),
@@ -716,15 +734,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnPack(count: number, radius: number): void {
-    const wave = WAVES[this.waveNumber - 1];
+    const wave = this.currentStage.encounter.wave;
     const heading = Number.isFinite(this.movementHeading) ? this.movementHeading
-      : Math.random() * Math.PI * 2;
-    const sector = heading + (Math.random() - 0.5) * 0.55;
+      : this.randoms.combat.next() * Math.PI * 2;
+    const sector = heading + (this.randoms.combat.next() - 0.5) * 0.55;
     let eliteCount = this.enemyList.reduce((count, enemy) => count + Number(enemy.elite && enemy.alive), 0)
       + this.arrivingEnemies.reduce((count, enemy) => count + Number(enemy.elite), 0);
     for (let i = 0; i < count && this.enemyList.length + this.arrivingEnemies.length < wave.maxEnemies; i++) {
-      const kind = pickEnemyKind(wave);
-      const elite = canSpawnElite(this.waveNumber, kind, eliteCount);
+      const kind = pickEnemyKind(wave, () => this.randoms.combat.next());
+      const elite = canSpawnElite(this.currentStage.encounter.pressureTier, kind, eliteCount, () => this.randoms.combat.next());
       if (this.spawnEnemy(kind, elite, sector + spawnOffset(i), radius) && elite) eliteCount++;
     }
   }
@@ -743,8 +761,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnEnemy(kind: EnemyKind, elite = false, preferredAngle?: number, baseRadius?: number): boolean {
-    const radius = kind === 'boss' ? 315 : (baseRadius ?? 410) + Math.random() * 65;
-    const angle = preferredAngle ?? Math.random() * Math.PI * 2;
+    const radius = kind === 'boss' ? 315 : (baseRadius ?? 410) + this.randoms.combat.next() * 65;
+    const angle = preferredAngle ?? this.randoms.combat.next() * Math.PI * 2;
     const view = this.combatView();
     let location: { x: number; y: number } | null = null;
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -811,12 +829,12 @@ export class GameScene extends Phaser.Scene {
         kind === 'bomber' ? 0xff537e : 0xff745c, kind === 'bomber' ? 0.17 : 0.13)
         .setStrokeStyle(2, kind === 'bomber' ? 0xff7596 : 0xffa271, 0.7).setDepth(2).setVisible(false)
       : null;
-    const pressure = pressurePlan(this.waveNumber, this.waveElapsedMs, WAVES[this.waveNumber - 1].durationMs);
+    const pressure = pressurePlan(this.currentStage.encounter.pressureTier, this.waveElapsedMs, this.currentStage.encounter.wave.durationMs);
     this.enemyList.push({
       kind, elite, eliteAura, x, y, alive: true, hp: stats.hp, speed: stats.speed * pressure.speedMultiplier, size: stats.size,
       sprite, shadow, warning, flashTime: 0, slowMs: 0,
       burnMs: 0, burnTickMs: 0, burnDamage: 0,
-      attackCooldownMs: 1900 + Math.random() * 1500, windupMs: 0,
+      attackCooldownMs: 1900 + this.randoms.combat.next() * 1500, windupMs: 0,
     });
   }
 
@@ -1289,7 +1307,7 @@ export class GameScene extends Phaser.Scene {
 
   private damageEnemy(enemy: Enemy, damage: number): void {
     if (!enemy.alive) return;
-    const critical = this.build.criticalChance > 0 && Math.random() < this.build.criticalChance;
+    const critical = this.build.criticalChance > 0 && this.randoms.combat.next() < this.build.criticalChance;
     enemy.hp -= critical ? damage * 2 : damage;
     if (critical) {
       this.addCombatVisual('ring', enemy.x, enemy.y, enemy.x, enemy.y, 0xffe38b, 24, 125);
@@ -1322,7 +1340,7 @@ export class GameScene extends Phaser.Scene {
     const index = this.enemyList.indexOf(enemy);
     if (index >= 0) this.enemyList.splice(index, 1);
     if (enemy.kind === 'boss') this.bossKilled = true;
-    if (this.build.explosionChance > 0 && Math.random() < this.build.explosionChance) {
+    if (this.build.explosionChance > 0 && this.randoms.combat.next() < this.build.explosionChance) {
       // One-depth explosion (no recursive chain reaction): bounded damage and frame cost.
       for (const other of [...this.enemyList]) {
         if (!other.alive || Math.hypot(enemy.x - other.x, enemy.y - other.y) > 100 * this.build.range) continue;
@@ -1348,8 +1366,8 @@ export class GameScene extends Phaser.Scene {
 
   /** Elite kills drop supplies; periodic drops also reward moving around the arena. */
   private spawnSupplyNearPlayer(): void {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 145 + Math.random() * 90;
+    const angle = this.randoms.combat.next() * Math.PI * 2;
+    const radius = 145 + this.randoms.combat.next() * 90;
     const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * radius, 65, WORLD - 65);
     const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * radius, 65, WORLD - 65);
     this.spawnSupply(x, y);
@@ -1357,7 +1375,7 @@ export class GameScene extends Phaser.Scene {
 
   private spawnSupply(x: number, y: number): void {
     if (this.supplies.length >= MAX_SUPPLIES) return;
-    const kind = rollSupplyKind(this.hp < this.build.maxHp);
+    const kind = rollSupplyKind(this.hp < this.build.maxHp, () => this.randoms.combat.next());
     const color = kind === 'repair' ? 0x77f5a9 : kind === 'overclock' ? 0xffd073 : 0x88baff;
     const glow = this.add.circle(x, y, 30, color, 0.10).setStrokeStyle(2, color, 0.65).setDepth(2);
     const sprite = this.add.image(x, y, 'supply').setTint(color).setDepth(4);
@@ -1459,10 +1477,10 @@ export class GameScene extends Phaser.Scene {
   private spawnSparks(x: number, y: number, count: number, color: number, speed: number): void {
     // A bounded particle budget keeps phones responsive during bursts of kills.
     for (let i = 0; i < count && this.particles.length < 105; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const velocity = speed * (0.5 + Math.random() * 0.65);
-      const lifeMs = 120 + Math.random() * 210;
-      const sprite = this.add.circle(x, y, 1.7 + Math.random() * 2, color, 0.92).setDepth(11);
+      const angle = this.randoms.visuals.next() * Math.PI * 2;
+      const velocity = speed * (0.5 + this.randoms.visuals.next() * 0.65);
+      const lifeMs = 120 + this.randoms.visuals.next() * 210;
+      const sprite = this.add.circle(x, y, 1.7 + this.randoms.visuals.next() * 2, color, 0.92).setDepth(11);
       this.particles.push({ x, y, vx: Math.cos(angle) * velocity, vy: Math.sin(angle) * velocity, lifeMs, maxMs: lifeMs, sprite });
     }
   }
@@ -1490,7 +1508,7 @@ export class GameScene extends Phaser.Scene {
   private hurt(amount = 1): void {
     this.lastHurtMs = this.timeMs;
     this.streak = 0; // losing armor also breaks the combo, even if Bulwark absorbs it
-    if (this.deployed && this.build.bulwark && Math.random() < 0.4) {
+    if (this.deployed && this.build.bulwark && this.randoms.combat.next() < 0.4) {
       this.spawnSparks(this.player.x, this.player.y, 7, 0x9cdaff, 130);
       return;
     }
@@ -1519,6 +1537,7 @@ export class GameScene extends Phaser.Scene {
       cards: [...this.build.selected], bestStreak: this.bestStreak,
       level: this.growth.level, weaponLevels: { ...this.growth.weaponLevels },
       evolutions: Object.entries(this.growth.evolved).filter(([, enabled]) => enabled).map(([name]) => name),
+      heroId: this.heroId, campaignId: this.campaignRun.campaignId, runSeed: this.campaignRun.seed,
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
@@ -1534,11 +1553,11 @@ export class GameScene extends Phaser.Scene {
     this.killLabel.setText(`击杀 ${String(this.kills).padStart(3, '0')}${combo}`);
     this.growthLabel.setText(this.growthNoticeMs > 0 ? this.growthNotice : `专精 ${this.training.weapon === 'rifle' ? '步枪' : this.training.weapon === 'scatter' ? '散射' : this.training.weapon === 'arc' ? '电弧' : '喷焰'} · ${TRAINING_LABELS[this.training.focus]}`);
     this.growthLabel.setAlpha(this.growthNoticeMs > 0 ? Math.min(1, this.growthNoticeMs / 350) : 0.72);
-    const wave = WAVES[this.waveNumber - 1];
+    const wave = this.currentStage.encounter.wave;
     const remaining = Math.max(0, Math.ceil((wave.durationMs - this.waveElapsedMs) / 1000));
-    this.waveLabel.setText(this.waveNumber === 5
-      ? `第 5 / 5 波 · ${this.bossKilled ? '虫巢已消灭' : `首领决战 ${remaining}s`}`
-      : `第 ${this.waveNumber} / 5 波 · ${remaining}s`);
+    this.waveLabel.setText(this.currentStage.encounter.kind === 'boss'
+      ? `${this.currentStage.actTitle} · ${this.bossKilled ? '虫巢已消灭' : `首领决战 ${remaining}s`}`
+      : `${this.currentStage.actTitle} · ${this.waveNumber}/${this.currentStage.total} · ${remaining}s`);
     this.stateLabel.setText(this.deployed ? `火力展开 // ${this.build.weapons.length} 门齐射` : `机动射击 // ${this.build.weapons.length} 门武装`);
     this.stateLabel.setColor(this.deployed ? '#ffcd86' : '#c1f7e7');
     this.buffLabel.setFontSize(12);
@@ -1584,11 +1603,12 @@ export class GameScene extends Phaser.Scene {
     g.lineStyle(1, 0x72989b, 0.5);
     g.strokeRoundedRect(112, this.hudHeight - 83, VIEW_W - 224, 15, 7);
     // Military orange threat rail; each segment corresponds to one wave.
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < this.currentStage.total; i++) {
+      const segment = 195 / this.currentStage.total;
       g.fillStyle(i < this.waveNumber ? 0xea9c63 : 0x34454c, i < this.waveNumber ? 0.95 : 0.65);
-      g.fillRect(129 + i * 39, 117, 31, 3);
+      g.fillRect(129 + i * segment, 117, segment - 8, 3);
     }
-    if (this.waveNumber === 5 && this.bossSpawned && !this.bossKilled) {
+    if (this.currentStage.encounter.kind === 'boss' && this.bossSpawned && !this.bossKilled) {
       const boss = this.enemyList.find(enemy => enemy.kind === 'boss' && enemy.alive);
       if (boss) {
         g.fillStyle(0x1b2531, 0.95);
