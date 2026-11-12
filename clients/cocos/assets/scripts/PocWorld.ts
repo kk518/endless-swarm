@@ -4,6 +4,10 @@
  * preview. It does NOT yet implement full M6 campaign/hero/meta progression.
  * No imports from cc, Phaser, DOM or wx are allowed.
  */
+import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
+import { battlefieldWave, DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
+import { WAVES } from './m6/progression.ts';
+
 export interface Vec2 { x: number; y: number }
 export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'boss';
 export interface PocPlayer extends Vec2 {
@@ -111,6 +115,7 @@ function emptyState(): PocState {
 export class PocWorld {
   readonly width: number;
   readonly height: number;
+  readonly zoneId: BattlefieldId;
   readonly state: PocState;
   private accumulatorMs = 0;
   private fireCooldownMs = 0;
@@ -118,14 +123,15 @@ export class PocWorld {
   private spawnCooldownMs = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
   private nextId = 1;
-  private randomState: number;
+  private randomStreams: RunRandomStreams;
   private readonly initialSeed: number;
 
-  constructor(width = 450, height = 800, seed = 12345) {
+  constructor(width = 450, height = 800, seed = 12345, zoneId: BattlefieldId = DEFAULT_BATTLEFIELD) {
     this.width = width;
     this.height = height;
+    this.zoneId = zoneId;
     this.initialSeed = seed >>> 0;
-    this.randomState = this.initialSeed;
+    this.randomStreams = createRunRandoms(this.initialSeed);
     this.state = emptyState();
     this.spawnEnemyAt(130, 60);
   }
@@ -137,7 +143,7 @@ export class PocWorld {
     this.spawnCooldownMs = POC.enemySpawnMs;
     this.hurtCooldownMs = 0;
     this.nextId = 1;
-    this.randomState = this.initialSeed;
+    this.randomStreams = createRunRandoms(this.initialSeed);
     this.spawnEnemyAt(130, 60);
   }
   /** Pause/resume must discard frame debt to prevent lethal catch-up damage. */
@@ -159,8 +165,8 @@ export class PocWorld {
     this.accumulatorMs = steps === 5 ? 0 : Math.max(0, this.accumulatorMs - steps * POC.fixedStepMs);
   }
   private nextRandom(): number {
-    this.randomState = (Math.imul(1664525, this.randomState) + 1013904223) >>> 0;
-    return this.randomState / 0x100000000;
+    // Visual effects cannot change combat rolls: reuse the M6 domain RNG.
+    return this.randomStreams.combat.next();
   }
   private addXp(amount: number): void {
     const s = this.state;
@@ -175,11 +181,18 @@ export class PocWorld {
   }
   private spawnWaveEnemy(player: PocPlayer): void {
     const wave = this.state.wave;
-    const roll = this.nextRandom();
-    const kind: PocEnemyKind =
-      wave >= 4 && roll < .22 ? 'armored'
-      : wave >= 2 && roll < .50 ? 'leaper'
-      : 'grunt';
+    const profile = battlefieldWave(this.zoneId, WAVES[Math.min(4, wave - 1)]);
+    // Only three already-implemented enemy behaviors are eligible for the PoC.
+    // Original spitter/bomber definitions must wait for real attack drivers.
+    const choices = profile.mix.filter(entry =>
+      entry.kind === 'grunt' || entry.kind === 'leaper' || entry.kind === 'armored');
+    const total = choices.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = this.nextRandom() * total;
+    let kind: PocEnemyKind = 'grunt';
+    for (const entry of choices) {
+      roll -= entry.weight;
+      if (roll <= 0) { kind = entry.kind as PocEnemyKind; break; }
+    }
     const angle = this.nextRandom() * Math.PI * 2;
     // Keep spawn points off the player's feet; clip to readable arena.
     const dx = Math.cos(angle) * 185, dy = Math.sin(angle) * 215;
