@@ -13,16 +13,19 @@ import {
   FIXED_STEP_MS, fixedStepBatch, isDeployed, normalizedMove, selectTarget,
 } from './combat';
 import {
-  applyCard, newBuild, pickEnemyKind, rollCards,
+  applyCard, newBuild, pickEnemyKind, rollCards, CARDS,
   type CardDef, type CardId, type EnemyKind, type RunBuild, type WeaponId,
 } from './progression';
 import { advanceStreak, streakActive, streakDamageMultiplier } from './streak';
 import {
   PROTOTYPE_CAMPAIGN, THREE_ACT_BLUEPRINT, advanceCampaignReward, beginCampaign, getEncounter, tickCampaign,
+  fromCheckpoint, toCheckpoint,
   type CampaignDefinition, type CampaignRunState,
 } from './campaignDirector';
 import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
-import { createRunRandoms, newRunSeed, type RunRandomStreams } from './runRandom';
+import { createRunRandoms, newRunSeed, restoreRandoms, snapshotRandoms, type RunRandomStreams } from './runRandom';
+import { readMetaProgress, settleStoredRun } from './metaProgression';
+import { clearRunSafeSave, parseRunSafeSave, writeRunSafeSave, type RunSafeSave } from './runSafeSave';
 import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
 import { createHeroRuntimeRegistry } from './heroRuntime';
 import { eligibleRouteChoices, resolveRouteChoice, type RouteChoice } from './routeDecisions';
@@ -109,6 +112,7 @@ export interface RunResult {
   level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
   heroId: string; campaignId: string; runSeed: number;
   totalStages: number; actTitle: string;
+  warDataEarned: number; totalWarData: number; armorRank: number; settlementSaved: boolean;
 }
 export interface RewardOffer {
   wave: number; options: CardDef[]; nextWave: number; equipped: WeaponId[];
@@ -160,6 +164,8 @@ export class GameScene extends Phaser.Scene {
   private rewardOptions: CardDef[] = [];
   private pendingRoutes: readonly RouteChoice[] = [];
   private routePressureMultiplier = 1;
+  private runId = 'not-started';
+  private settlementSaved = false;
   private campaign: CampaignDefinition = PROTOTYPE_CAMPAIGN;
   private campaignRun: CampaignRunState = beginCampaign(PROTOTYPE_CAMPAIGN, 1);
   private randoms: RunRandomStreams = createRunRandoms(1);
@@ -313,7 +319,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Called by the HTML start/retry button; safe for repeated sessions. */
-  startRun(training: TrainingPlan = DEFAULT_TRAINING, mode: CampaignMode = 'prototype'): void {
+  startRun(training: TrainingPlan = DEFAULT_TRAINING, mode: CampaignMode = 'prototype', persistOnStart = true): void {
     if (!this.ready) return;
     this.training = { ...DEFAULT_TRAINING };
     this.removeProjectilesAndEnemies();
@@ -343,6 +349,8 @@ export class GameScene extends Phaser.Scene {
     this.campaign = mode === 'expedition' ? THREE_ACT_BLUEPRINT : PROTOTYPE_CAMPAIGN;
     this.campaignRun = beginCampaign(this.campaign, newRunSeed());
     this.randoms = createRunRandoms(this.campaignRun.seed);
+    this.runId = `run-${Date.now().toString(36)}-${this.campaignRun.seed.toString(36)}-${newRunSeed().toString(36)}`;
+    this.settlementSaved = false;
     const loadout = resolveHeroLoadout(CONTENT_CATALOG, CURRENT_HERO_ID);
     // Future catalog entries need runtime attack and passive drivers before
     // they can be chosen; the present renderer supports the base marine.
@@ -358,6 +366,11 @@ export class GameScene extends Phaser.Scene {
     this.pendingRoutes = [];
     this.routePressureMultiplier = 1;
     this.build = newBuild();
+    const meta = readMetaProgress(localStorage);
+    if (meta) {
+      this.build.maxHp += meta.armorRank;
+      this.build.hp += meta.armorRank;
+    }
     this.growth = newGrowth();
     this.setTraining(training.weapon, training.focus);
     this.growthNotice = '';
@@ -377,14 +390,72 @@ export class GameScene extends Phaser.Scene {
     this.lockedTarget = null;
     this.introFadeMs = 4600;
     this.introHint.setText(mode === 'expedition'
-      ? '三幕远征实验 · 无中途存档或局外奖励 · 松手展开火力'
+      ? '三幕远征 · 安全节点自动保存 · 松手展开火力'
       : '经验自动升级 · 松手展开火力 · 波末选择构筑').setAlpha(1);
     this.stateLabel.setText('机动射击');
     this.releaseJoystick();
     this.soundFx.unlock();
     this.active = true;
     this.heroRuntimes.get(this.heroId)?.onRunStart?.();
+    if (mode === 'expedition' && persistOnStart) this.saveSafeNode();
     this.updateHUD();
+  }
+
+  /**
+   * Resume only from a validated between-stage checkpoint.
+   * Active enemies and Phaser objects are recreated at a clean safe boundary;
+   * there is no arbitrary mid-combat serialization.
+   */
+  resumeSavedExpedition(value: unknown): boolean {
+    const save = parseRunSafeSave(value);
+    if (!save || !this.ready) return false;
+    this.startRun(save.training, 'expedition', false);
+    const restored = fromCheckpoint(THREE_ACT_BLUEPRINT, save.campaign);
+    if (!restored) return false;
+    this.campaignRun = restored;
+    this.randoms = createRunRandoms(restored.seed);
+    restoreRandoms(this.randoms, save.randoms);
+    this.runId = save.runId;
+    this.heroId = save.heroId;
+    this.build = { ...save.build, weapons: [...save.build.weapons], selected: [...save.build.selected] };
+    this.growth = { ...save.growth, weaponLevels: { ...save.growth.weaponLevels },
+      evolved: { ...save.growth.evolved } };
+    this.training = { ...save.training };
+    this.hp = save.hp;
+    this.timeMs = save.timeMs;
+    this.kills = save.kills;
+    this.bestStreak = save.bestStreak;
+    this.salvageKills = save.salvageKills;
+    this.suppliesCollected = save.suppliesCollected;
+    this.routePressureMultiplier = save.routePressureMultiplier;
+    this.rewardOptions = save.cardOfferIds.map(id => CARDS.find(card => card.id === id)!);
+    this.pendingRoutes = restored.phase === 'reward' && this.currentStage.encounter.decision === 'route'
+      ? eligibleRouteChoices(this.currentStage.encounter.routes ?? [], this.hp) : [];
+    this.awaitingReward = restored.phase === 'reward';
+    this.active = restored.phase === 'playing';
+    this.refreshMountedWeapons();
+    this.releaseJoystick();
+    this.updateHUD();
+    if (this.awaitingReward) this.publishSafeDecision();
+    return true;
+  }
+
+  private saveSafeNode(): boolean {
+    if (this.campaign.id !== THREE_ACT_BLUEPRINT.id) return true;
+    const save: RunSafeSave = {
+      schemaVersion: 1, runId: this.runId, heroId: this.heroId,
+      savedAtMs: Date.now(), campaign: toCheckpoint(this.campaignRun),
+      build: { ...this.build, weapons: [...this.build.weapons], selected: [...this.build.selected] },
+      growth: { ...this.growth, weaponLevels: { ...this.growth.weaponLevels },
+        evolved: { ...this.growth.evolved } },
+      training: { ...this.training }, hp: this.hp, timeMs: this.timeMs, kills: this.kills,
+      bestStreak: this.bestStreak, salvageKills: this.salvageKills,
+      suppliesCollected: this.suppliesCollected, routePressureMultiplier: this.routePressureMultiplier,
+      randoms: snapshotRandoms(this.randoms), cardOfferIds: this.rewardOptions.map(card => card.id),
+    };
+    const saved = writeRunSafeSave(localStorage, save);
+    if (!saved) window.dispatchEvent(new Event('swarm:storage-warning'));
+    return saved;
   }
 
   /** Configure deterministic automatic training. The next rank always follows this plan. */
@@ -435,6 +506,7 @@ export class GameScene extends Phaser.Scene {
     this.build.damage *= effect.runDamageMultiplier;
     this.advanceAfterDecision(chosen.name, 0);
     this.routePressureMultiplier = effect.nextPressureMultiplier;
+    this.saveSafeNode();
     return true;
   }
 
@@ -463,6 +535,7 @@ export class GameScene extends Phaser.Scene {
     this.introHint.setText(`${label} · ${this.currentStage.actTitle} / ${this.currentStage.encounter.title}`).setAlpha(1);
     this.spawnSparks(this.player.x, this.player.y, 18, 0x79f8dc, 170);
     this.active = true;
+    if (this.campaign.id === THREE_ACT_BLUEPRINT.id && this.routePressureMultiplier === 1) this.saveSafeNode();
     this.updateHUD();
   }
 
@@ -807,6 +880,17 @@ export class GameScene extends Phaser.Scene {
     if (stage.encounter.decision === 'route') {
       this.pendingRoutes = eligibleRouteChoices(stage.encounter.routes ?? [], this.hp);
       if (this.pendingRoutes.length === 0) throw new Error('No legal route options');
+    } else {
+      this.rewardOptions = rollCards(this.build, this.waveNumber,
+        () => this.randoms.rewards.next(), evolutionRecipeTargets(this.build, this.growth));
+    }
+    this.saveSafeNode(); // Saved after reward roll; reloading cannot reroll the offer.
+    this.publishSafeDecision();
+  }
+
+  private publishSafeDecision(): void {
+    const stage = this.currentStage;
+    if (stage.encounter.decision === 'route') {
       const detail: RouteOffer = {
         wave: this.waveNumber, actTitle: stage.actTitle,
         encounterTitle: stage.encounter.title, totalStages: stage.total, options: this.pendingRoutes,
@@ -814,8 +898,7 @@ export class GameScene extends Phaser.Scene {
       window.dispatchEvent(new CustomEvent<RouteOffer>('swarm:route', { detail }));
       return;
     }
-    this.rewardOptions = rollCards(this.build, this.waveNumber,
-      () => this.randoms.rewards.next(), evolutionRecipeTargets(this.build, this.growth));
+    if (stage.encounter.decision !== 'card') return;
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
       equipped: [...this.build.weapons], training: this.currentTraining(),
