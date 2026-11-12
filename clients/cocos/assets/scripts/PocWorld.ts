@@ -7,6 +7,9 @@
 import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
 import { battlefieldWave, DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { WAVES } from './m6/progression.ts';
+import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
+  type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster';
+import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
 
 export interface Vec2 { x: number; y: number }
 export type PocEnemyKind = 'grunt' | 'leaper' | 'armored' | 'boss';
@@ -27,9 +30,11 @@ export interface PocBullet extends Vec2 {
   vx: number; vy: number; remainingMs: number;
 }
 export interface PocLightning {
-  fromX: number; fromY: number; toX: number; toY: number; remainingMs: number;
+  fromX: number; fromY: number; toX: number; toY: number;
+  remainingMs: number; kind?: 'arc' | 'rail';
 }
 export interface PocState {
+  heroId: PocHeroId;
   player: PocPlayer;
   enemies: PocEnemy[];
   bullets: PocBullet[];
@@ -106,6 +111,7 @@ function clamp(x: number, low: number, high: number): number {
 }
 function emptyState(): PocState {
   return {
+    heroId: 'marine',
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], bullets: [], lightning: [],
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
@@ -123,13 +129,17 @@ export class PocWorld {
   readonly width: number;
   readonly height: number;
   readonly zoneId: BattlefieldId;
+  readonly heroId: PocHeroId;
+  readonly heroName: string;
   readonly state: PocState;
+  private readonly passiveRuntime: Readonly<HeroPassiveRuntime>;
   private readonly armorRank: number;
   private readonly weaponFrameRank: number;
   private readonly repairModuleRank: number;
   private accumulatorMs = 0;
   private fireCooldownMs = 0;
   private arcCooldownMs = 0;
+  private railCooldownMs = 0;
   private spawnCooldownMs = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
   private nextId = 1;
@@ -137,7 +147,12 @@ export class PocWorld {
   private readonly initialSeed: number;
 
   constructor(width = 450, height = 800, seed = 12345,
-    zoneId: BattlefieldId = DEFAULT_BATTLEFIELD, tuning: PocMetaTuning = {}) {
+    zoneId: BattlefieldId = DEFAULT_BATTLEFIELD, tuning: PocMetaTuning = {},
+    heroId: PocHeroId = 'marine') {
+    const selected = resolvePocHero(heroId); // cannot select an unimplemented loadout
+    this.heroId = heroId;
+    this.heroName = selected.hero.name;
+    this.passiveRuntime = POC_HERO_RUNTIME.get(heroId)!;
     this.width = width;
     this.height = height;
     this.zoneId = zoneId;
@@ -147,22 +162,27 @@ export class PocWorld {
     this.initialSeed = seed >>> 0;
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.state = emptyState();
+    this.state.heroId = this.heroId;
     this.state.player.maxHp += this.armorRank;
     this.state.player.hp = this.state.player.maxHp;
     this.spawnEnemyAt(130, 60);
+    this.passiveRuntime.onRunStart?.();
   }
   reset(): void {
     Object.assign(this.state, emptyState());
+    this.state.heroId = this.heroId;
     this.state.player.maxHp += this.armorRank;
     this.state.player.hp = this.state.player.maxHp;
     this.accumulatorMs = 0;
     this.fireCooldownMs = 0;
     this.arcCooldownMs = 0;
+    this.railCooldownMs = 0;
     this.spawnCooldownMs = POC.enemySpawnMs;
     this.hurtCooldownMs = 0;
     this.nextId = 1;
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.spawnEnemyAt(130, 60);
+    this.passiveRuntime.onRunStart?.();
   }
   /** Pause/resume must discard frame debt to prevent lethal catch-up damage. */
   discardFrameDebt(): void { this.accumulatorMs = 0; }
@@ -226,12 +246,16 @@ export class PocWorld {
       state.enemies.splice(i, 1);
       state.kills++;
       this.addXp(enemyStats(e.kind ?? 'grunt').xp);
+      this.passiveRuntime.onEnemyKilled?.({
+        enemyKind: e.kind ?? 'grunt', elite: e.kind === 'boss', timeMs: state.elapsedMs,
+      });
       if (e.kind === 'boss') { state.won = true; state.over = true; }
     }
   }
   private step(ms: number, move: Vec2): void {
     const state = this.state, player = state.player;
     state.elapsedMs += ms;
+    this.passiveRuntime.onCombatTick?.(ms);
     const seconds = ms / 1000;
     const moving = Math.hypot(move.x, move.y) > 0.07;
     player.x = clamp(player.x + move.x * POC.moveSpeed * seconds,
@@ -288,18 +312,12 @@ export class PocWorld {
     }
 
     this.fireCooldownMs -= ms;
-    const target = nearestEnemy(player, state.enemies, POC.fireRange);
-    if (target && this.fireCooldownMs <= 0) {
-      const dx = target.x - player.x, dy = target.y - player.y;
-      const distance = Math.max(1, Math.hypot(dx, dy));
+    const rifleTarget = nearestEnemy(player, state.enemies, POC.fireRange);
+    if (rifleTarget && this.fireCooldownMs <= 0) {
+      const angle = Math.atan2(rifleTarget.y - player.y, rifleTarget.x - player.x);
       const rateBonus = 1 + (state.level - 1) * .025;
-      const interval = POC.shotIntervalMs / (rateBonus * (player.deployed ? POC.deployRateMultiplier : 1));
-      this.fireCooldownMs = interval;
-      state.bullets.push({
-        x: player.x, y: player.y,
-        vx: dx / distance * POC.bulletSpeed, vy: dy / distance * POC.bulletSpeed,
-        remainingMs: 800,
-      });
+      this.fireCooldownMs = 255 / (rateBonus * (player.deployed ? POC.deployRateMultiplier : 1));
+      POC_WEAPON_RUNTIME.get('rifle')!.attack(rifleTarget, angle, this.attackPort);
     }
 
     for (let i = state.bullets.length - 1; i >= 0; i--) {
@@ -310,8 +328,8 @@ export class PocWorld {
       let removed = bullet.remainingMs <= 0;
       if (!removed) for (const e of state.enemies) {
         if (e.hp <= 0 || squaredDistance(bullet, e) > 18 * 18) continue;
-        e.hp -= (28 + 3 * (state.level - 1)) * (1 + this.weaponFrameRank * .12) *
-          (player.deployed ? POC.deployDamageMultiplier : 1);
+        e.hp -= (28 + 3 * (state.level - 1)) * (1 + this.weaponFrameRank * .12)
+          * this.deployDamageBonus();
         removed = true;
         break;
       }
@@ -320,25 +338,84 @@ export class PocWorld {
 
     if (state.arcUnlocked) {
       this.arcCooldownMs -= ms;
-      if (this.arcCooldownMs <= 0) {
-        const first = nearestEnemy(player, state.enemies, 250);
-        if (first) {
-          const victims = state.enemies.filter(e => e.hp > 0 && e.id !== first.id
-            && squaredDistance(first, e) < 125 * 125)
-            .sort((a,b) => squaredDistance(first,a) - squaredDistance(first,b));
-          const chain = [first, ...victims.slice(0, state.level >= 6 ? 2 : 1)];
-          let from: Vec2 = player;
-          for (const e of chain) {
-            state.lightning.push({
-              fromX: from.x, fromY: from.y, toX: e.x, toY: e.y, remainingMs: 160,
-            });
-            e.hp -= 19 + (state.level - 1) * 2;
-            from = e;
-          }
-          this.arcCooldownMs = 940 / (player.deployed ? POC.deployRateMultiplier : 1);
-        }
+      const first = nearestEnemy(player, state.enemies, 250);
+      if (first && this.arcCooldownMs <= 0) {
+        const angle = Math.atan2(first.y - player.y, first.x - player.x);
+        POC_WEAPON_RUNTIME.get('arc')!.attack(first, angle, this.attackPort);
+        this.arcCooldownMs = 940 / (player.deployed ? POC.deployRateMultiplier : 1);
+      }
+    }
+
+    if (this.heroId === 'kane') {
+      this.railCooldownMs -= ms;
+      const target = nearestEnemy(player, state.enemies, 380);
+      if (target && this.railCooldownMs <= 0) {
+        const angle = Math.atan2(target.y - player.y, target.x - player.x);
+        POC_WEAPON_RUNTIME.get('kane-rail')!.attack(target, angle, this.attackPort);
+        this.railCooldownMs = 2050 / (player.deployed ? POC.deployRateMultiplier : 1);
       }
     }
     this.resolveDeaths();
   }
+  /**
+   * M6 attack drivers invoke these ports. They mutate only the world state,
+   * never a Phaser/Cocos Sprite. Both browser and Creator call the same code.
+   */
+  private readonly attackPort: PocAttackPort = {
+    rifle: (target, angle) => {
+      const p = this.state.player;
+      this.state.bullets.push({
+        x: p.x, y: p.y,
+        vx: Math.cos(angle) * POC.bulletSpeed,
+        vy: Math.sin(angle) * POC.bulletSpeed,
+        remainingMs: 800,
+      });
+    },
+    arc: (first) => {
+      const state = this.state;
+      const victims = state.enemies.filter(e => e.hp > 0 && e.id !== first.id
+        && squaredDistance(first, e) < 125 * 125)
+        .sort((a,b) => squaredDistance(first,a) - squaredDistance(first,b));
+      const chain: PocTarget[] = [first, ...victims.slice(0, state.level >= 6 ? 2 : 1)];
+      let from: Vec2 = state.player;
+      for (const e of chain) {
+        state.lightning.push({ fromX: from.x, fromY: from.y,
+          toX: e.x, toY: e.y, remainingMs: 160, kind: 'arc' });
+        e.hp -= (19 + (state.level - 1) * 2) * this.deployDamageBonus();
+        from = e;
+      }
+    },
+    rail: (target, angle) => {
+      const state = this.state, player = state.player;
+      const range = 380;
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      // First bullet pierces a narrow corridor along its direction.
+      const victims = state.enemies
+        .filter(e => {
+          if (e.hp <= 0) return false;
+          const x = e.x - player.x, y = e.y - player.y;
+          const along = x * direction.x + y * direction.y;
+          const sideways = Math.abs(x * direction.y - y * direction.x);
+          return along >= 0 && along <= range && sideways <= (e.kind === 'boss' ? 33 : 23);
+        })
+        .sort((a,b) => squaredDistance(player,a) - squaredDistance(player,b))
+        .slice(0, 3);
+      // A real rail beam fires even when no secondary target is aligned.
+      for (const e of victims) {
+        e.hp -= (95 + 5 * (state.level - 1)) * (1 + this.weaponFrameRank * .12)
+          * this.deployDamageBonus();
+      }
+      state.lightning.push({
+        fromX: player.x, fromY: player.y,
+        toX: player.x + direction.x * range, toY: player.y + direction.y * range,
+        remainingMs: 190, kind: 'rail',
+      });
+    },
+  };
+  private deployDamageBonus(): number {
+    if (!this.state.player.deployed) return 1;
+    // Kane's real passive rewards deployed fire but DOES NOT disable moving fire.
+    return POC.deployDamageMultiplier * (this.heroId === 'kane' ? 1.2 : 1);
+  }
+
 }
