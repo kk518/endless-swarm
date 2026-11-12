@@ -34,7 +34,13 @@ test('M2 bomber explosion is avoidable after telegraph and cancellable by killin
   escaped.spawnEnemyAt(75, 0, 'bomber');
   escaped.state.enemies[0].hp = 100000;
   frames(escaped, 1);
-  frames(escaped, 58, -1);
+  for (let i = 0; i < 58; i++) {
+    // Isolation: the bomber is the only enemy being tested here; ordinary
+    // wave spawns could inflict unrelated one-point contact damage.
+    for (let j = escaped.state.enemies.length - 1; j >= 0; j--)
+      if (escaped.state.enemies[j].kind !== 'bomber') escaped.state.enemies.splice(j, 1);
+    escaped.advance(POC.fixedStepMs, { x: -1, y: 0 });
+  }
   assert.equal(escaped.state.player.hp, 6, 'moving outside ring avoids blast damage');
   assert.equal(escaped.state.kills, 0);
   const killed = solo();
@@ -58,6 +64,9 @@ test('M2 4.5-second combo window and tier reset use main streak rules', () => {
   assert.equal(world.state.bestStreak, 5);
   assert.ok(world.state.streakRemainingMs > 0);
   for (let i = 0; i < 300; i++) {
+    // Unrelated auto-rifle kills must not extend the combo being timed out.
+    world.state.enemies.length = 0;
+    world.state.bullets.length = 0;
     world.heal(1);
     frames(world, 1, 1);
   }
