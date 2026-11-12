@@ -228,17 +228,19 @@ export class PocBattle extends Component {
       }
     }
     for (const arc of s.lightning) {
-      const rail = arc.kind === 'rail';
-      g.strokeColor = rail ? new Color(255, 203, 124, 250) : new Color(147, 224, 255, 240);
-      g.lineWidth = rail ? 7 : 4;
+      const rail = arc.kind === 'rail', flame = arc.kind === 'flame';
+      g.strokeColor = flame ? new Color(255, 133, 65, 238)
+        : rail ? new Color(255, 203, 124, 250) : new Color(147, 224, 255, 240);
+      g.lineWidth = flame ? 11 : rail ? 7 : 4;
       g.moveTo(arc.fromX, arc.fromY + 17);
-      g.lineTo((arc.fromX + arc.toX) * .5 - (rail ? 0 : 6),
-        (arc.fromY + arc.toY) * .5 + (rail ? 17 : 28));
+      g.lineTo((arc.fromX + arc.toX) * .5 - (rail || flame ? 0 : 6),
+        (arc.fromY + arc.toY) * .5 + (rail || flame ? 17 : 28));
       g.lineTo(arc.toX, arc.toY + 17);
       g.stroke();
     }
     for (const b of s.bullets) {
-      g.fillColor = COL.bullet; g.circle(b.x, b.y + 8, 4); g.fill();
+      g.fillColor = b.source === 'scatter' ? new Color(255, 146, 89, 255) : COL.bullet;
+      g.circle(b.x, b.y + 8, b.source === 'scatter' ? 3 : 4); g.fill();
     }
     const p = s.player;
     g.fillColor = COL.shadow; g.ellipse(p.x, p.y - 14, 23, 9); g.fill();
@@ -290,7 +292,8 @@ export class PocBattle extends Component {
         : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
           + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages + ' · Lv.' + s.level
           + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
-          + (s.arcUnlocked ? ' · 电弧已解锁' : '')
+          + ' · ' + s.weapons.map(id => id + ' Lv.' + s.weaponLevels[id]
+            + (s.evolved[id] ? ' ★' : '')).join('/')
           + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
           + ' · 左上角切换模式 / M · 右上角换英雄 / H';
   }

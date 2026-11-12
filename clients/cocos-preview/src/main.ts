@@ -262,20 +262,25 @@ function paint(dt: number): void {
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
   for (const bullet of s.bullets) {
     const b = worldPoint(bullet.x, bullet.y);
-    ellipse(b.x, b.y - 15, 7, 3, '#ff9e52b0');
-    ellipse(b.x, b.y - 17, 4, 2, '#fff3b4');
+    const buckshot = bullet.source === 'scatter';
+    ellipse(b.x, b.y - 15, buckshot ? 5 : 7, 3, buckshot ? '#ff925bcb' : '#ff9e52b0');
+    ellipse(b.x, b.y - 17, buckshot ? 3 : 4, 2, buckshot ? '#ffe0a6' : '#fff3b4');
   }
   for (const arc of s.lightning) {
     const a = worldPoint(arc.fromX, arc.fromY), b = worldPoint(arc.toX, arc.toY);
-    const rail = arc.kind === 'rail';
-    const strength = Math.min(1, arc.remainingMs/(rail ? 190 : 90));
-    const middleX = (a.x+b.x)/2+(rail?0:7);
-    const middleY = (a.y+b.y)/2-(rail?23:35);
-    g.lineWidth=rail ? 11 : 5;
-    g.strokeStyle=rail?'rgba(250,155,78,'+(strength*.50)+')':'rgba(77,189,238,'+(strength*.45)+')';
+    const rail = arc.kind === 'rail', flame = arc.kind === 'flame';
+    const strength = Math.min(1, arc.remainingMs/(flame ? 135 : rail ? 190 : 90));
+    const middleX = (a.x+b.x)/2+(rail||flame?0:7);
+    const middleY = (a.y+b.y)/2-(rail||flame?23:35);
+    g.lineWidth = flame ? 17 : rail ? 11 : 5;
+    g.strokeStyle = flame ? 'rgba(255,88,42,'+(strength*.42)+')'
+      : rail ? 'rgba(250,155,78,'+(strength*.50)+')'
+      : 'rgba(77,189,238,'+(strength*.45)+')';
     g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo(middleX,middleY);g.lineTo(b.x,b.y-22);g.stroke();
-    g.lineWidth=rail ? 4 : 2;
-    g.strokeStyle=rail?'rgba(255,240,165,'+strength+')':'rgba(197,247,255,'+strength+')';
+    g.lineWidth = flame ? 5 : rail ? 4 : 2;
+    g.strokeStyle = flame ? 'rgba(255,215,95,'+strength+')'
+      : rail ? 'rgba(255,240,165,'+strength+')'
+      : 'rgba(197,247,255,'+strength+')';
     g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo(middleX,middleY);g.lineTo(b.x,b.y-22);g.stroke();
   }
   if (activePointer !== null) {
@@ -337,8 +342,10 @@ function ui(): void {
     + String(s.wave).padStart(2,'0') + ' / ' + String(s.totalStages).padStart(2,'0');
   playerLevel.textContent = 'LV.' + String(s.level).padStart(2,'0')
     + ' · XP ' + s.xp + '/' + s.xpToNext;
-  arcUnlock.textContent = s.arcUnlocked ? '⚡ 电弧线圈 · 连锁攻击已激活' : '电弧线圈 · 从波末战术卡安装';
-  arcUnlock.classList.toggle('unlocked',s.arcUnlocked);
+  const weaponNames: Record<string, string> = { rifle: '步枪', scatter: '散射炮', arc: '电弧', flame: '喷火器' };
+  arcUnlock.textContent = s.weapons.map(id => weaponNames[id] + ' Lv.' + s.weaponLevels[id]
+    + (s.evolved[id] ? ' ★' : '')).join(' · ');
+  arcUnlock.classList.toggle('unlocked', s.weapons.length > 1);
   const isDeployed = s.player.deployed;
   // Hero-specific attacks are resolved in the shared world, not this Canvas renderer.
   stanceLabel.classList.toggle('active', isDeployed);
