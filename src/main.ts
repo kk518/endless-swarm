@@ -4,7 +4,9 @@ import { DEFAULT_TRAINING, type TrainingFocus } from './game/autoGrowth';
 import type { WeaponId } from './game/progression';
 import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
 import { CONTENT_CATALOG } from './game/contentCatalog';
-import { readMetaProgress, purchaseStoredArmor, nextArmorCost } from './game/metaProgression';
+import { readMetaProgress, purchaseStoredArmor, nextArmorCost,
+  purchaseStoredEquipment, nextEquipmentCost, type EquipmentId } from './game/metaProgression';
+import { DEFAULT_BATTLEFIELD, getBattlefield, isBattlefieldId, type BattlefieldId } from './game/battlefields';
 import { readRunSafeSave, clearRunSafeSave } from './game/runSafeSave';
 import { getStoragePort } from './game/platformStorage';
 import './styles.css';
@@ -47,6 +49,13 @@ const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
 const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
 const startFocus = document.querySelector<HTMLSelectElement>('#start-training-focus')!;
 const startCampaign = document.querySelector<HTMLSelectElement>('#start-campaign')!;
+const startBattlefield = document.querySelector<HTMLSelectElement>('#start-battlefield')!;
+const battlefieldHint = document.querySelector<HTMLElement>('#battlefield-hint')!;
+const metaMaterials = document.querySelector<HTMLElement>('#meta-materials')!;
+const metaFrameStatus = document.querySelector<HTMLElement>('#meta-frame-status')!;
+const metaRepairStatus = document.querySelector<HTMLElement>('#meta-repair-status')!;
+const frameUpgradeButton = document.querySelector<HTMLButtonElement>('#frame-upgrade-button')!;
+const repairUpgradeButton = document.querySelector<HTMLButtonElement>('#repair-upgrade-button')!;
 const resumeButton = document.querySelector<HTMLButtonElement>('#resume-button')!;
 const armorUpgradeButton = document.querySelector<HTMLButtonElement>('#armor-upgrade-button')!;
 const metaWallet = document.querySelector<HTMLElement>('#meta-wallet')!;
@@ -60,6 +69,16 @@ const weaponName = (id: WeaponId): string => CONTENT_CATALOG.weapons.get(id)?.na
 const cardCategory: Record<string, string> = {
   weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
 };
+
+function selectedBattlefield(): BattlefieldId {
+  return isBattlefieldId(startBattlefield.value) ? startBattlefield.value : DEFAULT_BATTLEFIELD;
+}
+function refreshBattlefieldHint(): void {
+  const zone = getBattlefield(selectedBattlefield());
+  battlefieldHint.textContent = `${zone.name} · ${zone.enemyTrait} · 主要收集${zone.resourceName}，用于${zone.workshopTarget}。`;
+}
+startBattlefield.addEventListener('change', refreshBattlefieldHint);
+refreshBattlefieldHint();
 
 function getSavedExpedition() {
   const storage = getStoragePort();
@@ -79,10 +98,30 @@ function refreshArmory(message?: string): void {
     metaWallet.textContent = '本地战备不可用';
     metaArmorStatus.textContent = '无法读取本地存档';
     armorUpgradeButton.disabled = true;
+    frameUpgradeButton.disabled = true;
+    repairUpgradeButton.disabled = true;
     metaStorageStatus.textContent = message ?? '浏览器本地存储不可用，战备和远征无法可靠保存。';
     return;
   }
   const cost = nextArmorCost(meta);
+  metaMaterials.textContent = `军用合金 ${meta.alloy} · 生体样本 ${meta.samples}`;
+  for (const [item, label, status, button] of [
+    ['weapon-frame', '主武器框架', metaFrameStatus, frameUpgradeButton],
+    ['repair-module', '装甲修复模块', metaRepairStatus, repairUpgradeButton],
+  ] as const) {
+    const rank = item === 'weapon-frame' ? meta.weaponFrameRank : meta.repairModuleRank;
+    const price = nextEquipmentCost(meta, item);
+    status.textContent = item === 'weapon-frame'
+      ? `${label} Lv.${rank}/2 · 步枪伤害 +${rank * 2.5}%`
+      : `${label} Lv.${rank}/2 · 战术卡阶段休整额外回复 +${rank} 点`;
+    if (!price) {
+      button.disabled = true;
+      button.textContent = `${label}已达当前上限`;
+    } else {
+      button.disabled = meta.warData < price.warData || meta[price.material] < price.quantity;
+      button.textContent = `${label}升级 · ${price.warData} 战备 + ${price.quantity} ${price.material === 'alloy' ? '合金' : '样本'}`;
+    }
+  }
   metaWallet.textContent = `战备数据 ${meta.warData}`;
   metaArmorStatus.textContent = `装甲工坊 Lv.${meta.armorRank}/3 · 下局初始装甲上限 +${meta.armorRank}`;
   armorUpgradeButton.disabled = cost === null || meta.warData < cost;
@@ -106,7 +145,7 @@ function beginRun(): void {
     }
   }
   scene.startRun({ weapon: DEFAULT_TRAINING.weapon, focus: startFocus.value as TrainingFocus },
-    startCampaign.value === 'expedition' ? 'expedition' : 'prototype');
+    startCampaign.value === 'expedition' ? 'expedition' : 'prototype', true, selectedBattlefield());
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
   refreshResumeButton();
@@ -120,6 +159,8 @@ resumeButton.addEventListener('click', () => {
   if (!saved) { refreshResumeButton(); return; }
   overlay.classList.add('is-hidden');
   rewardOverlay.classList.add('is-hidden');
+  startBattlefield.value = saved.battlefieldId;
+  refreshBattlefieldHint();
   if (!scene.resumeSavedExpedition(saved)) {
     overlay.classList.remove('is-hidden');
     refreshArmory('远征快照版本不兼容，无法恢复，请使用重新出击。');
@@ -136,6 +177,25 @@ armorUpgradeButton.addEventListener('click', () => {
     ? `永久装甲已升级至 Lv.${purchased.meta.armorRank}，下次出击立即生效。`
     : '战备不足，或装甲已经强化到上限。');
 });
+function buyRegionalEquipment(item: EquipmentId): void {
+  const storage = getStoragePort();
+  const purchased = storage ? purchaseStoredEquipment(storage, item) : null;
+  if (!purchased) {
+    refreshArmory('素材强化未能保存，请检查浏览器本地存储。');
+    return;
+  }
+  if (purchased.bought) {
+    refreshArmory(`装备强化成功：下次出击生效。已经开始的远征保留原来的装备快照。`);
+    return;
+  }
+  const price = purchased.cost;
+  const material = price?.material === 'samples' ? '生体样本' : '军用合金';
+  refreshArmory(price ? `材料不足：需要 ${price.warData} 战备 + ${price.quantity} ${material}。可以前往对应战区收集。`
+    : '该装备已达当前强化上限。');
+}
+frameUpgradeButton.addEventListener('click', () => buyRegionalEquipment('weapon-frame'));
+repairUpgradeButton.addEventListener('click', () => buyRegionalEquipment('repair-module'));
+
 window.addEventListener('swarm:storage-warning', () => {
   refreshArmory('警告：安全节点存档失败，本次远征刷新后可能无法恢复。');
 });
