@@ -30,6 +30,12 @@
             </div>
             <div id="run-stats" class="run-stats is-hidden" aria-live="polite"></div>
             <div id="start-training" class="training-controls">
+              <label for="start-campaign">出击模式</label>
+              <select id="start-campaign" aria-label="选择战斗模式">
+                <option value="prototype">五波封锁 · 现有原型</option>
+                <option value="expedition">三幕远征 · 实验玩法（约 16 分钟）</option>
+              </select>
+              <small>实验远征现可选择风险路线；暂无中途存档、战区素材或失败永久收益。</small>
               <label for="start-training-focus">自动成长倾向</label>
               <select id="start-training-focus" aria-label="开局自动升级方向">
                 <option value="damage">火力 · 优先提升武器伤害</option>
@@ -43,7 +49,7 @@
           </div>
         </div>
         <section id="reward-overlay" class="reward-overlay is-hidden" aria-label="波后卡牌选择" aria-live="polite">
-          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / STRATEGIC MODULE</span><h2 id="reward-title">战术模块授权</h2><p>波后强力模块 · 每波免费选择一张。</p></div>
+          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / STRATEGIC MODULE</span><h2 id="reward-title">战术模块授权</h2><p id="reward-description">波后强力模块 · 每波免费选择一张。</p></div>
           <div id="reward-cards" class="reward-cards" role="group" aria-label="选择一张强化卡"></div>
           <div class="wave-training" aria-label="下一波自动成长设置">
             <span>下一波自动专精</span>
@@ -56,7 +62,7 @@
               <option value="speed">机动 +7%</option>
             </select>
           </div>
-          <div class="reward-footer"><span class="footer-line"></span> 选取一项装备模块 / 立即生效 <span class="footer-line"></span></div>
+          <div class="reward-footer"><span class="footer-line"></span><span id="reward-footer-copy">选取一项装备模块 / 立即生效</span><span class="footer-line"></span></div>
         </section>
         <button id="mute-button" class="mute-button" type="button" aria-pressed="false">关闭音效</button>
       </section>
