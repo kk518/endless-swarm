@@ -13,7 +13,9 @@ import { createRunRandoms, snapshotRandoms } from '../src/game/runRandom.ts';
 function snapshot(): RunSafeSave {
   const campaign = beginCampaign(THREE_ACT_BLUEPRINT, 42);
   return {
-    schemaVersion: 1, runId: 'run-abc12345-xy567890', heroId: 'marine', savedAtMs: Date.now(),
+    schemaVersion: 2, battlefieldId: 'steel-ruins',
+    equipment: { weaponFrameRank: 0, repairModuleRank: 0 },
+    runId: 'run-abc12345-xy567890', heroId: 'marine', savedAtMs: Date.now(),
     campaign: toCheckpoint(campaign), build: newBuild(), growth: newGrowth(),
     training: { weapon: 'rifle', focus: 'damage' }, hp: 6,
     timeMs: 0, kills: 0, bestStreak: 0, salvageKills: 0, suppliesCollected: 0,
@@ -61,7 +63,9 @@ test('reward choices are snapshotted after drawing, never rerolled by restoratio
 test('rejects cross-version, illegal weapons, XP, HP, RNG and tampered phase', () => {
   const base = snapshot();
   for (const corrupted of [
-    null, {}, { ...base, schemaVersion: 2 },
+    null, {}, { ...base, schemaVersion: 3 },
+    { ...base, battlefieldId: 'unknown-zone' },
+    { ...base, equipment: { ...base.equipment, weaponFrameRank: 500 } },
     { ...base, heroId: 'not-yet-developed' },
     { ...base, campaign: { ...base.campaign, campaignId: 'k09-prototype' } },
     { ...base, campaign: { ...base.campaign, phase: 'reward' } },
@@ -79,6 +83,17 @@ test('rejects cross-version, illegal weapons, XP, HP, RNG and tampered phase', (
   ]) {
     assert.equal(parseRunSafeSave(corrupted), null);
   }
+});
+
+test('valid M6.0c v1 expedition snapshots migrate into steel ruins without losing the original build', () => {
+  const current = snapshot();
+  const { battlefieldId: _zone, equipment: _equipment, schemaVersion: _schema, ...legacy } = current;
+  const migrated = parseRunSafeSave({ ...legacy, schemaVersion: 1 });
+  assert.equal(migrated?.schemaVersion, 2);
+  assert.equal(migrated?.battlefieldId, 'steel-ruins');
+  assert.deepEqual(migrated?.equipment, { weaponFrameRank: 0, repairModuleRank: 0 });
+  assert.deepEqual(migrated?.build, current.build);
+  assert.equal(migrated?.runId, current.runId);
 });
 
 test('save failures are reported and never misrepresented as persisted checkpoints', () => {
