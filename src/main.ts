@@ -3,6 +3,7 @@ import { GameScene, type RewardOffer, type RunResult } from './game/GameScene';
 import { DEFAULT_TRAINING, type TrainingFocus } from './game/autoGrowth';
 import type { WeaponId } from './game/progression';
 import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
+import { CONTENT_CATALOG } from './game/contentCatalog';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
@@ -44,9 +45,7 @@ const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
 const startFocus = document.querySelector<HTMLSelectElement>('#start-training-focus')!;
 const rewardWeapon = document.querySelector<HTMLSelectElement>('#reward-training-weapon')!;
 const rewardFocus = document.querySelector<HTMLSelectElement>('#reward-training-focus')!;
-const weaponNames: Record<WeaponId, string> = {
-  rifle: '电磁步枪', scatter: '散射炮', arc: '电弧线圈', flame: '喷火器',
-};
+const weaponName = (id: WeaponId): string => CONTENT_CATALOG.weapons.get(id)?.name ?? id;
 const cardCategory: Record<string, string> = {
   weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
 };
@@ -72,7 +71,7 @@ window.addEventListener('swarm:reward', (event) => {
   for (const weapon of offer.equipped) {
     const option = document.createElement('option');
     option.value = weapon;
-    option.textContent = weaponNames[weapon];
+    option.textContent = weaponName(weapon);
     rewardWeapon.append(option);
   }
   rewardWeapon.value = offer.equipped.includes(offer.training.weapon)
@@ -110,7 +109,7 @@ window.addEventListener('swarm:reward', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, weapons, bestStreak, level, evolutions } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, weapons, bestStreak, level, evolutions, heroId } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
   subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
@@ -121,7 +120,7 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(`${wave}/5`, '最终波次'), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
+  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/5`, '最终波次'), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
