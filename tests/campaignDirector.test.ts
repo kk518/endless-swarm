@@ -43,7 +43,7 @@ test('five stages transition through one reward per ordinary wave, boss win or t
   assert.throws(() => advanceCampaignReward(PROTOTYPE_CAMPAIGN, state), /No pending/);
 });
 
-test('three-act draft describes 15–20 minutes and separate route/card milestones but is not active', () => {
+test('opt-in three-act expedition describes 15–20 minutes and valid real route/card milestones', () => {
   validateCampaign(THREE_ACT_BLUEPRINT);
   const encounters = encountersOf(THREE_ACT_BLUEPRINT);
   assert.equal(encounters.length, 9);
@@ -54,6 +54,8 @@ test('three-act draft describes 15–20 minutes and separate route/card mileston
   assert.equal(encounters.filter(e => e.encounter.decision === 'route').length, 2);
   assert.equal(encounters.filter(e => e.encounter.kind === 'boss').length, 1);
   assert.notEqual(PROTOTYPE_CAMPAIGN.id, THREE_ACT_BLUEPRINT.id);
+  assert.equal(encounters.filter(e => e.encounter.decision === 'route' && e.encounter.routes?.length === 2).length, 2);
+  assert.ok(encounters.filter(e => e.encounter.decision === 'card').every(e => !e.encounter.routes?.length));
 });
 
 test('checkpoint schema restores stage state and rejects invalid/cross-campaign copies', () => {
@@ -85,9 +87,12 @@ test('invalid stage data, duplicated ids, early bosses and invalid seeds are rej
 
 test('real scene uses director for transitions and seed domains, legacy nextPhase stays available for tests', () => {
   const scene = readFileSync(new URL('../src/game/GameScene.ts', import.meta.url), 'utf8');
-  assert.ok(scene.includes('beginCampaign(PROTOTYPE_CAMPAIGN, newRunSeed())'));
-  assert.ok(scene.includes('advanceCampaignReward(PROTOTYPE_CAMPAIGN, this.campaignRun)'));
-  assert.ok(scene.includes('tickCampaign(PROTOTYPE_CAMPAIGN, this.campaignRun, 0, this.bossKilled)'));
+  assert.ok(scene.includes("mode === 'expedition' ? THREE_ACT_BLUEPRINT : PROTOTYPE_CAMPAIGN"));
+  assert.ok(scene.includes('beginCampaign(this.campaign, newRunSeed())'));
+  assert.ok(scene.includes('advanceCampaignReward(this.campaign, this.campaignRun)'));
+  assert.ok(scene.includes('tickCampaign(this.campaign, this.campaignRun, 0, this.bossKilled)'));
+  assert.ok(scene.includes('this.currentStage.encounter.decision !== \'route\''));
+  assert.ok(scene.includes("new CustomEvent<RouteOffer>('swarm:route'"));
   assert.ok(scene.includes('this.randoms.rewards.next()'));
   assert.ok(scene.includes('this.randoms.combat.next()'));
   assert.ok(!scene.includes('nextPhase(this.waveNumber'));
