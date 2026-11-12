@@ -144,11 +144,30 @@ export class PocBattle extends Component {
     for (let y = -h / 2; y < h / 2; y += 55) { g.moveTo(-w / 2, y); g.lineTo(w / 2, y); g.stroke(); }
 
     for (const enemy of s.enemies) {
-      g.fillColor = COL.shadow; g.ellipse(enemy.x, enemy.y - 12, 20, 8); g.fill();
-      g.fillColor = COL.enemy; g.circle(enemy.x, enemy.y + 8, 18); g.fill();
+      const scale = enemy.kind === 'boss' ? 2.3 : enemy.kind === 'armored' ? 1.35 : enemy.kind === 'leaper' ? .85 : 1;
+      const radius = 18 * scale;
+      g.fillColor = COL.shadow; g.ellipse(enemy.x, enemy.y - 12, radius + 4, 8 * scale); g.fill();
+      g.fillColor = enemy.kind === 'boss' ? new Color(204, 92, 86, 255)
+        : enemy.kind === 'armored' ? new Color(133, 103, 130, 255)
+        : enemy.kind === 'leaper' ? new Color(180, 95, 107, 255)
+        : COL.enemy;
+      g.circle(enemy.x, enemy.y + 8 * scale, radius); g.fill();
       g.strokeColor = COL.claw; g.lineWidth = 3;
       g.moveTo(enemy.x - 12, enemy.y + 4); g.lineTo(enemy.x - 23, enemy.y - 8); g.stroke();
       g.moveTo(enemy.x + 12, enemy.y + 4); g.lineTo(enemy.x + 23, enemy.y - 8); g.stroke();
+      if (enemy.kind === 'boss' || enemy.kind === 'armored') {
+        g.fillColor = COL.shadow; g.rect(enemy.x - radius, enemy.y + radius + 11, radius * 2, 5); g.fill();
+        g.fillColor = COL.claw;
+        g.rect(enemy.x - radius, enemy.y + radius + 11,
+          radius * 2 * Math.max(0, enemy.hp / (enemy.maxHp ?? 1)), 5); g.fill();
+      }
+    }
+    g.strokeColor = new Color(147, 224, 255, 240); g.lineWidth = 4;
+    for (const arc of s.lightning) {
+      g.moveTo(arc.fromX, arc.fromY + 17);
+      g.lineTo((arc.fromX + arc.toX) * .5 - 6, (arc.fromY + arc.toY) * .5 + 28);
+      g.lineTo(arc.toX, arc.toY + 17);
+      g.stroke();
     }
     for (const b of s.bullets) {
       g.fillColor = COL.bullet; g.circle(b.x, b.y + 8, 4); g.fill();
@@ -177,8 +196,10 @@ export class PocBattle extends Component {
       g.circle(x + this.touchMove.x * 40, y + this.touchMove.y * 40, 17); g.fill();
     }
     this.hud.string = s.over
-      ? '机甲损毁 · 点击屏幕重开 / 按 R\n击杀 ' + s.kills
-      : '无尽虫潮 · Cocos 迁移 PoC\n装甲 ' + s.player.hp + '/6 · 击杀 ' + s.kills
-        + ' · ' + (s.player.deployed ? '火力展开' : '移动自动射击');
+      ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\n击杀 ' : '机甲损毁 · 点击重开 / R\n击杀 ') + s.kills
+      : '无尽虫潮 · Cocos Web · 波次 ' + s.wave + '/5 · Lv.' + s.level
+        + '\n装甲 ' + s.player.hp + '/6 · 击杀 ' + s.kills
+        + (s.arcUnlocked ? ' · 电弧已解锁' : '')
+        + ' · ' + (s.player.deployed ? '火力展开' : '机动射击');
   }
 }
