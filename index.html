@@ -35,7 +35,7 @@
                 <option value="prototype">五波封锁 · 现有原型</option>
                 <option value="expedition">三幕远征 · 实验玩法（约 16 分钟）</option>
               </select>
-              <small>实验远征现可选择风险路线；暂无中途存档、战区素材或失败永久收益。</small>
+              <small>远征会在阶段边界保存；战后可获得通用战备并升级装甲。战区素材后续开放。</small>
               <label for="start-training-focus">自动成长倾向</label>
               <select id="start-training-focus" aria-label="开局自动升级方向">
                 <option value="damage">火力 · 优先提升武器伤害</option>
@@ -44,6 +44,13 @@
               </select>
               <small>XP 自动升级；重要武器和战术模块留在波末选择。</small>
             </div>
+            <div id="meta-armory" class="meta-armory" aria-label="局外战备与装备工坊">
+              <div class="meta-armory-heading"><strong>星际军械库</strong><span id="meta-wallet">战备数据 0</span></div>
+              <p id="meta-armor-status">装甲工坊 Lv.0 / 3</p>
+              <button id="armor-upgrade-button" class="meta-upgrade-button" type="button">强化基础装甲 · 25 战备</button>
+              <small id="meta-storage-status" aria-live="polite">有效战斗失败也能获得战备。仅保存在本机浏览器。</small>
+            </div>
+            <button id="resume-button" class="action-button is-hidden" type="button">继续上次远征 <span>›</span></button>
             <button id="play-button" class="action-button" type="button">执行登陆行动 <span>›</span></button>
             <div class="bottom-note"><span class="status-light"></span> M5 战地进化 <span class="note-sep">/</span> 手机竖屏体验</div>
           </div>
