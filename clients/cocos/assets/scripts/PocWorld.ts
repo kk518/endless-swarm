@@ -362,7 +362,7 @@ export class PocWorld {
    * never a Phaser/Cocos Sprite. Both browser and Creator call the same code.
    */
   private readonly attackPort: PocAttackPort = {
-    rifle: (target, angle) => {
+    rifle: (_target, angle) => {
       const p = this.state.player;
       this.state.bullets.push({
         x: p.x, y: p.y,
@@ -385,7 +385,7 @@ export class PocWorld {
         from = e;
       }
     },
-    rail: (target, angle) => {
+    rail: (_target, angle) => {
       const state = this.state, player = state.player;
       const range = 380;
       const direction = { x: Math.cos(angle), y: Math.sin(angle) };
