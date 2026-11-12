@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PocWorld, POC, deploymentReady, nearestEnemy, normalizedMove,
+  PocWorld, POC, deploymentReady, nearestEnemy, normalizedMove, enemyStats, xpRequired,
 } from '../clients/cocos/assets/scripts/PocWorld.ts';
 
 function tick(world: PocWorld, frames: number, x = 0, y = 0): void {
@@ -65,4 +65,59 @@ test('Cocos PoC world uses no Phaser or cc engine dependency', async () => {
   // Importing this same source through Node is a dependency boundary smoke test.
   const mod = await import('../clients/cocos/assets/scripts/PocWorld.ts');
   assert.equal(typeof mod.PocWorld, 'function');
+});
+
+test('new enemy classes have differentiated health, speed, and rewards', () => {
+  assert.ok(enemyStats('leaper').speed > enemyStats('grunt').speed);
+  assert.ok(enemyStats('armored').hp > enemyStats('grunt').hp);
+  assert.ok(enemyStats('boss').xp > enemyStats('armored').xp);
+});
+test('kill XP auto-levels without modal state and unlocks independent arc coil', () => {
+  const world = new PocWorld();
+  world.state.enemies[0].hp = 0;
+  tick(world, 1);
+  for (let i = 0; i < 28; i++) {
+    world.spawnEnemyAt(135, 50);
+    world.state.enemies[world.state.enemies.length - 1].hp = 0;
+    tick(world, 1);
+  }
+  assert.ok(world.state.level >= 3);
+  assert.equal(world.state.arcUnlocked, true);
+  assert.equal(world.state.xpToNext, xpRequired(world.state.level));
+  assert.ok(world.state.kills >= 29);
+  // The core contains no state that requests or waits for an XP-selection modal.
+});
+test('surviving beyond wave one triggers stronger wave pressure', () => {
+  const world = new PocWorld();
+  world.state.player.hp = 1000;
+  tick(world, Math.ceil((POC.waveDurationMs + 300) / POC.fixedStepMs), 1, 0);
+  assert.equal(world.state.wave, 2);
+  assert.ok(world.state.enemies.every(e => e.kind !== undefined));
+  assert.ok(world.state.enemies.length <= POC.maxEnemies);
+});
+test('fifth wave spawns a boss, which grants victory when killed', () => {
+  const world = new PocWorld();
+  world.state.player.hp = 1000;
+  tick(world, Math.ceil((POC.waveDurationMs * 4 + 400) / POC.fixedStepMs), 1, 0);
+  assert.equal(world.state.wave, 5);
+  assert.equal(world.state.bossSpawned, true);
+  const boss = world.state.enemies.find(e => e.kind === 'boss');
+  assert.ok(boss);
+  boss.hp = 0;
+  tick(world, 1);
+  assert.equal(world.state.won, true);
+  assert.equal(world.state.over, true);
+});
+test('reset clears modern wave/XP/lightning/boss state without losing starting rifle', () => {
+  const world = new PocWorld();
+  world.state.player.hp = 1000;
+  tick(world, 1600);
+  world.reset();
+  assert.equal(world.state.wave, 1);
+  assert.equal(world.state.level, 1);
+  assert.equal(world.state.arcUnlocked, false);
+  assert.equal(world.state.bossSpawned, false);
+  assert.deepEqual(world.state.lightning, []);
+  assert.equal(world.state.won, false);
+  assert.equal(world.state.enemies.length, 1);
 });
