@@ -13,6 +13,8 @@ test -x "$editor" || { echo "No Creator executable at $editor" >&2; exit 20; }
 test -s "$project/assets/scenes/Battle.scene" || { echo "Battle.scene missing" >&2; exit 21; }
 test -s "$project/assets/scenes/Battle.scene.meta" || { echo "Battle.scene.meta missing" >&2; exit 22; }
 
+node "$repo_root/scripts/check-m6-copy.mjs" --check
+
 echo "Running Cocos Creator CLI: $editor"
 echo "Project: $project"
 mkdir -p "$repo_root/dist"
