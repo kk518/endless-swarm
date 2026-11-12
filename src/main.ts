@@ -1,23 +1,32 @@
 import Phaser from 'phaser';
-import { GameScene, type RewardOffer, type RunResult, type LevelOffer } from './game/GameScene';
+import { GameScene, type RewardOffer, type RunResult } from './game/GameScene';
+import { DEFAULT_TRAINING, type TrainingFocus } from './game/autoGrowth';
+import type { WeaponId } from './game/progression';
+import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
 import './styles.css';
 
 // Use the full vertical viewport on tall phones rather than letterboxing 9:16.
 const portraitPhone = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+// Widen the world canvas rather than camera.zoom: HUD and joystick keep their
+// physical size through the independently scaled HUD container in GameScene.
+const logicalWidth = (): number => {
+  const portrait = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
+  return portrait ? MOBILE_WORLD_WIDTH : HUD_DESIGN_WIDTH;
+};
 const viewportHeight = (): number => {
   const portrait = window.matchMedia('(max-width: 850px)').matches && window.innerHeight > window.innerWidth;
-  return portrait ? Math.round(450 * window.innerHeight / window.innerWidth) : 800;
+  return portrait ? Math.round(logicalWidth() * window.innerHeight / window.innerWidth) : 800;
 };
 const logicalHeight = portraitPhone ? viewportHeight() : 800;
 const scene = new GameScene();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 450,
+  width: logicalWidth(),
   height: logicalHeight,
   backgroundColor: '#0c141a',
   render: { antialias: true, pixelArt: false },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 450, height: logicalHeight },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: logicalWidth(), height: logicalHeight },
   scene: [scene],
   fps: { target: 60, forceSetTimeOut: false },
 });
@@ -32,9 +41,12 @@ const muteButton = document.querySelector<HTMLButtonElement>('#mute-button')!;
 const rewardOverlay = document.querySelector<HTMLElement>('#reward-overlay')!;
 const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
 const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
-const levelOverlay = document.querySelector<HTMLElement>('#level-overlay')!;
-const levelTitle = document.querySelector<HTMLElement>('#level-title')!;
-const levelCards = document.querySelector<HTMLElement>('#level-cards')!;
+const startFocus = document.querySelector<HTMLSelectElement>('#start-training-focus')!;
+const rewardWeapon = document.querySelector<HTMLSelectElement>('#reward-training-weapon')!;
+const rewardFocus = document.querySelector<HTMLSelectElement>('#reward-training-focus')!;
+const weaponNames: Record<WeaponId, string> = {
+  rifle: '电磁步枪', scatter: '散射炮', arc: '电弧线圈', flame: '喷火器',
+};
 const cardCategory: Record<string, string> = {
   weapon: '新武器', assault: '通用火力', mobile: '机动构筑', deploy: '站桩构筑', survival: '生存强化',
 };
@@ -46,61 +58,26 @@ function beginRun(): void {
     window.setTimeout(() => { startButton.disabled = false; beginRun(); }, 100);
     return;
   }
-  scene.startRun();
+  scene.startRun({ weapon: DEFAULT_TRAINING.weapon, focus: startFocus.value as TrainingFocus });
   rewardOverlay.classList.add('is-hidden');
-  levelOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
   document.querySelector<HTMLElement>('#game')?.focus();
 }
 
 startButton.addEventListener('click', beginRun);
 
-window.addEventListener('swarm:levelup', (event) => {
-  const offer = (event as CustomEvent<LevelOffer>).detail;
-  rewardOverlay.classList.add('is-hidden');
-  levelTitle.textContent = `战地升级 · LV.${offer.level}${offer.pending > 1 ? ` · 剩余 ${offer.pending} 次` : ''}`;
-  levelCards.replaceChildren();
-  for (const [index, choice] of offer.options.entries()) {
-    const button = document.createElement('button');
-    button.className = 'reward-card';
-    button.dataset.category = choice.category;
-    button.type = 'button';
-    const serial = document.createElement('span');
-    serial.className = 'reward-card-serial';
-    serial.textContent = `TACTIC / 0${index + 1}`;
-    const icon = document.createElement('span');
-    icon.className = 'reward-card-icon'; icon.textContent = choice.icon;
-    const name = document.createElement('strong');
-    name.className = 'reward-card-name'; name.textContent = choice.name;
-    const description = document.createElement('span');
-    description.className = 'reward-card-description'; description.textContent = choice.description;
-    const category = document.createElement('span');
-    category.className = 'reward-card-category';
-    category.textContent = choice.category === 'evolution' ? '武器进化' : choice.category === 'weapon' ? '武器等级' : '战术校准';
-    button.append(serial, icon, name, description, category);
-    button.addEventListener('click', () => {
-      // If multiple levels are queued, chooseLevelUpgrade synchronously emits the next offer.
-      // Hide the old selection *before* that event to keep the next modal visible.
-      levelOverlay.classList.add('is-hidden');
-      if (!scene.chooseLevelUpgrade(choice.id)) {
-        levelOverlay.classList.remove('is-hidden');
-        return;
-      }
-      // A queued second level has already opened the next dialog synchronously.
-      // Don't steal its keyboard focus back to the game canvas.
-      if (levelOverlay.classList.contains('is-hidden')) {
-        document.querySelector<HTMLElement>('#game')?.focus();
-      }
-    });
-    levelCards.append(button);
-  }
-  levelOverlay.classList.remove('is-hidden');
-  levelCards.querySelector('button')?.focus();
-});
-
 window.addEventListener('swarm:reward', (event) => {
   const offer = (event as CustomEvent<RewardOffer>).detail;
-  levelOverlay.classList.add('is-hidden');
+  rewardWeapon.replaceChildren();
+  for (const weapon of offer.equipped) {
+    const option = document.createElement('option');
+    option.value = weapon;
+    option.textContent = weaponNames[weapon];
+    rewardWeapon.append(option);
+  }
+  rewardWeapon.value = offer.equipped.includes(offer.training.weapon)
+    ? offer.training.weapon : offer.equipped[0];
+  rewardFocus.value = offer.training.focus;
   rewardTitle.textContent = `第 ${offer.wave} 波完成 · 战术模块三选一`;
   rewardCards.replaceChildren();
   for (const [i, card] of offer.options.entries()) {
@@ -121,6 +98,7 @@ window.addEventListener('swarm:reward', (event) => {
     category.className = 'reward-card-category'; category.textContent = cardCategory[card.category] ?? '强化';
     button.append(serial, icon, name, description, category);
     button.addEventListener('click', () => {
+      scene.setTraining(rewardWeapon.value as WeaponId, rewardFocus.value as TrainingFocus);
       if (!scene.chooseCard(card.id)) return;
       rewardOverlay.classList.add('is-hidden');
       document.querySelector<HTMLElement>('#game')?.focus();
@@ -148,7 +126,6 @@ window.addEventListener('swarm:gameover', (event) => {
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
   rewardOverlay.classList.add('is-hidden');
-  levelOverlay.classList.add('is-hidden');
   overlay.classList.remove('is-hidden');
 });
 
@@ -184,6 +161,6 @@ window.addEventListener('pointercancel', () => scene.pauseControls());
 
 /** Address-bar changes / phone rotation must not strand HUD labels off-screen. */
 window.addEventListener('resize', () => {
-  const height = viewportHeight();
-  if (game.scale.height !== height) game.scale.resize(450, height);
+  const width = logicalWidth(), height = viewportHeight();
+  if (game.scale.width !== width || game.scale.height !== height) game.scale.resize(width, height);
 });
