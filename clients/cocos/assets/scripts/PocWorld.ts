@@ -9,6 +9,9 @@ import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { xpToNext, weaponTuning } from './m6/arsenal.ts';
 import { buildWeaponDamage, buildWeaponInterval, GAMEPLAY } from './m6/combat.ts';
 import {
+  pressurePlan, spawnOffset, SURGE_PERIOD_MS, SURGE_WARNING_MS,
+} from './m6/pressure.ts';
+import {
   ARRIVAL_WARNING_MS, insideReadableView, visibleEdgeSpawn, type ViewRect,
 } from './m6/visibility.ts';
 import type { WeaponId } from './m6/progression.ts';
@@ -86,6 +89,11 @@ export interface PocState {
   pulses: PocPulse[];
   overclockMs: number;
   suppliesCollected: number;
+  /** M3.1 live pacing and visible surge countdown, in world time. */
+  spawnIntervalMs: number;
+  spawnGroupSize: number;
+  surgeWarningMs: number;
+  surgesTriggered: number;
   streak: number;
   bestStreak: number;
   streakRemainingMs: number;
@@ -176,6 +184,8 @@ function emptyState(): PocState {
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], arrivals: [], acids: [], bullets: [], lightning: [], supplies: [], pulses: [],
     overclockMs: 0, suppliesCollected: 0,
+    spawnIntervalMs: 690, spawnGroupSize: 1,
+    surgeWarningMs: 0, surgesTriggered: 0,
     streak: 0, bestStreak: 0, streakRemainingMs: 0,
     kills: 0, elapsedMs: 0, wave: 1, level: 1, xp: 0,
     xpToNext: xpRequired(1), arcUnlocked: false, bossSpawned: false,
@@ -207,6 +217,8 @@ export class PocWorld {
   private spawnCooldownMs: number = POC.enemySpawnMs;
   private hurtCooldownMs = 0;
   private supplyCooldownMs = SUPPLY_PERIOD_MS;
+  private nextSurgeAtMs = SURGE_PERIOD_MS;
+  private surgePending = 0;
   private nextId = 1;
   private randomStreams: RunRandomStreams;
   private readonly initialSeed: number;
@@ -234,7 +246,9 @@ export class PocWorld {
     this.state = emptyState();
     this.state.heroId = this.heroId;
     this.syncRunState();
-    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
+    const stage = this.runController.currentStage;
+    this.spawnCooldownMs = pressurePlan(stage.encounter.pressureTier, 0,
+      stage.encounter.wave.durationMs).intervalMs;
     this.spawnEnemyAt(130, 60);
     this.passiveRuntime.onRunStart?.();
   }
@@ -248,9 +262,13 @@ export class PocWorld {
     this.weaponCooldownMs.arc = 0;
     this.weaponCooldownMs.flame = 0;
     this.railCooldownMs = 0;
-    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
+    const stage = this.runController.currentStage;
+    this.spawnCooldownMs = pressurePlan(stage.encounter.pressureTier, 0,
+      stage.encounter.wave.durationMs).intervalMs;
     this.hurtCooldownMs = 0;
     this.supplyCooldownMs = SUPPLY_PERIOD_MS;
+    this.nextSurgeAtMs = SURGE_PERIOD_MS;
+    this.surgePending = 0;
     this.nextId = 1;
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.syncRunState();
@@ -277,9 +295,15 @@ export class PocWorld {
     this.state.supplies.length = 0;
     this.state.pulses.length = 0;
     this.state.overclockMs = 0;
+    this.state.surgeWarningMs = 0;
+    this.state.surgesTriggered = 0;
     this.supplyCooldownMs = SUPPLY_PERIOD_MS;
+    this.nextSurgeAtMs = SURGE_PERIOD_MS;
+    this.surgePending = 0;
     this.state.bossSpawned = false;
-    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
+    const stage = this.runController.currentStage;
+    this.spawnCooldownMs = pressurePlan(stage.encounter.pressureTier, 0,
+      stage.encounter.wave.durationMs).intervalMs;
     this.hurtCooldownMs = 0;
     for (const weapon of ['rifle', 'scatter', 'arc', 'flame'] as const)
       this.weaponCooldownMs[weapon] = 0;
@@ -367,7 +391,8 @@ export class PocWorld {
     // Visual effects cannot change combat rolls: reuse the M6 domain RNG.
     return this.randomStreams.combat.next();
   }
-  private spawnWaveEnemy(player: PocPlayer): void {
+  /** One pack member: a chosen valid main-M6 battlefield kind and edge warning. */
+  private spawnWaveEnemy(player: PocPlayer, preferredAngle?: number, spawnRadius = 410): void {
     const profile = this.runController.currentWave;
     // All historical main enemy families now have executable behaviors.
     const choices = profile.mix.filter(entry =>
@@ -380,7 +405,7 @@ export class PocWorld {
       roll -= entry.weight;
       if (roll <= 0) { kind = entry.kind as PocEnemyKind; break; }
     }
-    const angle = this.nextRandom() * Math.PI * 2;
+    const angle = preferredAngle ?? this.nextRandom() * Math.PI * 2;
     // M5.3's visibleEdgeSpawn uses positive square-world coordinates.
     // Translate the local Cocos arena into that coordinate space, preserving
     // the canonical readable view, 16px entrance inset and >=140px clearance.
@@ -394,11 +419,12 @@ export class PocWorld {
     for (let attempt = 0; attempt < 8; attempt++) {
       const candidate = visibleEdgeSpawn(
         { x: player.x + offset, y: player.y + offset }, shiftedView,
-        angle + attempt * Math.PI / 4, offset * 3, 410, 140, 16,
+        angle + attempt * Math.PI / 4, offset * 3, spawnRadius, 140, 16,
       );
       if (candidate) { location = { x: candidate.x - offset, y: candidate.y - offset }; break; }
     }
-    if (!location || this.state.enemies.length + this.state.arrivals.length >= POC.maxEnemies) return;
+    if (!location || this.state.enemies.length + this.state.arrivals.length
+      >= Math.min(POC.maxEnemies, profile.maxEnemies)) return;
     const livingElites = this.state.enemies.filter(e => e.hp > 0 && e.elite).length
       + this.state.arrivals.filter(e => e.elite).length;
     const elite = canSpawnElite(this.runController.currentStage.encounter.pressureTier,
@@ -406,6 +432,14 @@ export class PocWorld {
     this.state.arrivals.push({
       kind, elite, ...location, remainingMs: ARRIVAL_WARNING_MS, durationMs: ARRIVAL_WARNING_MS,
     });
+  }
+
+  private spawnPack(player: PocPlayer, count: number, radius: number): void {
+    if (count <= 0) return;
+    const heading = this.nextRandom() * Math.PI * 2;
+    const sector = heading + (this.nextRandom() - 0.5) * 0.55;
+    for (let i = 0; i < count; i++)
+      this.spawnWaveEnemy(player, sector + spawnOffset(i), radius);
   }
 
   private combatView(): ViewRect {
@@ -548,12 +582,30 @@ export class PocWorld {
         clamp(player.y + Math.sin(angle) * radius, -this.height / 2 + 20, this.height / 2 - 20),
       );
     }
+    // M3.1/M4: use EXACT main pressurePlan to escalate each encounter rather
+    // than hard-coded interval/batch tiers. Route pressure affects cadence.
+    const pressure = pressurePlan(stage.encounter.pressureTier, stageElapsedMs,
+      stage.encounter.wave.durationMs);
+    state.spawnIntervalMs = pressure.intervalMs;
+    state.spawnGroupSize = pressure.groupSize;
     this.spawnCooldownMs -= ms;
     if (this.spawnCooldownMs <= 0) {
-      const profile = this.runController.currentWave;
-      this.spawnCooldownMs += Math.max(370, profile.spawnIntervalMs);
-      const batch = state.wave >= 4 ? 3 : state.wave >= 2 ? 2 : 1;
-      for (let i = 0; i < batch; i++) this.spawnWaveEnemy(player);
+      this.spawnCooldownMs += pressure.intervalMs / Math.max(0.1, run.routePressureMultiplier);
+      this.spawnPack(player, pressure.groupSize, pressure.spawnRadius);
+    }
+    if (stageElapsedMs >= this.nextSurgeAtMs && this.surgePending === 0) {
+      this.surgePending = pressure.surgeSize;
+      state.surgeWarningMs = SURGE_WARNING_MS;
+      this.nextSurgeAtMs += SURGE_PERIOD_MS;
+    }
+    if (this.surgePending > 0) {
+      state.surgeWarningMs -= ms;
+      if (state.surgeWarningMs <= 0) {
+        this.spawnPack(player, this.surgePending, pressure.spawnRadius);
+        this.surgePending = 0;
+        state.surgeWarningMs = 0;
+        state.surgesTriggered++;
+      }
     }
 
     for (const e of state.enemies) {
@@ -620,8 +672,10 @@ export class PocWorld {
       const slow = (e.slowMs ?? 0) > 0 ? 0.7 : 1;
       if (distance > 2) {
         const eliteSpeed = e.elite ? 1.12 : 1;
-        e.x += dx / distance * stats.speed * eliteSpeed * slow * direction * seconds;
-        e.y += dy / distance * stats.speed * eliteSpeed * slow * direction * seconds;
+        e.x += dx / distance * stats.speed * pressure.speedMultiplier
+          * eliteSpeed * slow * direction * seconds;
+        e.y += dy / distance * stats.speed * pressure.speedMultiplier
+          * eliteSpeed * slow * direction * seconds;
       }
       if (e.kind !== 'bomber' && distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
         this.runController.applyDamage(1);
