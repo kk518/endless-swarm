@@ -97,7 +97,7 @@ test('surviving beyond wave one triggers stronger wave pressure', () => {
 });
 test('fifth wave spawns a boss, which grants victory when killed', () => {
   const world = new PocWorld();
-  world.state.player.hp = 1000;
+  world.state.player.hp = 1000000;
   tick(world, Math.ceil((POC.waveDurationMs * 4 + 400) / POC.fixedStepMs), 1, 0);
   assert.equal(world.state.wave, 5);
   assert.equal(world.state.bossSpawned, true);
