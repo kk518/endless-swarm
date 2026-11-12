@@ -187,6 +187,14 @@ export class CocosRunController {
       streak: this.streak, bestStreak: this.bestStreak };
   }
 
+  heal(amount: number): number {
+    if (this.failed || this.won) return this.hp;
+    const healing = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
+    this.hp = Math.min(this.build.maxHp, this.hp + healing);
+    this.build.hp = this.hp;
+    return this.hp;
+  }
+
   applyDamage(amount: number): number {
     if (this.failed || this.won || this.campaignRun.phase !== 'playing') return this.hp;
     const damage = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;

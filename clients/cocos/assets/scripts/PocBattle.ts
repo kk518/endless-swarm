@@ -64,6 +64,7 @@ export class PocBattle extends Component {
         hp: this.world.state.player.hp, enemies: this.world.state.enemies.length,
         kills: this.world.state.kills, wave: this.world.state.wave,
         level: this.world.state.level, over: this.world.state.over,
+        decision: this.world.decision?.kind ?? null,
       }),
     };
   }
@@ -103,6 +104,15 @@ export class PocBattle extends Component {
     if (this.activeTouch !== null) return;
     if (this.world.state.over) { this.world.reset(); return; }
     const p = event.getUILocation();
+    const decision = this.world.decision;
+    if (decision) {
+      if (p.y >= this.screenHeight * 0.08 && p.y <= this.screenHeight * 0.36) {
+        const index = Math.min(decision.options.length - 1,
+          Math.floor(p.x / this.screenWidth * decision.options.length));
+        this.world.chooseDecision(index);
+      }
+      return; // combat input is locked until the explicit encounter decision is made
+    }
     if (p.y > this.screenHeight * 0.65) {
       // Top-right HUD tap changes the playable hero in the Cocos scene.
       if (p.x > this.screenWidth * 0.64) this.switchHero();
@@ -225,12 +235,30 @@ export class PocBattle extends Component {
       g.fillColor = COL.stick;
       g.circle(x + this.touchMove.x * 40, y + this.touchMove.y * 40, 17); g.fill();
     }
+    const decision = this.world.decision;
+    if (decision) {
+      const count = decision.options.length;
+      const gap = 8, cardWidth = (w - 16 - gap * (count - 1)) / count;
+      const cardHeight = 128, cardY = -h / 2 + 100;
+      for (let i = 0; i < count; i++) {
+        const x = -w / 2 + 8 + i * (cardWidth + gap);
+        g.fillColor = new Color(23, 47, 59, 238);
+        g.rect(x, cardY, cardWidth, cardHeight); g.fill();
+        g.strokeColor = new Color(91, 193, 180, 230); g.lineWidth = 2;
+        g.rect(x, cardY, cardWidth, cardHeight); g.stroke();
+      }
+    }
+    const decision = this.world.decision;
     this.hud.string = s.over
-      ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\n击杀 ' : '机甲损毁 · 点击重开 / R\n击杀 ') + s.kills
-      : '无尽虫潮 · ' + this.world.heroName + ' · 波次 ' + s.wave + '/5 · Lv.' + s.level
-        + '\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
-        + (s.arcUnlocked ? ' · 电弧已解锁' : '')
-        + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
-        + ' · 点右上角切换英雄 / H';
+      ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\\n击杀 ' : '机甲损毁 · 点击重开 / R\\n击杀 ') + s.kills
+      : decision
+        ? (decision.kind === 'card' ? '遭遇结束 · 选择战术卡' : '路线分岔 · 选择前进路线')
+          + '\\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
+          + '\\n点击下方对应选项继续'
+        : '无尽虫潮 · ' + this.world.heroName + ' · 波次 ' + s.wave + '/5 · Lv.' + s.level
+          + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
+          + (s.arcUnlocked ? ' · 电弧已解锁' : '')
+          + ' · ' + (s.player.deployed ? '火力展开' : '机动射击')
+          + ' · 点右上角切换英雄 / H';
   }
 }

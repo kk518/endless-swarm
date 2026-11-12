@@ -7,6 +7,15 @@ import {
 function tick(world: PocWorld, frames: number, x = 0, y = 0): void {
   for (let n = 0; n < frames; n++) world.advance(POC.fixedStepMs, { x, y });
 }
+function tickDuration(world: PocWorld, durationMs: number, x = 0, y = 0, keepAlive = false): void {
+  let remaining = durationMs;
+  while (remaining > 0) {
+    if (keepAlive) world.heal(1);
+    const frame = Math.min(250, remaining);
+    world.advance(frame, { x, y });
+    remaining -= frame;
+  }
+}
 
 test('Cocos PoC core normalizes diagonal movement and rejects non-finite input', () => {
   assert.ok(Math.abs(Math.hypot(...Object.values(normalizedMove(1, 1))) - 1) < 1e-10);
@@ -72,7 +81,7 @@ test('new enemy classes have differentiated health, speed, and rewards', () => {
   assert.ok(enemyStats('armored').hp > enemyStats('grunt').hp);
   assert.ok(enemyStats('boss').xp > enemyStats('armored').xp);
 });
-test('kill XP auto-levels without modal state and unlocks independent arc coil', () => {
+test('kill XP auto-levels without a modal; a weapon is unlocked by a legal encounter card', () => {
   const world = new PocWorld();
   world.state.enemies[0].hp = 0;
   tick(world, 1);
@@ -81,30 +90,46 @@ test('kill XP auto-levels without modal state and unlocks independent arc coil',
     world.state.enemies[world.state.enemies.length - 1].hp = 0;
     tick(world, 1);
   }
-  assert.ok(world.state.level >= 3);
-  assert.equal(world.state.arcUnlocked, true);
+  assert.ok(world.state.level >= 2);
+  assert.equal(world.state.arcUnlocked, false);
+  assert.equal(world.decision, null);
   assert.equal(world.state.xpToNext, xpRequired(world.state.level));
-  assert.ok(world.state.kills >= 29);
-  // The core contains no state that requests or waits for an XP-selection modal.
+  tickDuration(world, world.currentWaveDurationMs, 0, 0, true);
+  const decision = world.decision;
+  assert.equal(decision?.kind, 'card');
+  if (decision?.kind !== 'card') throw new Error('expected a card offer');
+  const arc = decision.options.findIndex(option => option.id === 'arc-kit');
+  assert.ok(arc >= 0);
+  assert.equal(world.chooseDecision(arc), true);
+  assert.equal(world.state.arcUnlocked, true);
 });
-test('surviving beyond wave one triggers stronger wave pressure', () => {
+test('prototype encounter pauses for a three-card decision and advances only after selection', () => {
   const world = new PocWorld();
-  world.state.player.hp = 1000;
-  tick(world, Math.ceil((POC.waveDurationMs + 300) / POC.fixedStepMs), 1, 0);
+  tickDuration(world, world.currentWaveDurationMs, 1, 0, true);
+  assert.equal(world.state.wave, 1);
+  const decision = world.decision;
+  assert.equal(decision?.kind, 'card');
+  if (decision?.kind !== 'card') throw new Error('expected a card offer');
+  assert.equal(decision.options.length, 3);
+  assert.equal(world.chooseDecision(0), true);
   assert.equal(world.state.wave, 2);
-  assert.ok(world.state.enemies.every(e => e.kind !== undefined));
-  assert.ok(world.state.enemies.length <= POC.maxEnemies);
+  assert.equal(world.decision, null);
 });
-test('fifth wave spawns a boss, which grants victory when killed', () => {
+test('canonical five-stage campaign reaches the boss finale and completes on boss kill', () => {
   const world = new PocWorld();
-  world.state.player.hp = 1000000;
-  tick(world, Math.ceil((POC.waveDurationMs * 4 + 400) / POC.fixedStepMs), 1, 0);
+  for (let stage = 0; stage < 4; stage++) {
+    tickDuration(world, world.currentWaveDurationMs, 1, 0, true);
+    const decision = world.decision;
+    assert.equal(decision?.kind, 'card');
+    assert.equal(world.chooseDecision(0), true);
+  }
   assert.equal(world.state.wave, 5);
+  tickDuration(world, 3500, 0, 0, true);
   assert.equal(world.state.bossSpawned, true);
   const boss = world.state.enemies.find(e => e.kind === 'boss');
   assert.ok(boss);
   boss.hp = 0;
-  tick(world, 1);
+  tickDuration(world, POC.fixedStepMs, 0, 0, true);
   assert.equal(world.state.won, true);
   assert.equal(world.state.over, true);
 });

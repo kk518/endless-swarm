@@ -5,8 +5,9 @@
  * No imports from cc, Phaser, DOM or wx are allowed.
  */
 import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
-import { battlefieldWave, DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
-import { WAVES } from './m6/progression.ts';
+import { DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
+import { xpToNext } from './m6/arsenal.ts';
+import { CocosRunController, type CampaignMode, type RunDecision } from './m6/runController.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
   type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster.ts';
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
@@ -96,7 +97,7 @@ export function deploymentReady(stationaryMs: number, moving: boolean): boolean 
   return !moving && stationaryMs >= POC.deployDelayMs;
 }
 export function xpRequired(level: number): number {
-  return 6 + 3 * Math.max(1, Math.floor(level));
+  return xpToNext(level);
 }
 export function enemyStats(kind: PocEnemyKind): { hp: number; speed: number; contactRadius: number; xp: number } {
   switch (kind) {
@@ -145,10 +146,13 @@ export class PocWorld {
   private nextId = 1;
   private randomStreams: RunRandomStreams;
   private readonly initialSeed: number;
+  private readonly campaignMode: CampaignMode;
+  private runController!: CocosRunController;
+  private runSerial = 0;
 
   constructor(width = 450, height = 800, seed = 12345,
     zoneId: BattlefieldId = DEFAULT_BATTLEFIELD, tuning: PocMetaTuning = {},
-    heroId: PocHeroId = 'marine') {
+    heroId: PocHeroId = 'marine', mode: CampaignMode = 'prototype') {
     const selected = resolvePocHero(heroId); // cannot select an unimplemented loadout
     this.heroId = heroId;
     this.heroName = selected.hero.name;
@@ -160,29 +164,90 @@ export class PocWorld {
     this.weaponFrameRank = Math.max(0, Math.min(2, Math.floor(tuning.weaponFrameRank ?? 0)));
     this.repairModuleRank = Math.max(0, Math.min(2, Math.floor(tuning.repairModuleRank ?? 0)));
     this.initialSeed = seed >>> 0;
+    this.campaignMode = mode;
+    this.runController = this.createRunController();
     this.randomStreams = createRunRandoms(this.initialSeed);
     this.state = emptyState();
     this.state.heroId = this.heroId;
-    this.state.player.maxHp += this.armorRank;
-    this.state.player.hp = this.state.player.maxHp;
+    this.syncRunState();
+    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.spawnEnemyAt(130, 60);
     this.passiveRuntime.onRunStart?.();
   }
   reset(): void {
     Object.assign(this.state, emptyState());
     this.state.heroId = this.heroId;
-    this.state.player.maxHp += this.armorRank;
-    this.state.player.hp = this.state.player.maxHp;
+    this.runController = this.createRunController();
     this.accumulatorMs = 0;
     this.fireCooldownMs = 0;
     this.arcCooldownMs = 0;
     this.railCooldownMs = 0;
-    this.spawnCooldownMs = POC.enemySpawnMs;
+    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
     this.hurtCooldownMs = 0;
     this.nextId = 1;
     this.randomStreams = createRunRandoms(this.initialSeed);
+    this.syncRunState();
     this.spawnEnemyAt(130, 60);
     this.passiveRuntime.onRunStart?.();
+  }
+
+  get decision(): RunDecision | null { return this.runController.snapshot().decision; }
+  get currentWaveDurationMs(): number { return this.runController.currentWave.durationMs; }
+
+  chooseDecision(index: number): boolean {
+    const decision = this.decision;
+    if (!decision || !Number.isInteger(index) || index < 0 || index >= decision.options.length) return false;
+    const option = decision.options[index];
+    const accepted = decision.kind === 'card'
+      ? this.runController.chooseCard(option.id)
+      : this.runController.chooseRoute(option.id);
+    if (!accepted) return false;
+    this.state.enemies.length = 0;
+    this.state.bullets.length = 0;
+    this.state.lightning.length = 0;
+    this.state.bossSpawned = false;
+    this.spawnCooldownMs = this.runController.currentWave.spawnIntervalMs;
+    this.hurtCooldownMs = 0;
+    this.state.player.stationaryMs = 0;
+    this.state.player.deployed = false;
+    this.syncRunState();
+    this.spawnEnemyAt(130, 60);
+    return true;
+  }
+
+  heal(amount: number): number {
+    const hp = this.runController.heal(amount);
+    this.syncRunState();
+    return hp;
+  }
+
+  private createRunController(): CocosRunController {
+    this.runSerial++;
+    return new CocosRunController({
+      seed: this.initialSeed,
+      runId: `cocos-${this.initialSeed.toString(16)}-${this.heroId}-${this.runSerial}`,
+      mode: this.campaignMode,
+      battlefieldId: this.zoneId,
+      armorRank: this.armorRank,
+      weaponFrameRank: this.weaponFrameRank,
+      repairModuleRank: this.repairModuleRank,
+      playableWeapons: ['rifle', 'arc'],
+    });
+  }
+
+  private syncRunState(): void {
+    const run = this.runController.snapshot();
+    this.state.elapsedMs = run.timeMs;
+    this.state.wave = run.stage.index + 1;
+    this.state.level = run.growth.level;
+    this.state.xp = run.growth.xp;
+    this.state.xpToNext = xpToNext(run.growth.level);
+    this.state.arcUnlocked = run.build.weapons.includes('arc');
+    this.state.kills = run.kills;
+    this.state.player.hp = run.hp;
+    this.state.player.maxHp = run.maxHp;
+    this.state.won = run.won;
+    this.state.over = run.failed || run.won;
   }
   /** Pause/resume must discard frame debt to prevent lethal catch-up damage. */
   discardFrameDebt(): void { this.accumulatorMs = 0; }
@@ -193,7 +258,7 @@ export class PocWorld {
   }
   /** Stable fixed-step update; backlog after a stall is intentionally dropped. */
   advance(frameMs: number, intent: Vec2): void {
-    if (this.state.over) return;
+    if (this.state.over || this.decision) return;
     if (!Number.isFinite(frameMs) || frameMs <= 0) return;
     this.accumulatorMs += Math.min(frameMs, 250);
     const steps = Math.min(5, Math.floor((this.accumulatorMs + 1e-7) / POC.fixedStepMs));
@@ -206,20 +271,9 @@ export class PocWorld {
     // Visual effects cannot change combat rolls: reuse the M6 domain RNG.
     return this.randomStreams.combat.next();
   }
-  private addXp(amount: number): void {
-    const s = this.state;
-    s.xp += amount;
-    while (s.level < POC.maxLevel && s.xp >= s.xpToNext) {
-      s.xp -= s.xpToNext;
-      s.level++;
-      s.xpToNext = xpRequired(s.level);
-      if (s.level >= 3) s.arcUnlocked = true; // independent auto-fire lightning coil
-    }
-    if (s.level >= POC.maxLevel) s.xp = Math.min(s.xp, s.xpToNext);
-  }
   private spawnWaveEnemy(player: PocPlayer): void {
     const wave = this.state.wave;
-    const profile = battlefieldWave(this.zoneId, WAVES[Math.min(4, wave - 1)]);
+    const profile = this.runController.currentWave;
     // Only three already-implemented enemy behaviors are eligible for the PoC.
     // Original spitter/bomber definitions must wait for real attack drivers.
     const choices = profile.mix.filter(entry =>
@@ -244,17 +298,18 @@ export class PocWorld {
       const e = state.enemies[i];
       if (e.hp > 0) continue;
       state.enemies.splice(i, 1);
-      state.kills++;
-      this.addXp(enemyStats(e.kind ?? 'grunt').xp);
+      this.runController.registerKill(e.kind ?? 'grunt', e.kind === 'boss');
       this.passiveRuntime.onEnemyKilled?.({
         enemyKind: e.kind ?? 'grunt', elite: e.kind === 'boss', timeMs: state.elapsedMs,
       });
-      if (e.kind === 'boss') { state.won = true; state.over = true; }
+      if (e.kind === 'boss') {
+        this.runController.tick(0, true);
+        this.syncRunState();
+      }
     }
   }
   private step(ms: number, move: Vec2): void {
     const state = this.state, player = state.player;
-    state.elapsedMs += ms;
     this.passiveRuntime.onCombatTick?.(ms);
     const seconds = ms / 1000;
     const moving = Math.hypot(move.x, move.y) > 0.07;
@@ -271,15 +326,9 @@ export class PocWorld {
       if (segment.remainingMs <= 0) state.lightning.splice(i, 1);
     }
 
-    const nextWave = Math.min(5, 1 + Math.floor(state.elapsedMs / POC.waveDurationMs));
-    if (nextWave > state.wave) {
-      // Presentation-only PoC tuning; cost/rank rules come from M6 metaProgression.
-      if (this.repairModuleRank > 0) {
-        player.hp = Math.min(player.maxHp, player.hp + this.repairModuleRank);
-      }
-      state.wave = nextWave;
-    }
-    if (state.wave === 5 && !state.bossSpawned) {
+    const stage = this.runController.currentStage;
+    const stageElapsedMs = this.runController.snapshot().campaign.elapsedMs;
+    if (stage.encounter.kind === 'boss' && !state.bossSpawned && stageElapsedMs > 2500) {
       // Reserve the boss slot even if the previous wave reached its enemy cap.
       if (state.enemies.length >= POC.maxEnemies) {
         const expendable = state.enemies.findIndex(e => e.kind !== 'boss');
@@ -291,7 +340,8 @@ export class PocWorld {
     }
     this.spawnCooldownMs -= ms;
     if (this.spawnCooldownMs <= 0) {
-      this.spawnCooldownMs += Math.max(370, POC.enemySpawnMs - (state.wave - 1) * 270);
+      const profile = this.runController.currentWave;
+      this.spawnCooldownMs += Math.max(370, profile.spawnIntervalMs);
       const batch = state.wave >= 4 ? 3 : state.wave >= 2 ? 2 : 1;
       for (let i = 0; i < batch; i++) this.spawnWaveEnemy(player);
     }
@@ -305,9 +355,10 @@ export class PocWorld {
         e.y += dy / distance * stats.speed * seconds;
       }
       if (distance < stats.contactRadius && this.hurtCooldownMs <= 0) {
-        player.hp--;
+        this.runController.applyDamage(1);
+        this.syncRunState();
         this.hurtCooldownMs = 750;
-        if (player.hp <= 0) { state.over = true; return; }
+        if (state.player.hp <= 0) return;
       }
     }
 
@@ -356,6 +407,15 @@ export class PocWorld {
       }
     }
     this.resolveDeaths();
+    if (!state.over) {
+      this.runController.tick(ms);
+      this.syncRunState();
+      if (this.decision) {
+        state.enemies.length = 0;
+        state.bullets.length = 0;
+        state.lightning.length = 0;
+      }
+    }
   }
   /**
    * M6 attack drivers invoke these ports. They mutate only the world state,
