@@ -1,6 +1,11 @@
 {
-  "name": "endless-swarm-cocos-poc",
-  "version": "0.0.1",
+  "name": "endless-swarm-cocos",
+  "type": "2d",
+  "uuid": "57ad72c9-2a1a-4bda-9a75-0bfaa911fae1",
+  "version": "3.8.8",
+  "creator": {
+    "version": "3.8.8"
+  },
   "private": true,
-  "description": "Cocos Creator 3.8 LTS WeChat-first migration proof of concept. Editor scene setup pending."
+  "description": "WeChat-first Cocos Creator 3.8.8 migration project"
 }
