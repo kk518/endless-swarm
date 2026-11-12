@@ -188,10 +188,13 @@ export class PocBattle extends Component {
           radius * 2 * Math.max(0, enemy.hp / (enemy.maxHp ?? 1)), 5); g.fill();
       }
     }
-    g.strokeColor = new Color(147, 224, 255, 240); g.lineWidth = 4;
     for (const arc of s.lightning) {
+      const rail = arc.kind === 'rail';
+      g.strokeColor = rail ? new Color(255, 203, 124, 250) : new Color(147, 224, 255, 240);
+      g.lineWidth = rail ? 7 : 4;
       g.moveTo(arc.fromX, arc.fromY + 17);
-      g.lineTo((arc.fromX + arc.toX) * .5 - 6, (arc.fromY + arc.toY) * .5 + 28);
+      g.lineTo((arc.fromX + arc.toX) * .5 - (rail ? 0 : 6),
+        (arc.fromY + arc.toY) * .5 + (rail ? 17 : 28));
       g.lineTo(arc.toX, arc.toY + 17);
       g.stroke();
     }

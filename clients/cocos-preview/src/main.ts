@@ -256,11 +256,16 @@ function paint(dt: number): void {
   }
   for (const arc of s.lightning) {
     const a = worldPoint(arc.fromX, arc.fromY), b = worldPoint(arc.toX, arc.toY);
-    const strength = Math.min(1, arc.remainingMs/90);
-    g.lineWidth=5; g.strokeStyle='rgba(77,189,238,'+(strength*.45)+')';
-    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo((a.x+b.x)/2+7,(a.y+b.y)/2-35);g.lineTo(b.x,b.y-22);g.stroke();
-    g.lineWidth=2;g.strokeStyle='rgba(197,247,255,'+strength+')';
-    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo((a.x+b.x)/2+7,(a.y+b.y)/2-35);g.lineTo(b.x,b.y-22);g.stroke();
+    const rail = arc.kind === 'rail';
+    const strength = Math.min(1, arc.remainingMs/(rail ? 190 : 90));
+    const middleX = (a.x+b.x)/2+(rail?0:7);
+    const middleY = (a.y+b.y)/2-(rail?23:35);
+    g.lineWidth=rail ? 11 : 5;
+    g.strokeStyle=rail?'rgba(250,155,78,'+(strength*.50)+')':'rgba(77,189,238,'+(strength*.45)+')';
+    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo(middleX,middleY);g.lineTo(b.x,b.y-22);g.stroke();
+    g.lineWidth=rail ? 4 : 2;
+    g.strokeStyle=rail?'rgba(255,240,165,'+strength+')':'rgba(197,247,255,'+strength+')';
+    g.beginPath();g.moveTo(a.x,a.y-24);g.lineTo(middleX,middleY);g.lineTo(b.x,b.y-22);g.stroke();
   }
   if (activePointer !== null) {
     const j = dragOrigin;
