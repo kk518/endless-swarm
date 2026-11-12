@@ -71,7 +71,7 @@ function pointerEnd(e: PointerEvent): void {
   if (e.pointerId !== activePointer) return;
   activePointer = null;
   stick = { x: 0, y: 0 };
-  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+  if (canvas!.hasPointerCapture(e.pointerId)) canvas!.releasePointerCapture(e.pointerId);
 }
 canvas.addEventListener('pointerup', pointerEnd);
 canvas.addEventListener('pointercancel', pointerEnd);
