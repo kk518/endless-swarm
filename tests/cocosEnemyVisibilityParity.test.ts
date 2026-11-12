@@ -42,14 +42,16 @@ test('M5.3 stage spawns first show a 700ms warning, then materialize outside aut
   assert.equal(insideReadableView(marker, view), false);
   assert.ok(Math.hypot(marker.x - world.state.player.x, marker.y - world.state.player.y) >= 140);
   assert.equal(world.state.bullets.length, 0, 'unmaterialized bug cannot be shot');
-  step(world, 43);
-  // A faster M3.1 grouped spawner may already have scheduled the next warning.
-  // Verify the first exact marker materialized, not that no future warning exists.
+  const warned = { ...marker };
+  const killsBefore = world.state.kills;
+  step(world, Math.ceil(warned.remainingMs / POC.fixedStepMs) + 2);
+  // Real enemies begin walking as soon as they materialize. Exact x/y equality
+  // falsely treats a successfully spawned moving enemy as a missing spawn.
+  // The faster M3.1 spawner may also have queued a second arrival.
   assert.ok(world.state.enemies.some(enemy =>
-    enemy.kind === marker.kind
-    && Math.abs(enemy.x - marker.x) < 1e-9
-    && Math.abs(enemy.y - marker.y) < 1e-9),
-    'the first warned arrival must become a real enemy after 700ms');
+    enemy.kind === warned.kind && Math.hypot(enemy.x - warned.x,
+      enemy.y - warned.y) < 40) || world.state.kills > killsBefore,
+    'the warned bug must materialize near the marker (or have been killed)');
   assert.equal(world.state.kills, 0);
 });
 
