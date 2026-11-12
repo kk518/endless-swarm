@@ -18,6 +18,7 @@ import {
 } from './m6/runSafeSave.ts';
 import { getStoragePort } from './m6/platformStorage.ts';
 import { preservePreviousCheckpoint } from './m6/safeNodePolicy.ts';
+import { CreatorHangar, type WorkshopItem } from './PocHangar.ts';
 
 // Creator's preview and the original Phaser H5 must NEVER share save keys.
 const creatorStoragePrefix = 'cocos-creator-m6:';
@@ -58,6 +59,8 @@ export class PocBattle extends Component {
   private world!: PocWorld;
   private selectedHero: PocHeroId = 'marine';
   private selectedMode: CampaignMode = 'prototype';
+  private readonly hangar = new CreatorHangar();
+  private hangarLabels: Label[] = [];
   private lastSavedFingerprint = '';
   private storageWarning = false;
   private graphic!: Graphics;
@@ -79,8 +82,8 @@ export class PocBattle extends Component {
     this.screenWidth = size.width;
     this.screenHeight = size.height;
     this.viewport = mobileViewport(size.width, size.height);
-    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
-      518, undefined, {}, this.selectedHero, this.selectedMode);
+    this.world = this.hangar.launch(this.viewport.worldWidth, this.viewport.worldHeight,
+      this.selectedHero, this.selectedMode);
     // M5.3: combat geometry is independently scaled to the 600-unit world.
     // HUD, safe-node cards and touch joystick stay in Canvas UI coordinates.
     const worldNode = new Node('BattleWorldGraphics');
@@ -126,6 +129,21 @@ export class PocBattle extends Component {
       node.active = false;
       this.trainingLabels.push(label);
     }
+    // M6.1a: permanent resource workshop and zone choice are genuine Creator UI.
+    // They appear after defeat/victory, not as interrupting combat pop-ups.
+    for (let index = 0; index < 6; index++) {
+      const node = new Node('HangarButtonLabel' + index);
+      this.node.addChild(node);
+      node.addComponent(UITransform).setContentSize(
+        Math.max(78, size.width / (index < 2 ? 2 : 3) - 15), 100);
+      const label = node.addComponent(Label);
+      label.fontSize = Math.max(11, 13 * this.viewport.hudScale);
+      label.lineHeight = Math.max(15, 18 * this.viewport.hudScale);
+      label.enableWrapText = true;
+      label.overflow = Label.Overflow.SHRINK;
+      node.active = false;
+      this.hangarLabels.push(label);
+    }
     // Staging-only smoke-test contract. Never expose storage or player identity.
     (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
       state: () => ({
@@ -141,6 +159,8 @@ export class PocBattle extends Component {
         kills: this.world.state.kills, wave: this.world.state.wave,
         level: this.world.state.level, over: this.world.state.over,
         mode: this.world.state.mode, totalStages: this.world.state.totalStages,
+        zone: this.world.zoneId, nextZone: this.hangar.zoneId,
+        metaRank: this.hangar.display().meta?.armorRank ?? null,
         decision: this.world.decision?.kind ?? null,
         training: { ...this.world.state.training },
         savedCheckpoint: readRunSafeSave(creatorSafeStorage)?.campaign.stageIndex ?? null,
@@ -181,8 +201,8 @@ export class PocBattle extends Component {
 
   private touchStart(event: EventTouch): void {
     if (this.activeTouch !== null) return;
-    if (this.world.state.over) { this.world.reset(); return; }
     const p = event.getUILocation();
+    if (this.world.state.over) { this.handleHangarTap(p); return; }
     const decision = this.world.decision;
     if (decision) {
       // Training is editable only while the safe-node reward UI is open.
@@ -247,8 +267,7 @@ export class PocBattle extends Component {
     if (event.keyCode === KeyCode.KEY_H) this.switchHero();
     if (event.keyCode === KeyCode.KEY_M) this.switchMode();
     if (event.keyCode === KeyCode.KEY_R) {
-      this.world.reset();
-      this.releaseInput();
+      this.startFreshRun();
     }
   }
   private persistSafeNode(): void {
@@ -265,10 +284,7 @@ export class PocBattle extends Component {
     this.lastSavedFingerprint = signature;
   }
   private resumeSafeNode(): void {
-    const save = readRunSafeSave(creatorSafeStorage);
-    if (!save) return;
-    const restored = PocWorld.fromSafeSnapshot(save,
-      this.viewport.worldWidth, this.viewport.worldHeight);
+    const restored = this.hangar.restore(this.viewport.worldWidth, this.viewport.worldHeight);
     if (!restored) return;
     this.world = restored;
     this.selectedHero = 'marine';
@@ -276,17 +292,79 @@ export class PocBattle extends Component {
     this.lastSavedFingerprint = '';
     this.releaseInput();
   }
+
+  private handleHangarTap(p: Vec2): void {
+    const h = this.screenHeight, w = this.screenWidth;
+    if (p.y >= h * .70 && p.y <= h * .815) {
+      this.hangar.chooseZone(p.x < w / 2 ? 'steel-ruins' : 'infested-nest');
+      return;
+    }
+    if (p.y >= h * .47 && p.y <= h * .60) {
+      const options: readonly WorkshopItem[] = ['armor', 'weapon-frame', 'repair-module'];
+      const index = Math.min(2, Math.max(0, Math.floor(p.x / w * 3)));
+      this.hangar.purchase(options[index]);
+      return;
+    }
+    if (p.y >= h * .16 && p.y <= h * .28) this.startFreshRun();
+  }
+
+  private startFreshRun(): void {
+    // New run seed + ID: never reuse the completed run ledger key.
+    this.hangar.settle(this.world);
+    this.world = this.hangar.launch(this.viewport.worldWidth, this.viewport.worldHeight,
+      this.selectedHero, this.selectedMode);
+    this.lastSavedFingerprint = '';
+    this.releaseInput();
+  }
+
+  private paintHangar(ui: Graphics): void {
+    const s = this.world.state;
+    for (const label of this.hangarLabels) label.node.active = s.over;
+    if (!s.over) return;
+    const display = this.hangar.display();
+    const meta = display.meta;
+    const w = this.screenWidth, h = this.screenHeight;
+    const armor = display.armorCost;
+    const frame = display.frameCost;
+    const repair = display.repairCost;
+    const captions = [
+      '钢铁遗迹\n合金战区' + (display.zoneId === 'steel-ruins' ? ' ✓' : ''),
+      '感染巢穴\n样本战区' + (display.zoneId === 'infested-nest' ? ' ✓' : ''),
+      '装甲 Lv.' + (meta?.armorRank ?? 0) + '\n'
+        + (armor === null ? '已满级' : armor + ' 战备'),
+      '武器框架 Lv.' + (meta?.weaponFrameRank ?? 0) + '\n'
+        + (frame === null ? '已满级' : frame.warData + '战备+' + frame.quantity + '合金'),
+      '修复模块 Lv.' + (meta?.repairModuleRank ?? 0) + '\n'
+        + (repair === null ? '已满级' : repair.warData + '战备+' + repair.quantity + '样本'),
+      '启动下一局\n新购买装备生效',
+    ];
+    for (let i = 0; i < this.hangarLabels.length; i++) {
+      const label = this.hangarLabels[i];
+      const zone = i < 2, launch = i === 5;
+      const count = zone ? 2 : launch ? 1 : 3;
+      const index = zone ? i : launch ? 0 : i - 2;
+      const slotWidth = w / count;
+      const x = -w / 2 + slotWidth * index + 6;
+      const y = -h / 2 + h * (zone ? .70 : launch ? .16 : .47);
+      const rectHeight = h * (zone ? .115 : launch ? .12 : .13);
+      const rectWidth = slotWidth - 12;
+      const highlighted = zone && display.zoneId === (i === 0 ? 'steel-ruins' : 'infested-nest');
+      ui.fillColor = highlighted ? new Color(48, 94, 78, 245) : new Color(22, 49, 59, 245);
+      ui.rect(x, y, rectWidth, rectHeight); ui.fill();
+      ui.strokeColor = highlighted ? new Color(255, 220, 146, 255)
+        : new Color(111, 179, 178, 230);
+      ui.lineWidth = 2; ui.rect(x, y, rectWidth, rectHeight); ui.stroke();
+      label.node.setPosition(x + rectWidth / 2, y + rectHeight / 2, 0);
+      label.string = captions[i];
+    }
+  }
   private switchHero(): void {
     this.selectedHero = this.selectedHero === 'marine' ? 'kane' : 'marine';
-    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
-      518, undefined, {}, this.selectedHero, this.selectedMode);
-    this.releaseInput();
+    this.startFreshRun();
   }
   private switchMode(): void {
     this.selectedMode = this.selectedMode === 'prototype' ? 'expedition' : 'prototype';
-    this.world = new PocWorld(this.viewport.worldWidth, this.viewport.worldHeight,
-      518, undefined, {}, this.selectedHero, this.selectedMode);
-    this.releaseInput();
+    this.startFreshRun();
   }
   private keyUp(event: EventKeyboard): void { this.pressed.delete(event.keyCode); }
   private intent(): Vec2 {
@@ -303,6 +381,8 @@ export class PocBattle extends Component {
     if (!this.suspended) {
       this.world.advance(dt * 1000, this.intent());
       this.persistSafeNode();
+      // Failed runs receive rewards as well, exactly once per canonical runId.
+      if (this.world.state.over) this.hangar.settle(this.world);
     }
     this.paint();
   }
@@ -473,8 +553,14 @@ export class PocBattle extends Component {
       label.string = (i + 1) + '. ' + decision.options[i].name
         + '\n' + decision.options[i].description;
     }
+    this.paintHangar(ui);
     this.hud.string = s.over
-      ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\\n击杀 ' : '机甲损毁 · 点击重开 / R\\n击杀 ') + s.kills
+      ? (s.won ? '虫潮歼灭 · 远征结算' : '机甲损毁 · 战备结算')
+        + ' · 击杀 ' + s.kills
+        + '\\n' + this.hangar.message
+        + '\\n战备 ' + (this.hangar.display().meta?.warData ?? '—')
+        + ' · 合金 ' + (this.hangar.display().meta?.alloy ?? '—')
+        + ' · 样本 ' + (this.hangar.display().meta?.samples ?? '—')
       : decision
         ? (decision.kind === 'card' ? '遭遇结束 · 选择战术卡' : '路线分岔 · 选择前进路线')
           + '\\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
