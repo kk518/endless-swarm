@@ -41,8 +41,8 @@ export function createWeaponRuntimeRegistry<TTarget, TTuning>(
 }
 
 /** Useful when selecting a hero, equipping a normal weapon, or restoring a run. */
-export function assertWeaponSlots(
-  ids: readonly string[], registry: WeaponRuntimeRegistry<unknown, unknown>,
+export function assertWeaponSlots<TTarget, TTuning>(
+  ids: readonly string[], registry: WeaponRuntimeRegistry<TTarget, TTuning>,
   maxOrdinary = 4,
 ): void {
   const seen = new Set<string>();
