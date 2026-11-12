@@ -8,7 +8,7 @@ import {
   EventTouch, EventKeyboard, Input, KeyCode, input, game, Game, view,
 } from 'cc';
 import { PocWorld, normalizedMove, type Vec2 } from './PocWorld';
-import { type PocHeroId } from './PocRoster';
+import { type PocHeroId } from './PocRoster.ts';
 
 const { ccclass } = _decorator;
 const COL = {

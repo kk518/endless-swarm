@@ -8,7 +8,7 @@ import { createRunRandoms, type RunRandomStreams } from './m6/runRandom.ts';
 import { battlefieldWave, DEFAULT_BATTLEFIELD, type BattlefieldId } from './m6/battlefields.ts';
 import { WAVES } from './m6/progression.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
-  type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster';
+  type PocHeroId, type PocTarget, type PocAttackPort } from './PocRoster.ts';
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
 
 export interface Vec2 { x: number; y: number }
