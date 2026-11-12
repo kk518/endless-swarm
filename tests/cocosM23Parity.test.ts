@@ -118,3 +118,20 @@ test('M3 EMP pickup damages enemies in radius and emits a visible pulse', () => 
   assert.equal(world.state.suppliesCollected, 1);
   assert.ok(world.state.pulses.some(p => p.kind === 'emp' && p.radius === stats.radius));
 });
+
+test('M5.3 arena-edge spawns always enter beyond immediate contact/telegraph distance', () => {
+  for (let seed = 1; seed <= 32; seed++) {
+    const world = new PocWorld(450, 800, seed);
+    world.state.enemies.length = 0;
+    world.state.player.x = -world.width / 2 + 26;
+    world.state.player.y = -world.height / 2 + 56;
+    frames(world, 53);
+    assert.ok(world.state.enemies.length > 0, 'a real wave spawn occurred');
+    for (const enemy of world.state.enemies) {
+      const distance = Math.hypot(enemy.x - world.state.player.x,
+        enemy.y - world.state.player.y);
+      assert.ok(distance >= 125,
+        'enemy was clipped too close to a cornered player: ' + distance);
+    }
+  }
+});
