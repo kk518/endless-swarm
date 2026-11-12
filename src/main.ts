@@ -77,7 +77,7 @@ window.addEventListener('swarm:reward', (event) => {
   rewardWeapon.value = offer.equipped.includes(offer.training.weapon)
     ? offer.training.weapon : offer.equipped[0];
   rewardFocus.value = offer.training.focus;
-  rewardTitle.textContent = `第 ${offer.wave} 波完成 · 战术模块三选一`;
+  rewardTitle.textContent = `${offer.actTitle} · ${offer.encounterTitle}（${offer.wave}/${offer.totalStages}）`;
   rewardCards.replaceChildren();
   for (const [i, card] of offer.options.entries()) {
     const button = document.createElement('button');
@@ -109,7 +109,7 @@ window.addEventListener('swarm:reward', (event) => {
 });
 
 window.addEventListener('swarm:gameover', (event) => {
-  const { kills, survived, record, victory, wave, weapons, bestStreak, level, evolutions, heroId } = (event as CustomEvent<RunResult>).detail;
+  const { kills, survived, record, victory, wave, totalStages, weapons, bestStreak, level, evolutions, heroId, actTitle } = (event as CustomEvent<RunResult>).detail;
   title.textContent = victory ? '隔离区已肃清' : '通讯信号中断';
   subtitle.textContent = victory ? '任务完成 / 战区 K-09 恢复通讯' : '任务失败 / 重新部署最后的防线';
   instructions.classList.add('is-hidden');
@@ -120,7 +120,7 @@ window.addEventListener('swarm:gameover', (event) => {
     wrapper.append(strong, span);
     return wrapper;
   };
-  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/5`, '最终波次'), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
+  stats.replaceChildren(entry(CONTENT_CATALOG.heroes.get(heroId)?.name ?? heroId, '出击角色'), entry(`${wave}/${totalStages}`, `最终进度 · ${actTitle}`), entry(String(level), '本局等级'), entry(String(evolutions.length), '武器进化'), entry(String(kills), '击杀虫族'), entry(String(bestStreak), '最高连杀'));
   stats.classList.remove('is-hidden');
   stats.setAttribute('aria-label', `存活 ${survived}，装备 ${weapons.length} 把武器，历史最佳 ${record} 次击杀`);
   startButton.textContent = '重新执行行动';
