@@ -269,7 +269,7 @@ export class PocBattle extends Component {
       g.rect(x, cardY, cardWidth, cardHeight); g.stroke();
       label.node.setPosition(x + cardWidth / 2, cardY + cardHeight / 2, 0);
       label.string = (i + 1) + '. ' + decision.options[i].name
-        + '\\n' + decision.options[i].description;
+        + '\n' + decision.options[i].description;
     }
     this.hud.string = s.over
       ? (s.won ? '歼灭虫巢巨兽 · 点击重开 / R\\n击杀 ' : '机甲损毁 · 点击重开 / R\\n击杀 ') + s.kills
