@@ -6,7 +6,7 @@ import { SoundFx } from './Sound';
 import {
   evolutionRecipeTargets, grantExperience, installWeaponCalibration, killExperience, newGrowth,
   weaponTuning, xpToNext, MAX_RUN_LEVEL,
-  type GrowthState,
+  type GrowthState, type WeaponTuning,
 } from './arsenal';
 import {
   GAMEPLAY, fireIntervalMs, formatTime, buildReadout, buildWeaponDamage, buildWeaponInterval,
@@ -23,6 +23,7 @@ import {
 } from './campaignDirector';
 import { CONTENT_CATALOG, CURRENT_HERO_ID, resolveHeroLoadout } from './contentCatalog';
 import { createRunRandoms, newRunSeed, type RunRandomStreams } from './runRandom';
+import { assertWeaponSlots, createWeaponRuntimeRegistry } from './weaponRuntime';
 import {
   canSpawnElite, empStats, MAX_SUPPLIES, overclockDurationMs, rollSupplyKind,
   SUPPLY_PERIOD_MS, SUPPLY_TTL_MS, withinPickupReach, type SupplyKind,
@@ -151,6 +152,32 @@ export class GameScene extends Phaser.Scene {
   private campaignRun: CampaignRunState = beginCampaign(PROTOTYPE_CAMPAIGN, 1);
   private randoms: RunRandomStreams = createRunRandoms(1);
   private heroId = CURRENT_HERO_ID;
+  /**
+   * Combat wiring for the four currently implemented hardpoints.
+   * Future weapons register a driver here; catalog metadata alone cannot
+   * accidentally enable a weapon without its real firing implementation.
+   */
+  private readonly weaponDrivers = createWeaponRuntimeRegistry<Enemy, WeaponTuning>(CONTENT_CATALOG, [
+    {
+      driverId: 'rifle', slot: 'standard', baseRange: GAMEPLAY.fireRange, baseIntervalMs: fireIntervalMs(false),
+      attack: (_target, angle, tuning) => this.fire(angle,
+        this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage),
+        this.build.pierce + tuning.pierce, this.growth.evolved.rifle ? 1.65 : 1,
+        this.growth.evolved.rifle ? 0xffd7a2 : WEAPON_LIGHT.rifle),
+    },
+    {
+      driverId: 'scatter', slot: 'standard', baseRange: 270, baseIntervalMs: 850,
+      attack: (_target, angle) => this.fireScatter(angle),
+    },
+    {
+      driverId: 'arc', slot: 'standard', baseRange: 320, baseIntervalMs: 980,
+      attack: (target) => this.fireArc(target),
+    },
+    {
+      driverId: 'flame', slot: 'standard', baseRange: 190, baseIntervalMs: 170,
+      attack: (_target, angle) => this.fireFlame(angle),
+    },
+  ]);
   private get waveNumber(): number { return this.campaignRun.stageIndex + 1; }
   private get waveElapsedMs(): number { return this.campaignRun.elapsedMs; }
   private get currentStage() { return getEncounter(PROTOTYPE_CAMPAIGN, this.campaignRun.stageIndex); }
@@ -307,6 +334,7 @@ export class GameScene extends Phaser.Scene {
       throw new Error('Hero runtime adapter has no attack driver for this loadout');
     }
     this.heroId = loadout.heroId;
+    assertWeaponSlots([...loadout.standardWeaponIds, ...(loadout.signatureWeaponId ? [loadout.signatureWeaponId] : [])], this.weaponDrivers);
     this.bossSpawned = false;
     this.bossKilled = false;
     this.awaitingReward = false;
@@ -351,7 +379,7 @@ export class GameScene extends Phaser.Scene {
   /** The DOM reward UI is the only allowed path to resume a completed wave. */
   chooseCard(cardId: string): boolean {
     const chosen = this.rewardOptions.find(card => card.id === cardId);
-    if (!this.awaitingReward || !chosen) return false;
+    if (!this.awaitingReward || !chosen || (chosen.weapon && !this.weaponDrivers.has(chosen.weapon))) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
     if (chosen.weapon) installWeaponCalibration(this.growth, chosen.weapon);
@@ -1118,28 +1146,18 @@ export class GameScene extends Phaser.Scene {
   private updateWeapons(ms: number): void {
     for (const id of this.build.weapons) {
       this.weaponCooldowns[id] = Math.max(0, this.weaponCooldowns[id] - ms);
+      const driver = this.weaponDrivers.get(id);
+      if (!driver) throw new Error(`Missing attack driver for ${id}`);
       const tuning = weaponTuning(this.growth, id);
-      const range = (id === 'flame' ? 190 : id === 'scatter' ? 270 : id === 'arc' ? 320 : GAMEPLAY.fireRange)
-        * this.build.range * tuning.range;
+      const range = driver.baseRange * this.build.range * tuning.range;
       const target = id === 'rifle' && this.lockedTarget?.alive
         && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.lockedTarget.x, this.lockedTarget.y) <= range
           ? this.lockedTarget
           : selectTarget(this.player, this.readableEnemies(), range);
       if (!target || this.weaponCooldowns[id] > 0) continue;
       const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
-      switch (id) {
-        case 'rifle': {
-          this.fire(angle, this.weaponDamage(GAMEPLAY.bulletDamage * tuning.damage),
-            this.build.pierce + tuning.pierce, this.growth.evolved.rifle ? 1.65 : 1,
-            this.growth.evolved.rifle ? 0xffd7a2 : WEAPON_LIGHT.rifle);
-          break;
-        }
-        case 'scatter': this.fireScatter(angle); break;
-        case 'arc': this.fireArc(target); break;
-        case 'flame': this.fireFlame(angle); break;
-      }
-      const interval = id === 'rifle' ? fireIntervalMs(false) : id === 'scatter' ? 850 : id === 'arc' ? 980 : 170;
-      this.weaponCooldowns[id] = this.weaponInterval(interval) * tuning.interval;
+      driver.attack(target, angle, tuning);
+      this.weaponCooldowns[id] = this.weaponInterval(driver.baseIntervalMs) * tuning.interval;
     }
   }
 
