@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#09141d" />
+  <meta name="description" content="无尽虫潮 Cocos 迁移过程中的共享 TypeScript 核心 Web 验证页；原版游戏保持不变。" />
+  <title>无尽虫潮 · 迁移验证战场</title>
+</head>
+<body>
+<div class="shell">
+  <header class="site-header">
+    <div class="logo"><span class="logo-symbol">✳</span><span>ENDLESS <em>SWARM</em></span></div>
+    <span class="header-sub">COCOS MIGRATION LAB / 001</span>
+  </header>
+  <main class="workspace">
+    <section class="game-wrap" aria-label="交互式战斗预览">
+      <div class="battle-header"><span class="recording-dot"></span><span>TACTICAL LIVE FEED</span><span id="wave-meta">MIGRATION / G1</span></div>
+      <div class="canvas-shell">
+        <canvas id="battle" width="450" height="800" aria-label="无尽虫潮交互式战斗场景，按 WASD 或用手指拖动移动"></canvas>
+        <div class="top-hud">
+          <div><small>ARMOR INTEGRITY</small><div class="hp-bar"><div id="hp-fill"></div></div></div>
+          <div class="kill-count"><small>ELIMINATED</small><strong id="kill-count">000</strong></div>
+        </div>
+        <div class="status-bubble" id="stance">移动自动射击</div>
+        <div class="bottom-tip" id="battle-message">按住下半屏滑动移动 · 静止 0.8 秒火力展开</div>
+        <div id="end-screen" class="end-screen" hidden>
+          <p>MISSION FAILED</p><strong>战士阵亡</strong>
+          <span id="end-kills">已击杀 0 只虫族</span>
+          <button id="restart-overlay" type="button">再次出击</button>
+        </div>
+      </div>
+      <div class="battle-footer"><span>LIVE SIMULATION · <strong>1 MARINE / 1 ENEMY TYPE / 1 WEAPON</strong></span><span>POC <span id="frame-count">60</span> FPS</span></div>
+    </section>
+    <aside class="side-panel">
+      <div class="kicker">ENGINE MIGRATION / FIELD TEST</div>
+      <h1>新战场，<br><em>正在构建。</em></h1>
+      <p class="lead">这里是《无尽虫潮》微信小游戏迁移的独立预览。保留原版不动，先验证一个机甲、虫族追击、自动射击和火力展开的底层规则。</p>
+      <div class="notice">
+        <strong>当前预览说明</strong>
+        <p>本页面使用<strong>与 Cocos PoC 同一份 TypeScript 战斗核心</strong>，临时通过浏览器 Canvas 绘制；<strong>尚不是 Cocos Creator 引擎的正式 Web 构建</strong>，也不代表微信真机已经通过验证。</p>
+      </div>
+      <div class="section-caption">TACTICAL PROTOCOL</div>
+      <div class="instruction"><span>01</span><div><strong>单指控制</strong><small>按住战斗画面下半部分，朝任意方向拖动。</small></div></div>
+      <div class="instruction"><span>02</span><div><strong>自动瞄准</strong><small>步枪自动向射程内最近的活体虫族开火。</small></div></div>
+      <div class="instruction"><span>03</span><div><strong>火力展开</strong><small>停步 0.8 秒，伤害与攻击频率同时提升。</small></div></div>
+      <div class="actions">
+        <button id="restart" type="button" class="primary-action">重新开始验证 <span>↻</span></button>
+        <a href="/swarm/" class="secondary-action">返回原版游戏 <span>↗</span></a>
+      </div>
+      <p class="footnote">电脑支持 WASD / 方向键 · R 重新开始。页面切后台自动冻结模拟。</p>
+      <div class="build-info">SOURCE <a href="https://github.com/kk518/endless-swarm/pull/15" target="_blank" rel="noreferrer">FEATURE BRANCH / PR #15 ↗</a><br>DEPLOY <code id="build-sha">preview</code></div>
+    </aside>
+  </main>
+  <footer class="site-footer"><span>ENDLESS SWARM // ORIGINAL SCI-FI SURVIVAL</span><span>ISOLATED MIGRATION PREVIEW · NOT A PRODUCTION BUILD</span></footer>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
