@@ -15,7 +15,7 @@
   - [Run 43166896140](https://github.com/kk518/endless-swarm/actions/runs/43166896140)
   - 当前 PR head 的最新检查记录见 PR #15 Checks。
 - Cocos 场景使用 PocWorld 纯 TypeScript 规则；浏览器 Canvas 预览也复用同一份 PocWorld。
-- progression、runRandom、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime 七个规则模块通过 scripts/check-m6-copy.mjs 做字节级同步检查。
+- progression、runRandom、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime 十八个规则模块（combat、progression、arsenal、autoGrowth、streak、supplies、pressure、visibility、campaignDirector、routeDecisions、runRandom、runSafeSave、platformStorage、battlefields、metaProgression、contentCatalog、heroRuntime、weaponRuntime）通过 scripts/check-m6-copy.mjs 和 cocosM6Bridge.test.ts 做字节级同步检查。
 - PoC 有星际战士和凯恩两名可玩英雄；凯恩有部署强化被动和独立轨道炮专武。
 - Canvas 预览已接入双战区选择、独立预览存档、资源结算与工坊购买。
 
@@ -30,7 +30,7 @@
 
 ## 下一步
 
-严格按审计文档中的 P1→P5 推进：先让 Cocos 使用 main 的完整纯 TS 规则，再接入完整战斗和三幕/存档/局外闭环；暂停新增英雄与武器。
+P1 的源码准备已完成：18 个主线纯 TypeScript 规则模块已镜像进 Cocos 工程，并扩展字节一致性检查与回归测试。当前 PocWorld 尚未调用其中大部分模块。下一步建立 Core/RunController 接口，先恢复四武器、卡牌、XP/进化和 M0–M5.3 战斗行为，再接入三幕/存档/局外闭环；暂停新增英雄与武器。
 
 ## 隔离要求
 
