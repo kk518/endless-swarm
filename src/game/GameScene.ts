@@ -107,10 +107,12 @@ export interface RunResult {
   victory: boolean; wave: number; weapons: WeaponId[]; cards: string[]; bestStreak: number;
   level: number; weaponLevels: Record<WeaponId, number>; evolutions: string[];
   heroId: string; campaignId: string; runSeed: number;
+  totalStages: number; actTitle: string;
 }
 export interface RewardOffer {
   wave: number; options: CardDef[]; nextWave: number; equipped: WeaponId[];
   training: TrainingPlan;
+  actTitle: string; encounterTitle: string; totalStages: number;
 }
 
 /** An immediately playable mobile vertical slice of Endless Swarm. */
@@ -384,7 +386,8 @@ export class GameScene extends Phaser.Scene {
   /** The DOM reward UI is the only allowed path to resume a completed wave. */
   chooseCard(cardId: string): boolean {
     const chosen = this.rewardOptions.find(card => card.id === cardId);
-    if (!this.awaitingReward || !chosen || (chosen.weapon && !this.weaponDrivers.has(chosen.weapon))) return false;
+    if (!this.awaitingReward || !chosen || this.currentStage.encounter.decision !== 'card'
+      || (chosen.weapon && !this.weaponDrivers.has(chosen.weapon))) return false;
     this.build.hp = this.hp;
     if (!applyCard(this.build, cardId as CardId)) return false;
     if (chosen.weapon) installWeaponCalibration(this.growth, chosen.weapon);
@@ -754,6 +757,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endWave(): void {
+    if (this.currentStage.encounter.decision !== 'card') {
+      throw new Error('Encounter needs a route decision UI before it can be activated');
+    }
     this.active = false;
     this.awaitingReward = true;
     this.releaseJoystick();
@@ -763,6 +769,8 @@ export class GameScene extends Phaser.Scene {
     const detail: RewardOffer = {
       wave: this.waveNumber, nextWave: this.waveNumber + 1, options: this.rewardOptions,
       equipped: [...this.build.weapons], training: this.currentTraining(),
+      actTitle: this.currentStage.actTitle, encounterTitle: this.currentStage.encounter.title,
+      totalStages: this.currentStage.total,
     };
     window.dispatchEvent(new CustomEvent<RewardOffer>('swarm:reward', { detail }));
   }
@@ -1563,6 +1571,7 @@ export class GameScene extends Phaser.Scene {
       level: this.growth.level, weaponLevels: { ...this.growth.weaponLevels },
       evolutions: Object.entries(this.growth.evolved).filter(([, enabled]) => enabled).map(([name]) => name),
       heroId: this.heroId, campaignId: this.campaignRun.campaignId, runSeed: this.campaignRun.seed,
+      totalStages: this.currentStage.total, actTitle: this.currentStage.actTitle,
     };
     window.dispatchEvent(new CustomEvent<RunResult>('swarm:gameover', { detail: result }));
   }
