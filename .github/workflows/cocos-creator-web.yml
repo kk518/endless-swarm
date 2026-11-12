@@ -15,11 +15,35 @@ permissions:
 
 concurrency:
   group: cocos-real-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  creator-build:
+  detect-source-change:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/cocos-wechat-migration-poc' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.diff.outputs.build }}
+    steps:
+      - name: Checkout recent migration commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+      - name: Only rebuild Creator for changed Cocos source or build scripts
+        id: diff
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || \
+             git diff --name-only HEAD^ HEAD | grep -Eq '^(clients/cocos/|scripts/build-cocos-macos\.sh|scripts/check-m6-copy\.mjs|\.github/workflows/cocos-creator-web\.yml)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Only browser or documentation code changed; skip expensive Creator installer."
+          fi
+
+  creator-build:
+    needs: detect-source-change
+    if: needs.detect-source-change.outputs.build == 'true'
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
