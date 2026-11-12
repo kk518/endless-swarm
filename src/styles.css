@@ -333,3 +333,32 @@ h1{
   background: linear-gradient(165deg, #583a32, #202c30 80%);
 }
 .reward-card[data-category="safe"] { border-color: #77bcad; }
+
+
+/* M6.0c local armory: one compact, keyboard/touch-accessible progression action. */
+.meta-armory {
+  display: grid; gap: 5px;
+  text-align: left; margin: 6px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #547d776b;
+  border-radius: 10px;
+  background: linear-gradient(140deg, #203c3fbb, #132832bb);
+}
+.meta-armory-heading {display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px}
+.meta-armory-heading strong {color:#ffe1a4;letter-spacing:.09em}
+.meta-armory-heading span {color:#b6ebd5;font-variant-numeric:tabular-nums}
+.meta-armory p {font-size:11px;color:#bbd2cb;margin:0}
+.meta-armory small {font-size:10px;color:#92b1ac;line-height:1.35}
+.meta-upgrade-button {width:100%;padding:8px 10px;border-radius:7px;
+  border:1px solid #e1b479a0;background:#314746;color:#fff0c3;font-size:12px;font-weight:800}
+.meta-upgrade-button:disabled {opacity:.45;cursor:not-allowed;border-color:#6e8581}
+.meta-upgrade-button:focus-visible {outline:2px solid #ffe1a4;outline-offset:2px}
+#resume-button {margin-bottom:8px;background:linear-gradient(105deg,#93e1cb,#d2f8db)}
+#overlay {overflow-y:auto;overscroll-behavior:contain}
+#overlay .briefing {margin:auto}
+@media(max-height:690px) {
+  .meta-armory {gap:3px;margin:3px 0 7px;padding:7px 9px}
+  .meta-armory-heading {font-size:11px}
+  .meta-upgrade-button {padding:6px 8px}
+  #resume-button {margin-bottom:5px}
+}
