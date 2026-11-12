@@ -30,6 +30,18 @@
             </div>
             <div id="run-stats" class="run-stats is-hidden" aria-live="polite"></div>
             <div id="start-training" class="training-controls">
+              <label for="start-battlefield">战区地图 · 选择本次资源目标</label>
+              <select id="start-battlefield" aria-label="选择战区和目标素材">
+                <option value="steel-ruins">钢铁遗迹 · 军用合金 / 重甲虫</option>
+                <option value="infested-nest">感染巢穴 · 生体样本 / 自爆虫</option>
+              </select>
+              <small id="battlefield-hint">钢铁遗迹：获得军用合金，解锁主武器框架强化。</small>
+              <label for="start-campaign">出击模式</label>
+              <select id="start-campaign" aria-label="选择战斗模式">
+                <option value="prototype">五波封锁 · 现有原型</option>
+                <option value="expedition">三幕远征 · 实验玩法（约 16 分钟）</option>
+              </select>
+              <small>远征会在阶段边界保存；战区素材与战备统一结算，失败有效出击仍有收获。</small>
               <label for="start-training-focus">自动成长倾向</label>
               <select id="start-training-focus" aria-label="开局自动升级方向">
                 <option value="damage">火力 · 优先提升武器伤害</option>
@@ -38,12 +50,24 @@
               </select>
               <small>XP 自动升级；重要武器和战术模块留在波末选择。</small>
             </div>
+            <div id="meta-armory" class="meta-armory" aria-label="局外战备与装备工坊">
+              <div class="meta-armory-heading"><strong>星际军械库</strong><span id="meta-wallet">战备数据 0</span></div>
+              <p id="meta-armor-status">基础装甲 Lv.0 / 3</p>
+              <p id="meta-materials">合金 0 · 样本 0</p>
+              <p id="meta-frame-status">主武器框架 Lv.0 / 2</p>
+              <button id="frame-upgrade-button" class="meta-upgrade-button" type="button">主武器框架强化</button>
+              <p id="meta-repair-status">装甲修复模块 Lv.0 / 2</p>
+              <button id="repair-upgrade-button" class="meta-upgrade-button" type="button">装甲修复模块强化</button>
+              <button id="armor-upgrade-button" class="meta-upgrade-button" type="button">强化基础装甲 · 25 战备</button>
+              <small id="meta-storage-status" aria-live="polite">有效战斗失败也能获得战备。仅保存在本机浏览器。</small>
+            </div>
+            <button id="resume-button" class="action-button is-hidden" type="button">继续上次远征 <span>›</span></button>
             <button id="play-button" class="action-button" type="button">执行登陆行动 <span>›</span></button>
             <div class="bottom-note"><span class="status-light"></span> M5 战地进化 <span class="note-sep">/</span> 手机竖屏体验</div>
           </div>
         </div>
         <section id="reward-overlay" class="reward-overlay is-hidden" aria-label="波后卡牌选择" aria-live="polite">
-          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / STRATEGIC MODULE</span><h2 id="reward-title">战术模块授权</h2><p>波后强力模块 · 每波免费选择一张。</p></div>
+          <div class="reward-header"><span class="reward-kicker">/ LEGION ARMORY / STRATEGIC MODULE</span><h2 id="reward-title">战术模块授权</h2><p id="reward-description">波后强力模块 · 每波免费选择一张。</p></div>
           <div id="reward-cards" class="reward-cards" role="group" aria-label="选择一张强化卡"></div>
           <div class="wave-training" aria-label="下一波自动成长设置">
             <span>下一波自动专精</span>
@@ -56,7 +80,7 @@
               <option value="speed">机动 +7%</option>
             </select>
           </div>
-          <div class="reward-footer"><span class="footer-line"></span> 选取一项装备模块 / 立即生效 <span class="footer-line"></span></div>
+          <div class="reward-footer"><span class="footer-line"></span><span id="reward-footer-copy">选取一项装备模块 / 立即生效</span><span class="footer-line"></span></div>
         </section>
         <button id="mute-button" class="mute-button" type="button" aria-pressed="false">关闭音效</button>
       </section>
