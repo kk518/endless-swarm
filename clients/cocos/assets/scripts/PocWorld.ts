@@ -219,9 +219,14 @@ export class PocWorld {
     const nextWave = Math.min(5, 1 + Math.floor(state.elapsedMs / POC.waveDurationMs));
     if (nextWave > state.wave) state.wave = nextWave;
     if (state.wave === 5 && !state.bossSpawned) {
-      state.bossSpawned = true;
+      // Reserve the boss slot even if the previous wave reached its enemy cap.
+      if (state.enemies.length >= POC.maxEnemies) {
+        const expendable = state.enemies.findIndex(e => e.kind !== 'boss');
+        if (expendable >= 0) state.enemies.splice(expendable, 1);
+      }
       this.spawnEnemyAt(clamp(player.x + 135, -this.width/2+30, this.width/2-30),
         clamp(player.y + 160, -this.height/2+30, this.height/2-30), 'boss');
+      state.bossSpawned = state.enemies.some(e => e.kind === 'boss');
     }
     this.spawnCooldownMs -= ms;
     if (this.spawnCooldownMs <= 0) {
