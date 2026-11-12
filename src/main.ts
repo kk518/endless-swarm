@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameScene, type RewardOffer, type RunResult } from './game/GameScene';
+import { GameScene, type RewardOffer, type RouteOffer, type RunResult } from './game/GameScene';
 import { DEFAULT_TRAINING, type TrainingFocus } from './game/autoGrowth';
 import type { WeaponId } from './game/progression';
 import { MOBILE_WORLD_WIDTH, HUD_DESIGN_WIDTH } from './game/visibility';
@@ -43,6 +43,9 @@ const rewardOverlay = document.querySelector<HTMLElement>('#reward-overlay')!;
 const rewardTitle = document.querySelector<HTMLElement>('#reward-title')!;
 const rewardCards = document.querySelector<HTMLElement>('#reward-cards')!;
 const startFocus = document.querySelector<HTMLSelectElement>('#start-training-focus')!;
+const startCampaign = document.querySelector<HTMLSelectElement>('#start-campaign')!;
+const rewardDescription = document.querySelector<HTMLElement>('#reward-description')!;
+const rewardFooterCopy = document.querySelector<HTMLElement>('#reward-footer-copy')!;
 const rewardWeapon = document.querySelector<HTMLSelectElement>('#reward-training-weapon')!;
 const rewardFocus = document.querySelector<HTMLSelectElement>('#reward-training-focus')!;
 const weaponName = (id: WeaponId): string => CONTENT_CATALOG.weapons.get(id)?.name ?? id;
@@ -57,7 +60,8 @@ function beginRun(): void {
     window.setTimeout(() => { startButton.disabled = false; beginRun(); }, 100);
     return;
   }
-  scene.startRun({ weapon: DEFAULT_TRAINING.weapon, focus: startFocus.value as TrainingFocus });
+  scene.startRun({ weapon: DEFAULT_TRAINING.weapon, focus: startFocus.value as TrainingFocus },
+    startCampaign.value === 'expedition' ? 'expedition' : 'prototype');
   rewardOverlay.classList.add('is-hidden');
   overlay.classList.add('is-hidden');
   document.querySelector<HTMLElement>('#game')?.focus();
@@ -78,6 +82,9 @@ window.addEventListener('swarm:reward', (event) => {
     ? offer.training.weapon : offer.equipped[0];
   rewardFocus.value = offer.training.focus;
   rewardTitle.textContent = `${offer.actTitle} · ${offer.encounterTitle}（${offer.wave}/${offer.totalStages}）`;
+  rewardOverlay.dataset.mode = 'card';
+  rewardDescription.textContent = '阶段结束 · 选择一张战术模块（不会额外打断战斗经验升级）';
+  rewardFooterCopy.textContent = '选取一项装备模块 / 立即生效';
   rewardCards.replaceChildren();
   for (const [i, card] of offer.options.entries()) {
     const button = document.createElement('button');
@@ -99,6 +106,42 @@ window.addEventListener('swarm:reward', (event) => {
     button.addEventListener('click', () => {
       scene.setTraining(rewardWeapon.value as WeaponId, rewardFocus.value as TrainingFocus);
       if (!scene.chooseCard(card.id)) return;
+      rewardOverlay.classList.add('is-hidden');
+      document.querySelector<HTMLElement>('#game')?.focus();
+    });
+    rewardCards.append(button);
+  }
+  rewardOverlay.classList.remove('is-hidden');
+  rewardCards.querySelector('button')?.focus();
+});
+
+window.addEventListener('swarm:route', (event) => {
+  const offer = (event as CustomEvent<RouteOffer>).detail;
+  rewardOverlay.dataset.mode = 'route';
+  rewardTitle.textContent = `${offer.actTitle} · 路线抉择（${offer.wave}/${offer.totalStages}）`;
+  rewardDescription.textContent = `${offer.encounterTitle}已完成 · 二选一。高危路线损失装甲、增强火力并加速下一段虫潮增援。`;
+  rewardFooterCopy.textContent = '路线选择立即生效 / 无额外弹窗';
+  rewardCards.replaceChildren();
+  for (const [i, choice] of offer.options.entries()) {
+    const button = document.createElement('button');
+    button.className = 'reward-card';
+    button.type = 'button';
+    button.dataset.category = choice.risk;
+    const serial = document.createElement('span');
+    serial.className = 'reward-card-serial';
+    serial.textContent = `ROUTE / 0${i + 1}`;
+    const icon = document.createElement('span');
+    icon.className = 'reward-card-icon'; icon.textContent = choice.icon;
+    const name = document.createElement('strong');
+    name.className = 'reward-card-name'; name.textContent = choice.name;
+    const desc = document.createElement('span');
+    desc.className = 'reward-card-description'; desc.textContent = choice.description;
+    const risk = document.createElement('span');
+    risk.className = 'reward-card-category';
+    risk.textContent = choice.risk === 'hazard' ? '高风险 / 长期火力收益' : '安全路线 / 装甲恢复';
+    button.append(serial, icon, name, desc, risk);
+    button.addEventListener('click', () => {
+      if (!scene.chooseRoute(choice.id)) return;
       rewardOverlay.classList.add('is-hidden');
       document.querySelector<HTMLElement>('#game')?.focus();
     });
