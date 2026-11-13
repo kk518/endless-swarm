@@ -19,3 +19,16 @@ test('rendering-only texture migration cannot modify run state or saved gameplay
  assert.match(presenter,/this.frames.has\(key\)/);
  assert.match(battle,/this.art.ready/);
 });
+
+test('Creator sprite layering keeps enemy bodies behind the hero and guns in front',()=>{
+ const ordered=['MainEnemyLayer','MainPickupLayer','MainPlayerLayer','MainWeaponLayer','MainProjectileLayer'];
+ const offsets=ordered.map(name=>presenter.indexOf("this.layer('"+name+"')"));
+ assert.ok(offsets.every(index=>index>=0),'all scene layers must exist');
+ assert.deepEqual([...offsets].sort((a,b)=>a-b),offsets,'render layers are created back-to-front');
+ assert.match(presenter,/this.create\(this.enemyLayer,'MainBug-'/);
+ assert.match(presenter,/this.create\(this.playerLayer,'MainMarineSprite'\)/);
+ assert.match(presenter,/this.create\(this.weaponLayer,'MainMount-'/);
+ assert.match(presenter,/this.syncTransient\(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer\)/);
+ assert.match(presenter,/this.syncTransient\(this.acid,s.acids,'acid',18,18,8,this.projectileLayer\)/);
+ assert.match(presenter,/this.weaponLayer,this.projectileLayer\]\)layer.destroy\(\)/);
+});
