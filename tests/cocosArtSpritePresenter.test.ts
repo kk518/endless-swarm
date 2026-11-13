@@ -81,3 +81,15 @@ test('Boss 900ms charge previews its 125-unit directional lunge, not a false AoE
  assert.doesNotMatch(battle,/enemy.kind === 'boss' \? 65 : 26/);
  assert.match(battle,/g.circle\(enemy.x, enemy.y, 26\); g.stroke\(\)/);
 });
+
+test('combat HUD has clamped independent health/XP bars and surge alert',()=>{
+ assert.match(battle,/private paintCombatHud\(ui: Graphics\): void/);
+ assert.match(battle,/if \(s.over \|\| this.world.decision\) return/);
+ assert.match(battle,/Number.isFinite\(ratio\) \? ratio : 0/);
+ assert.match(battle,/s.player.hp \/ Math.max\(1, s.player.maxHp\)/);
+ assert.match(battle,/s.xp \/ Math.max\(1, s.xpToNext\)/);
+ assert.match(battle,/if \(s.surgeWarningMs > 0\) \{/);
+ assert.match(battle,/this.paintCombatHud\(ui\)/);
+ assert.match(battle,/s.weapons.map\(id => id \+ ' ' \+ s.weaponLevels\[id\]/);
+ assert.match(battle,/s.evolved\[id\] \? '★' : ''/);
+});
