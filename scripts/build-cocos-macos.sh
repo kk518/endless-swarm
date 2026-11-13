@@ -44,6 +44,9 @@ fi
 rm -rf "$output"
 mkdir -p "$output"
 rsync -a "$build_dir/" "$output/"
+# Generated Creator HTML keeps its real game bundles; add only a bounded
+# startup error/retry overlay, never a Vite fallback.
+node "$repo_root/scripts/inject-cocos-startup-guard.mjs" "$output/index.html"
 printf '{"commit":"%s","kind":"cocos-creator-3.8.8-web-mobile","editor":"3.8.8"}\n' \
   "${PREVIEW_REVISION:-unknown}" > "$output/preview-version.json"
 echo "Verified real Creator Web Mobile artifact at $output"
