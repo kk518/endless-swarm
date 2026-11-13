@@ -14,8 +14,11 @@ permissions:
   contents: read
 
 concurrency:
+  # Creator builds take several minutes on macOS; cancelling them on every
+  # synchronize wastes paid runner time and can indefinitely postpone deploy.
+  # Queue the latest request, then re-check the deployed SHA before rebuilding.
   group: cocos-real-build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   detect-source-change:
