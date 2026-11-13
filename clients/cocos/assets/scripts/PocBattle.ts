@@ -757,13 +757,13 @@ export class PocBattle extends Component {
     this.hud.string = s.over
       ? (s.won ? '虫潮歼灭 · 远征结算' : '机甲损毁 · 战备结算')
         + ' · 击杀 ' + s.kills
-        + '\\n' + this.hangar.message
+        + '\n' + this.hangar.message
         + '\\n战备 ' + (this.hangar.display().meta?.warData ?? '—')
         + ' · 合金 ' + (this.hangar.display().meta?.alloy ?? '—')
         + ' · 样本 ' + (this.hangar.display().meta?.samples ?? '—')
       : decision
         ? (decision.kind === 'card' ? '遭遇结束 · 选择战术卡' : '路线分岔 · 选择前进路线')
-          + '\\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
+          + '\n' + decision.options.map((option, index) => (index + 1) + '. ' + option.name).join('   ')
           + '\\n训练：' + s.training.weapon + '／' + TRAINING_LABELS[s.training.focus]
           + ' · 下方可更改专精后选卡'
         : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
