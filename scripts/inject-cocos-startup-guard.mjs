@@ -20,7 +20,10 @@ const guard=`<script id="swarm-startup-guard">
   window.addEventListener('error', function (event) {
     var target=event.target;
     if (target && target !== window && target.tagName) {
-      add('Resource failed: ' + target.tagName);
+      var src=target.src || target.href || '';
+      var path='';
+      try {path=new URL(src,window.location.href).pathname.slice(-100);} catch(_) {}
+      add('Resource failed: ' + target.tagName + ' ' + path);
     } else add('Runtime: ' + (event.message || 'unknown'));
   }, true);
   window.addEventListener('unhandledrejection', function (event) {
@@ -40,6 +43,7 @@ const guard=`<script id="swarm-startup-guard">
     layer.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;'+
       'align-items:center;justify-content:center;padding:22px;background:#08141bf2;'+
       'color:#e6eeea;font:14px/1.7 system-ui,-apple-system,sans-serif;text-align:center';
+    if(document.getElementById('swarm-startup-error'))return;
     var card=document.createElement('div');
     card.style.cssText='max-width:370px;border:1px solid #648c91;background:#12242c;'+
       'padding:24px 20px;border-radius:12px;box-shadow:0 12px 40px #0009';
@@ -47,7 +51,7 @@ const guard=`<script id="swarm-startup-guard">
     title.textContent='游戏启动超时';
     title.style.cssText='font-size:19px;margin:0 0 12px;color:#ffcf8e';
     var description=document.createElement('p');
-    description.textContent='Cocos 场景未能正常启动。请点击重试；若仍无法进入，可复制诊断信息反馈。';
+    description.textContent='Cocos 场景未能正常启动。请点击重试；若仍无法进入，请展开诊断信息并反馈。';
     var detail=document.createElement('pre');
     detail.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;'+
       'font-size:11px;color:#9fbfc6;background:#071820;padding:10px';
@@ -80,7 +84,7 @@ const guard=`<script id="swarm-startup-guard">
   window.setTimeout(function(){
     if(document.body)showFailure();
     else window.addEventListener('DOMContentLoaded',showFailure,{once:true});
-  },20000);
+  },45000);
 })();
 </script>`;
 html=html.replace(/<\/head>/i,guard+'\n</head>');
