@@ -30,6 +30,11 @@ page.on('console', (message) => {
 });
 page.on('pageerror', error => messages.push('PAGE ERROR ' + error.message));
 page.on('requestfailed', request => messages.push('REQUEST ' + request.url() + ' ' + request.failure()?.errorText));
+page.on('response', response => {
+  if (response.status() >= 400 && messages.length < 40) {
+    messages.push('HTTP ' + response.status() + ' ' + new URL(response.url()).pathname);
+  }
+});
 try {
   const markerResponse = await page.request.get(url + 'preview-version.json', { timeout: 30000 });
   if (!markerResponse.ok()) throw new Error('Version marker HTTP ' + markerResponse.status());
@@ -41,9 +46,15 @@ try {
   if (!navigation?.ok()) throw new Error('Game page HTTP ' + navigation?.status());
   // The scene's staging-only debug contract confirms actual component execution.
   await page.waitForFunction(
-    () => typeof window.__swarmCocosDebug?.state === 'function',
+    () => typeof window.__swarmCocosDebug?.state === 'function'
+      || Boolean(document.getElementById('swarm-startup-error')),
     null, { timeout: 55000 },
   );
+  const startupError = page.locator('#swarm-startup-error');
+  if (await startupError.count()) {
+    const details = await startupError.innerText();
+    throw new Error('Cocos startup watchdog triggered: ' + details + '\\n' + messages.join('\\n'));
+  }
   // Do not accept a green smoke test if Creator silently falls back to
   // primitive Graphics because it never imported the generated main PNGs.
   try {
