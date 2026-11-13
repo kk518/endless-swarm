@@ -29,12 +29,30 @@ export class PocArtSprites {
   private readonly acid: Sprite[]=[];
   private readonly player: Sprite;
   private readonly floor: Sprite;
+  private readonly enemyLayer: Node;
+  private readonly pickupLayer: Node;
+  private readonly playerLayer: Node;
+  private readonly weaponLayer: Node;
+  private readonly projectileLayer: Node;
   constructor(private readonly root:Node, floorRoot:Node){
     this.floor=this.create(floorRoot,'MainDustTiles');
     this.floor.node.setPosition(0,0,0);
     this.floor.type=Sprite.Type.TILED;
-    this.player=this.create(root,'MainMarineSprite');
+    // Explicit front-to-back ordering: enemy silhouettes never cover the
+    // marine, while attached guns and hostile projectiles stay readable.
+    // All layers inherit the same M5.3 world transform from root.
+    this.enemyLayer=this.layer('MainEnemyLayer');
+    this.pickupLayer=this.layer('MainPickupLayer');
+    this.playerLayer=this.layer('MainPlayerLayer');
+    this.weaponLayer=this.layer('MainWeaponLayer');
+    this.projectileLayer=this.layer('MainProjectileLayer');
+    this.player=this.create(this.playerLayer,'MainMarineSprite');
     for(const key of Object.keys(DIMENSIONS))this.load(key);
+  }
+  private layer(name:string):Node{
+    const node=new Node(name);
+    this.root.addChild(node);
+    return node;
   }
   ready(key:string):boolean{return this.frames.has(key);}
   enemyKey(kind:PocEnemyKind):string{return ENEMY_ART[kind];}
@@ -78,7 +96,7 @@ export class PocArtSprites {
     for(const e of s.enemies){
       living.add(e.id);
       let sprite=this.enemies.get(e.id);
-      if(!sprite){sprite=this.create(this.root,'MainBug-'+e.id);this.enemies.set(e.id,sprite);}
+      if(!sprite){sprite=this.create(this.enemyLayer,'MainBug-'+e.id);this.enemies.set(e.id,sprite);}
       const key=this.enemyKey(e.kind??'grunt');
       const scale=e.kind==='boss'?1.0:e.kind==='armored'?.85:e.kind==='leaper'?.8:.75;
       const dims=DIMENSIONS[key];
@@ -97,7 +115,7 @@ export class PocArtSprites {
     for(const mount of rig){
       mounted.add(mount.id);
       let sprite=this.weapons.get(mount.id);
-      if(!sprite){sprite=this.create(this.root,'MainMount-'+mount.id);this.weapons.set(mount.id,sprite);}
+      if(!sprite){sprite=this.create(this.weaponLayer,'MainMount-'+mount.id);this.weapons.set(mount.id,sprite);}
       const key=mount.id==='rifle'?'rifle':'mount-'+mount.id;
       const dims=DIMENSIONS[key];
       if(this.assign(sprite,key,dims[0]*.82,dims[1]*.82)){
@@ -110,12 +128,12 @@ export class PocArtSprites {
     for(const [id,sprite]of this.weapons)if(!mounted.has(id)){
       sprite.node.destroy();this.weapons.delete(id);
     }
-    this.syncTransient(this.supplies,s.supplies,'supply',30,30,10);
-    this.syncTransient(this.acid,s.acids,'acid',18,18,8);
+    this.syncTransient(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer);
+    this.syncTransient(this.acid,s.acids,'acid',18,18,8,this.projectileLayer);
   }
   private syncTransient(pool:Sprite[],items:readonly {x:number;y:number}[],
-    key:string,w:number,h:number,vertical:number):void{
-    while(pool.length<items.length)pool.push(this.create(this.root,'Main-'+key));
+    key:string,w:number,h:number,vertical:number,parent:Node):void{
+    while(pool.length<items.length)pool.push(this.create(parent,'Main-'+key));
     for(let i=0;i<pool.length;i++){
       const sprite=pool[i];
       sprite.node.active=i<items.length;
@@ -127,5 +145,8 @@ export class PocArtSprites {
     for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid])
       sprite.node.destroy();
     this.enemies.clear();this.weapons.clear();this.supplies.length=0;this.acid.length=0;
+    for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
+      this.weaponLayer,this.projectileLayer])layer.destroy();
+    this.floor.node.destroy();
   }
 }
