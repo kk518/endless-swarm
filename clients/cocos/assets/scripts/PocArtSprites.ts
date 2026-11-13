@@ -9,6 +9,7 @@ import type { PocHeroId } from './PocRoster.ts';
 import type { WeaponId } from './m6/progression.ts';
 import { buildWeaponRig } from './PocWeaponRig.ts';
 
+const VANGUARD_KEYS=new Set(['marine','crawler','leaper','armored','spitter','bomber','broodlord']);
 const ENEMY_ART: Record<PocEnemyKind,string> = {
   grunt:'crawler', leaper:'leaper', armored:'armored',
   spitter:'spitter', bomber:'bomber', boss:'broodlord',
@@ -23,6 +24,7 @@ const DIMENSIONS: Record<string, readonly [number, number]> = {
 export class PocArtSprites {
   private readonly frames=new Map<string,SpriteFrame>();
   private readonly pending=new Set<string>();
+  private readonly vanguardReady=new Set<string>();
   private readonly enemies=new Map<number,Sprite>();
   // Renderer-only health sampling: no damage, hitbox or RNG changes.
   private readonly enemyLastHp=new Map<number,number>();
@@ -63,6 +65,7 @@ export class PocArtSprites {
     return node;
   }
   ready(key:string):boolean{return this.frames.has(key);}
+  enhanced(key:string):boolean{return this.vanguardReady.has(key);}
   enemyKey(kind:PocEnemyKind):string{return ENEMY_ART[kind];}
   private create(parent:Node,name:string):Sprite{
     const node=new Node(name);parent.addChild(node);
@@ -71,14 +74,27 @@ export class PocArtSprites {
   private load(key:string):void{
     if(this.pending.has(key))return;
     this.pending.add(key);
-    // Creator 3.8.8 imports a dynamically generated PNG into resources as
-    // ImageAsset + Texture2D (not as a SpriteFrame sub-asset). Fetch the
-    // generated texture and create the SpriteFrame explicitly.
+    // Layered original vanguard silhouettes are the default for all characters.
+    // Source art remains available as a safe fallback if a texture is missing.
+    if(VANGUARD_KEYS.has(key)){
+      resources.load('vanguard-art/'+key+'/texture',Texture2D,(err,texture)=>{
+        if(!err&&texture){
+          this.installFrame(key,texture);
+          this.vanguardReady.add(key);
+        }else this.loadOriginal(key);
+      });
+    }else this.loadOriginal(key);
+  }
+  private installFrame(key:string,texture:Texture2D):void{
+    const frame=new SpriteFrame();
+    frame.texture=texture;
+    this.frames.set(key,frame);
+  }
+  private loadOriginal(key:string):void{
+    // Creator 3.8.8 imports generated PNGs as Texture2D sub-assets.
     resources.load('main-art/'+key+'/texture',Texture2D,(err,texture)=>{
-      if(err||!texture){console.warn('Main art texture unavailable:',key,err);return;}
-      const frame=new SpriteFrame();
-      frame.texture=texture;
-      this.frames.set(key,frame);
+      if(err||!texture){console.warn('Art texture unavailable:',key,err);return;}
+      this.installFrame(key,texture);
     });
   }
   private assign(sprite:Sprite,key:string,width:number,height:number):boolean{
@@ -218,6 +234,7 @@ export class PocArtSprites {
       ...this.evolutionGlows.values(),...this.supplies,...this.acid,...this.muzzleFlashes])
       sprite.node.destroy();
     this.enemies.clear();this.enemyLastHp.clear();this.enemyHitUntil.clear();
+    this.vanguardReady.clear();
     this.lastFrameTimeMs=-1;
     this.weapons.clear();this.evolutionGlows.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
