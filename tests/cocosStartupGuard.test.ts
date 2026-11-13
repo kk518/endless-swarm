@@ -19,7 +19,7 @@ test('Creator post-build guard injects parseable recovery UI without replacing e
     assert.match(result,/WebGL:/);
     assert.match(result,/window\.__swarmCocosDebug/);
     assert.match(result,/setTimeout\(function\(\)/);
-    assert.match(result,/20000/);
+    assert.match(result,/45000/);
     assert.match(result,/src="\.\/application\.js"/);
     const match=result.match(/<script id="swarm-startup-guard">([\s\S]*?)<\/script>/);
     assert.ok(match,'guard exists as an isolated inline script');
