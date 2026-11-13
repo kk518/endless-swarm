@@ -157,6 +157,12 @@ export class PocBattle extends Component {
     (globalThis as typeof globalThis & { __swarmCocosDebug?: { state: () => object } }).__swarmCocosDebug = {
       state: () => ({
         initialized: true,
+        originalMainArt: {
+          marine: this.art.ready('marine'),
+          rifle: this.art.ready('rifle'),
+          crawler: this.art.ready('crawler'),
+          dust: this.art.ready('dust'),
+        },
         hero: this.world.heroId, signature: this.world.heroId === 'kane' ? 'kane-rail' : null,
         input: { touchActive: this.activeTouch !== null, touchMove: { ...this.touchMove },
           pressedKeys: this.pressed.size, suspended: this.suspended },
