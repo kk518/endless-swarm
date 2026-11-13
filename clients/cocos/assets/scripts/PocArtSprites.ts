@@ -27,6 +27,7 @@ export class PocArtSprites {
   private readonly weapons=new Map<WeaponId,Sprite>();
   private readonly supplies: Sprite[]=[];
   private readonly acid: Sprite[]=[];
+  private readonly muzzleFlashes: Sprite[]=[];
   private readonly player: Sprite;
   private readonly floor: Sprite;
   private readonly enemyLayer: Node;
@@ -130,6 +131,28 @@ export class PocArtSprites {
     }
     this.syncTransient(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer);
     this.syncTransient(this.acid,s.acids,'acid',18,18,8,this.projectileLayer);
+    this.syncMuzzleFlashes(s.shots);
+  }
+  /** Reuse pooled flash sprites; simulation controls position, aim and lifetime. */
+  private syncMuzzleFlashes(shots:PocState['shots']):void{
+    while(this.muzzleFlashes.length<shots.length)
+      this.muzzleFlashes.push(this.create(this.projectileLayer,'MainMuzzleFlash'));
+    for(let i=0;i<this.muzzleFlashes.length;i++){
+      const sprite=this.muzzleFlashes[i];
+      sprite.node.active=i<shots.length;
+      if(i>=shots.length)continue;
+      const shot=shots[i];
+      const size=shot.source==='scatter'?34:shot.source==='flame'?38:28;
+      if(!this.assign(sprite,'muzzle-flash',size,size*.8))continue;
+      sprite.node.setPosition(shot.x,shot.y+8,0);
+      sprite.node.angle=shot.angle*180/Math.PI;
+      const fade=Math.max(0,Math.min(1,shot.remainingMs/95));
+      const tint=shot.source==='arc'?new Color(151,208,255,Math.round(255*fade))
+        :shot.source==='flame'?new Color(255,146,87,Math.round(255*fade))
+        :shot.source==='scatter'?new Color(255,190,126,Math.round(255*fade))
+        :new Color(255,230,178,Math.round(255*fade));
+      sprite.color=tint;
+    }
   }
   private syncTransient(pool:Sprite[],items:readonly {x:number;y:number}[],
     key:string,w:number,h:number,vertical:number,parent:Node):void{
@@ -142,9 +165,9 @@ export class PocArtSprites {
     }
   }
   dispose():void{
-    for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid])
+    for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid,...this.muzzleFlashes])
       sprite.node.destroy();
-    this.enemies.clear();this.weapons.clear();this.supplies.length=0;this.acid.length=0;
+    this.enemies.clear();this.weapons.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
       this.weaponLayer,this.projectileLayer])layer.destroy();
     this.floor.node.destroy();
