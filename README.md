@@ -162,12 +162,24 @@ CI 在 PR / feature 分支和 main 上运行测试、类型检查与构建，成
 
 每波之间额外修复 1 点装甲；抽卡可以获得新武器与额外回复。没有永久战力增长。
 
-## 设计文档与开发分支
+## 产品需求与后续规划（先验证，再开发）
 
-- [产品需求（PRD）](docs/PRD.md)
-- [技术设计（TDD）](docs/TECH_DESIGN.md)
+- **[产品总纲 PRD v2.5](docs/PRD_V2.md)**：**每局新鲜、失败也爽、Build 上头**；规划三幕 15–20 分钟长局、无打断升级和多战区资源成长。
+- **[完整 Roguelite 核心循环 PRD](docs/PRD_ROGUELITE_CORE_LOOP.md)**：三幕九段、受控随机、跨武器融合流派、失败结算、安全节点恢复及分期验收。
+- **[英雄与武器系统 PRD](docs/PRD_HERO_WEAPON_SYSTEM.md)**：六位英雄被动、六把英雄专属武器、十二种普通武器目标池、模组稀有度、主融合与分期方案。
+- **[首批英雄与 Build 垂直切片](docs/PRD_HERO_BUILD_VERTICAL_SLICE.md)**：三英雄、六普通武器、两融合的战斗合同、三幕奖池与具体验收标准（规划）。
+- **[英雄军械库、蓝图解锁与选卡规则](docs/PRD_HERO_ARMORY_AND_DRAFT.md)**：英雄解锁、武器蓝图、专武觉醒、稀有奖励、Build 防卡池稀释及结算展示（规划）。
+- **[M5.2 无打断升级 PRD](docs/PRD_M5_2_NONBLOCKING.md)**：**M5.2 已实现** XP 自动小升级；未来幕间大决策用于英雄改造、模组与融合。
+- **[M5.3 手机视野与虫潮可见性 PRD](docs/PRD_MOBILE_VISIBILITY.md)**：**M5.3 已实现**扩展逻辑视野、可见索敌与虫群入场预警。
+- **[M5.2–M8 路线图 v2](docs/ROADMAP_M6_M8.md)**：M5.2 已完成；后续先扩三幕长局 + **失败可得首笔资源/装备升级**；之后分期实现两战区、协同 Build、完整工坊/科技/机甲。
+- **[战区资源与装备工坊 PRD](docs/PRD_BATTLEFIELDS_EQUIPMENT.md)**：钢铁遗迹/感染巢穴/雷暴前哨的不同素材、四装备槽、失败收益与工坊消耗（规划）。
+- **[局外成长详细 PRD · 星际军械库](docs/PRD_META_PROGRESSION.md)**：战备数据、永久科技、机甲解锁与出战配置、存档/经济规则（规划）。
+- **[M5.2 试玩与验收计划](docs/PLAYTEST_PLAN.md)**：真机/新手测试流程、记录模板、指标口径和 Go/No-Go 标准。
+- **[M5.2 玩法现状审查](docs/DESIGN_AUDIT_M5_2.md)**：基于现有代码核对五波时长与 XP 阈值，列出待验证风险、测试任务和下一阶段门槛；[实际试玩追踪 Issue #8](https://github.com/kk518/endless-swarm/issues/8)。
+- [历史 MVP PRD v0.1](docs/PRD.md) · [M5 成长系统](docs/PRD_M5.md) · [M5.1 四武器进化](docs/PRD_M5_1.md)
+- [技术设计（TDD）](docs/TECH_DESIGN.md) · [美术规范](docs/ART_DIRECTION.md)
 
-M0–M5.0 已发布。M5.1 已完成四条进化；M5.2 无打断自动成长与 M5.3 手机宽视野代码已实现。产品路线图中长局/英雄/战区资源仍处于规划阶段。
+**当前代码基线为 M5.2 无打断成长 + M5.3 可见虫潮；三幕长局、英雄、专武、跨武器融合、战区资源和工坊仍属于规划，未实现。** 下一步先验证首批三英雄/六普通武器的差异、阶段奖池合法性和融合可达性；不把 FPS 当作本轮主要产品指标，但崩溃、触控故障和损档仍是 P0。
 
 ## 版权与部署
 
