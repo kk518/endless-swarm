@@ -70,6 +70,9 @@ export class PocBattle extends Component {
   private uiGraphic!: Graphics;
   private viewport!: MobileViewport;
   private hud!: Label;
+  private readonly weaponHudLabels: Label[] = [];
+  private bossHud!: Label;
+  private surgeHud!: Label;
   private optionLabels: Label[] = [];
   private trainingLabels: Label[] = [];
   private activeTouch: number | null = null;
@@ -114,6 +117,31 @@ export class PocBattle extends Component {
     this.hud.enableWrapText = true;
     this.hud.overflow = Label.Overflow.SHRINK;
     hudNode.setPosition(0, size.height / 2 - 36, 0);
+    // Fixed-size weapon slots: Canvas space, independent of battle zoom.
+    for (let i = 0; i < 4; i++) {
+      const node = new Node('CombatWeaponSlot' + i);
+      this.node.addChild(node);
+      node.addComponent(UITransform).setContentSize((size.width - 24) / 4 - 6, 25);
+      const label = node.addComponent(Label);
+      label.fontSize = Math.max(10, 12 * this.viewport.hudScale);
+      label.overflow = Label.Overflow.SHRINK;
+      node.active = false;
+      this.weaponHudLabels.push(label);
+    }
+    const bossNode = new Node('CombatBossHealth');
+    this.node.addChild(bossNode);
+    bossNode.addComponent(UITransform).setContentSize(size.width - 24, 22);
+    this.bossHud = bossNode.addComponent(Label);
+    this.bossHud.fontSize = Math.max(11, 13 * this.viewport.hudScale);
+    this.bossHud.color = new Color(255, 199, 162, 255);
+    bossNode.active = false;
+    const surgeNode = new Node('CombatSurgeWarning');
+    this.node.addChild(surgeNode);
+    surgeNode.addComponent(UITransform).setContentSize(size.width - 24, 28);
+    this.surgeHud = surgeNode.addComponent(Label);
+    this.surgeHud.fontSize = Math.max(11, 14 * this.viewport.hudScale);
+    this.surgeHud.color = new Color(255, 225, 164, 255);
+    surgeNode.active = false;
     // Three genuine Creator UI Labels, not browser DOM nodes.
     for (let index = 0; index < 3; index++) {
       const labelNode = new Node('DecisionCardLabel' + index);
@@ -405,30 +433,74 @@ export class PocBattle extends Component {
   }
   private paintCombatHud(ui: Graphics): void {
     const s = this.world.state;
-    if (s.over || this.world.decision) return;
+    const active = !s.over && !this.world.decision;
+    this.bossHud.node.active = false;
+    this.surgeHud.node.active = false;
+    for (const label of this.weaponHudLabels) label.node.active = active;
+    if (!active) return;
     const left = -this.screenWidth / 2 + 12;
-    const right = this.screenWidth / 2 - 12;
-    const barWidth = right - left;
+    const barWidth = this.screenWidth - 24;
     const top = this.screenHeight / 2 - 87;
-    const bar = (y: number, ratio: number, fill: Color): void => {
+    const bar = (y: number, ratio: number, fill: Color, height = 9): void => {
       const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
       ui.fillColor = new Color(7, 20, 29, 218);
-      ui.rect(left, y, barWidth, 9); ui.fill();
-      ui.fillColor = fill;
-      ui.rect(left, y, barWidth * clamped, 9); ui.fill();
+      ui.rect(left, y, barWidth, height); ui.fill();
+      ui.fillColor = fill; ui.rect(left, y, barWidth * clamped, height); ui.fill();
       ui.strokeColor = new Color(124, 166, 170, 220);
-      ui.lineWidth = 1; ui.rect(left, y, barWidth, 9); ui.stroke();
+      ui.lineWidth = 1; ui.rect(left, y, barWidth, height); ui.stroke();
     };
     const hpRatio = s.player.hp / Math.max(1, s.player.maxHp);
     bar(top, hpRatio, hpRatio <= .3
       ? new Color(255, 111, 108, 255) : new Color(94, 214, 163, 255));
     bar(top - 16, s.xp / Math.max(1, s.xpToNext), new Color(100, 182, 255, 255));
+
+    const boss = s.enemies.find(enemy => enemy.kind === 'boss');
+    if (boss) {
+      const bossY = top - 58;
+      this.bossHud.node.active = true;
+      this.bossHud.string = '虫巢巨兽  ' + Math.max(0, Math.ceil(boss.hp))
+        + ' / ' + (boss.maxHp ?? '?');
+      this.bossHud.node.setPosition(0, bossY + 23, 0);
+      bar(bossY, boss.hp / Math.max(1, boss.maxHp ?? 1),
+        new Color(240, 98, 94, 255), 12);
+    }
+
+    const weaponY = top - (boss ? 96 : 48);
+    const names: Record<WeaponId, string> = {
+      rifle: '步枪', scatter: '散射', arc: '电弧', flame: '喷火',
+    };
+    const slots: readonly WeaponId[] = ['rifle', 'scatter', 'arc', 'flame'];
+    const cellWidth = barWidth / 4;
+    for (let i = 0; i < slots.length; i++) {
+      const id = slots[i], unlocked = s.weapons.includes(id);
+      const x = left + cellWidth * i + 3;
+      ui.fillColor = unlocked ? new Color(17, 49, 59, 218)
+        : new Color(13, 26, 35, 175);
+      ui.rect(x, weaponY, cellWidth - 6, 27); ui.fill();
+      ui.strokeColor = unlocked && s.evolved[id]
+        ? new Color(255, 197, 105, 255)
+        : unlocked ? new Color(100, 189, 191, 225)
+          : new Color(59, 90, 104, 160);
+      ui.lineWidth = unlocked && s.evolved[id] ? 2 : 1;
+      ui.rect(x, weaponY, cellWidth - 6, 27); ui.stroke();
+      const label = this.weaponHudLabels[i];
+      label.node.setPosition(x + (cellWidth - 6) / 2, weaponY + 13, 0);
+      label.color = unlocked ? new Color(230, 249, 241, 255)
+        : new Color(111, 141, 147, 255);
+      label.string = unlocked ? names[id] + ' Lv.' + s.weaponLevels[id]
+        + (s.evolved[id] ? '★' : '') : names[id] + ' · 锁';
+    }
+
     if (s.surgeWarningMs > 0) {
-      const warningY = top - 48;
+      const warningY = weaponY - 36;
       ui.fillColor = new Color(127, 47, 35, 225);
-      ui.rect(left, warningY, barWidth, 25); ui.fill();
+      ui.rect(left, warningY, barWidth, 28); ui.fill();
       ui.strokeColor = new Color(255, 176, 112, 245);
-      ui.lineWidth = 2; ui.rect(left, warningY, barWidth, 25); ui.stroke();
+      ui.lineWidth = 2; ui.rect(left, warningY, barWidth, 28); ui.stroke();
+      this.surgeHud.node.active = true;
+      this.surgeHud.node.setPosition(0, warningY + 14, 0);
+      this.surgeHud.string = '⚠ 虫潮集结  '
+        + (s.surgeWarningMs / 1000).toFixed(1) + ' 秒';
     }
   }
   private paint(): void {
@@ -692,10 +764,8 @@ export class PocBattle extends Component {
           + ' · XP ' + s.xp + '/' + s.xpToNext
           + ' · 击杀 ' + s.kills
           + (s.streak >= 2 ? ' · ' + s.streak + '连杀' : '')
-          + '\\n' + s.weapons.map(id => id + ' ' + s.weaponLevels[id]
-            + (s.evolved[id] ? '★' : '')).join(' · ')
-          + (s.surgeWarningMs > 0 ? ' · ⚠虫潮 '
-            + (s.surgeWarningMs / 1000).toFixed(1) + '秒' : '')
+          + (s.overclockMs > 0 ? ' · 超频' : s.player.deployed ? ' · 展开' : '')
+          + (s.suppliesCollected ? ' · 补给' + s.suppliesCollected : '')
           + (this.storageWarning ? ' · ⚠存档失败' : '');
   }
 }
