@@ -24,6 +24,10 @@ export class PocArtSprites {
   private readonly frames=new Map<string,SpriteFrame>();
   private readonly pending=new Set<string>();
   private readonly enemies=new Map<number,Sprite>();
+  // Renderer-only health sampling: no damage, hitbox or RNG changes.
+  private readonly enemyLastHp=new Map<number,number>();
+  private readonly enemyHitUntil=new Map<number,number>();
+  private lastFrameTimeMs=-1;
   private readonly weapons=new Map<WeaponId,Sprite>();
   private readonly supplies: Sprite[]=[];
   private readonly acid: Sprite[]=[];
@@ -87,6 +91,12 @@ export class PocArtSprites {
     if(this.assign(this.floor,'dust',w,h))this.floor.node.setPosition(0,0,0);
   }
   sync(s:PocState,hero:PocHeroId,width:number,height:number):void{
+    // A fresh run may restart the clock while reusing enemy numeric IDs.
+    if(s.elapsedMs<this.lastFrameTimeMs){
+      this.enemyLastHp.clear();
+      this.enemyHitUntil.clear();
+    }
+    this.lastFrameTimeMs=s.elapsedMs;
     this.resizeFloor(width,height);
     if(this.assign(this.player,'marine',68,90)){
       this.player.node.setPosition(s.player.x,s.player.y+11,0);
@@ -98,16 +108,27 @@ export class PocArtSprites {
       living.add(e.id);
       let sprite=this.enemies.get(e.id);
       if(!sprite){sprite=this.create(this.enemyLayer,'MainBug-'+e.id);this.enemies.set(e.id,sprite);}
+      const priorHp=this.enemyLastHp.get(e.id);
+      if(priorHp!==undefined&&e.hp<priorHp)
+        this.enemyHitUntil.set(e.id,s.elapsedMs+130);
+      this.enemyLastHp.set(e.id,e.hp);
       const key=this.enemyKey(e.kind??'grunt');
       const scale=e.kind==='boss'?1.0:e.kind==='armored'?.85:e.kind==='leaper'?.8:.75;
       const dims=DIMENSIONS[key];
       if(this.assign(sprite,key,dims[0]*scale,dims[1]*scale)){
         sprite.node.setPosition(e.x,e.y+10,0);
-        sprite.color=e.elite?new Color(255,211,171,255):Color.WHITE;
+        const damaged=(this.enemyHitUntil.get(e.id)??0)>s.elapsedMs;
+        const elitePulse=.83+.17*Math.sin(s.elapsedMs/190);
+        sprite.color=damaged?new Color(255,255,255,255)
+          :e.elite?new Color(255,Math.round(170+46*elitePulse),
+            Math.round(116+38*elitePulse),255):Color.WHITE;
+        sprite.node.setScale(damaged?1.09:e.elite?1+.045*elitePulse:1,
+          damaged?1.09:e.elite?1+.045*elitePulse:1,1);
       }
     }
     for(const [id,sprite]of this.enemies)if(!living.has(id)){
       sprite.node.destroy();this.enemies.delete(id);
+      this.enemyLastHp.delete(id);this.enemyHitUntil.delete(id);
     }
     const mounted=new Set<WeaponId>();
     const rig=buildWeaponRig({player:s.player,deployed:s.player.deployed,
@@ -167,7 +188,9 @@ export class PocArtSprites {
   dispose():void{
     for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid,...this.muzzleFlashes])
       sprite.node.destroy();
-    this.enemies.clear();this.weapons.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
+    this.enemies.clear();this.enemyLastHp.clear();this.enemyHitUntil.clear();
+    this.lastFrameTimeMs=-1;
+    this.weapons.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
       this.weaponLayer,this.projectileLayer])layer.destroy();
     this.floor.node.destroy();
