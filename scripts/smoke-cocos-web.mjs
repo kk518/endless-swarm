@@ -42,6 +42,12 @@ try {
     () => typeof window.__swarmCocosDebug?.state === 'function',
     null, { timeout: 55000 },
   );
+  // Do not accept a green smoke test if Creator silently falls back to
+  // primitive Graphics because it never imported the generated main PNGs.
+  await page.waitForFunction(() => {
+    const art = window.__swarmCocosDebug?.state?.().originalMainArt;
+    return art?.marine && art?.rifle && art?.crawler && art?.dust;
+  }, null, { timeout: 20000 });
   const before = await page.evaluate(() => window.__swarmCocosDebug.state());
   if (!before.initialized || before.enemies < 1 || before.hp <= 0) {
     throw new Error('Cocos scene initialized but Core state invalid: ' + JSON.stringify(before));
