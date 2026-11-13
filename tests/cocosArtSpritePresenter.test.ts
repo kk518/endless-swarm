@@ -32,3 +32,14 @@ test('Creator sprite layering keeps enemy bodies behind the hero and guns in fro
  assert.match(presenter,/this.syncTransient\(this.acid,s.acids,'acid',18,18,8,this.projectileLayer\)/);
  assert.match(presenter,/this.weaponLayer,this.projectileLayer\]\)layer.destroy\(\)/);
 });
+
+test('muzzle flashes use combat shot events and fall back to Graphics only while loading',()=>{
+ assert.match(presenter,/this.syncMuzzleFlashes\(s.shots\)/);
+ assert.match(presenter,/this.create\(this.projectileLayer,'MainMuzzleFlash'\)/);
+ assert.match(presenter,/this.assign\(sprite,'muzzle-flash',size,size\*\.8\)/);
+ assert.match(presenter,/sprite.node.angle=shot.angle\*180\/Math.PI/);
+ assert.match(presenter,/shot.remainingMs\/95/);
+ assert.match(presenter,/this.muzzleFlashes.length=0/);
+ assert.match(battle,/if \(!this.art.ready\('muzzle-flash'\)\) for \(const shot of s.shots\)/);
+ assert.doesNotMatch(presenter,/emitBullet|weaponDamage|registerKill|chooseDecision/);
+});
