@@ -101,3 +101,15 @@ test('combat HUD has clamped independent health/XP bars and surge alert',()=>{
  assert.match(battle,/this.surgeHud.string/);
  assert.match(battle,/this.paintCombatHud\(ui\)/);
 });
+
+test('Creator HUD newlines and new portrait panels remain readable',()=>{
+ const hud=battle.slice(battle.indexOf('this.hud.string ='));
+ const escapedNewline=String.fromCharCode(92,92,110);
+ const realEscape=String.fromCharCode(92,110);
+ assert.ok(!hud.includes(escapedNewline),'Label must not render literal backslash-n');
+ assert.ok(hud.includes(realEscape),'HUD should use actual newline escapes');
+ assert.match(battle,/const cellWidth = barWidth \/ 4/);
+ assert.match(battle,/const weaponY = top - \(boss \? 96 : 48\)/);
+ assert.match(battle,/boss.hp \/ Math.max\(1, boss.maxHp \?\? 1\)/);
+ assert.match(battle,/this.surgeHud.node.active = true/);
+});
