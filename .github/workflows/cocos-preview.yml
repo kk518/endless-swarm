@@ -1,0 +1,145 @@
+name: Deploy Cocos Migration Web Preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: endless-swarm-cocos-preview
+  cancel-in-progress: false
+
+jobs:
+  build-test-deploy:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/cocos-wechat-migration-poc' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/cocos-wechat-migration-poc')
+    runs-on: ubuntu-latest
+    env:
+      PREVIEW_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify M6 canonical core mirrored into Cocos project
+        run: node scripts/check-m6-copy.mjs --check
+
+      - name: Test original H5 and shared migration core
+        run: npm test
+
+      - name: Verify migration preview TypeScript
+        run: npx tsc --project clients/cocos-preview/tsconfig.json --noEmit
+
+      - name: Export original main M4 art as transparent PNGs
+        run: node scripts/export-main-art.mjs
+
+      - name: Generate original vanguard mech and alien sprites
+        run: node scripts/export-vanguard-art.mjs
+
+      - name: Build isolated migration preview
+        run: npx vite build --config clients/cocos-preview/vite.config.ts
+
+      - name: Write immutable preview revision marker
+        shell: bash
+        run: |
+          test -s dist/cocos-preview/index.html
+          printf '{"commit":"%s","kind":"cocos-core-web-harness"}\n' "$PREVIEW_REVISION" > dist/cocos-preview/preview-version.json
+
+      - name: Archive browser preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: cocos-migration-web-preview
+          path: dist/cocos-preview/
+          if-no-files-found: error
+
+      - name: Check SSH configuration
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          if [[ -z "$SERVER_HOST" || -z "$SERVER_USER" || -z "$SERVER_SSH_KEY" || -z "$SERVER_KNOWN_HOSTS" ]]; then
+            echo '::error::Missing server SSH secrets. The preview artifact was built, but deployment did not run.'
+            exit 1
+          fi
+
+      - name: Prepare restricted SSH key
+        shell: bash
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify parent guard and initialize preview path
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            'set -eu
+             root=/var/www/endless-swarm
+             preview="$root/cocos-preview"
+             test -d "$root"
+             test ! -L "$root"
+             test -f "$root/.endless-swarm-deploy"
+             test -w "$root"
+             test ! -L "$preview"
+             mkdir -p "$preview"
+             test -d "$preview"
+             test -w "$preview"
+             touch "$preview/.cocos-preview-deploy"'
+
+      - name: Deploy to preview subdirectory only
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -az --delete --delay-updates \
+            --exclude='/.cocos-preview-deploy' \
+            --exclude='/creator/' \
+            -e "ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            dist/cocos-preview/ "$SERVER_USER@$SERVER_HOST:/var/www/endless-swarm/cocos-preview/"
+          echo "Preview deployed to /var/www/endless-swarm/cocos-preview/" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify nested URL and exact commit
+        shell: bash
+        run: |
+          page="$(curl -fsSL --retry 3 --retry-delay 2 --max-time 20 'https://kk518.top/swarm/cocos-preview/')"
+          if ! grep -q 'COCOS MIGRATION LAB' <<< "$page"; then
+            echo '::error::Preview URL does not serve the migration HTML.'
+            exit 1
+          fi
+          marker="$(curl -fsSL --retry 3 --retry-delay 2 --max-time 20 "https://kk518.top/swarm/cocos-preview/preview-version.json?commit=$PREVIEW_REVISION")"
+          expected="$(printf '{"commit":"%s","kind":"cocos-core-web-harness"}' "$PREVIEW_REVISION")"
+          if [[ "$marker" != "$expected" ]]; then
+            echo '::error::Preview URL returned the wrong SHA.'
+            exit 1
+          fi
+          echo "### Verified https://kk518.top/swarm/cocos-preview/ at $PREVIEW_REVISION" >> "$GITHUB_STEP_SUMMARY"
+
+# WARNING: old production main deployment rsync --delete targets the parent root.
+# A future main redeploy may remove /cocos-preview/. Since main is frozen,
+# this workflow does NOT modify it. Preserve the child in the main workflow
+# before resuming production releases or use a separate Nginx alias.

@@ -1,0 +1,92 @@
+:root{color-scheme:dark;--paper:#e6eeea;--muted:#8aabb3;--cyan:#72eed3;--line:rgba(118,199,203,.18);background:#08141b;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#08141b;color:var(--paper)}
+button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:pointer}
+.shell{min-height:100dvh;background:radial-gradient(ellipse at 70% 0%,#13303a 0%,transparent 49%),#08141b}
+.site-header,.site-footer{max-width:1370px;margin:auto;display:flex;justify-content:space-between;align-items:center;padding:18px 32px;letter-spacing:.15em}
+.site-header{border-bottom:1px solid var(--line)}.logo{display:flex;gap:12px;align-items:center;font-size:14px;font-weight:900}.logo em{font-style:normal;color:var(--cyan)}.logo-symbol{font-size:28px;color:var(--cyan)}.header-sub,.site-footer{color:#6f959b;font:11px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.1em}
+.workspace{max-width:1370px;margin:0 auto;display:grid;grid-template-columns:minmax(330px,580px) minmax(270px,500px);justify-content:center;gap:clamp(20px,5vw,86px);padding:30px 32px 40px}
+.game-wrap{background:#071017;border:1px solid #2b4b51;box-shadow:0 25px 90px #0008;min-width:0;max-width:580px}
+.battle-header,.battle-footer{height:38px;padding:0 19px;display:flex;justify-content:space-between;align-items:center;gap:10px;font:11px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.07em;color:#90bdb8}
+.battle-header{border-bottom:1px solid var(--line)}.battle-footer{border-top:1px solid var(--line);font-size:10px;color:#709ea6}.battle-footer strong{color:#b9d9d4}.recording-dot{width:6px;height:6px;background:#66f1b0;border-radius:50%;box-shadow:0 0 10px #66f1b0}
+.battle-header>span:nth-child(2){margin-right:auto;margin-left:4px}#wave-meta{color:#dbb984}
+.canvas-shell{position:relative;overflow:hidden;width:100%;max-height:min(72dvh,850px);aspect-ratio:450/800;background:#10232b;touch-action:none;user-select:none}
+#battle{display:block;width:100%;height:100%;touch-action:none}
+.top-hud{position:absolute;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;text-shadow:0 2px 5px #001}
+.top-hud small{font:10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#badad6}.hp-bar{margin-top:8px;width:150px;height:9px;border:1px solid #83b7b6;background:#153a3c;padding:1px;box-shadow:0 0 14px #0008}.hp-bar>div{width:100%;height:100%;background:linear-gradient(90deg,#4bd4b3,#bcf8c8);transition:width .2s}.kill-count{text-align:right}.kill-count strong{display:block;color:#fbe2a8;font:700 27px ui-monospace,Consolas,monospace}
+.status-bubble{position:absolute;bottom:83px;left:50%;transform:translateX(-50%);border:1px solid #66c7b884;background:#062127cd;color:#b7fbe3;padding:7px 13px;font-size:12px;white-space:nowrap;pointer-events:none}
+.status-bubble.active{background:#4c3714d9;color:#ffe1a8;border-color:#e9a85b}
+.bottom-tip{position:absolute;bottom:24px;width:100%;text-align:center;color:#bbd2d2;font-size:11px;text-shadow:0 1px 5px #000;pointer-events:none;padding:0 14px}
+.side-panel{padding:12px 0}.kicker,.section-caption{font:11px ui-monospace,Consolas,monospace;letter-spacing:.16em;color:#74e9ce}.side-panel h1{margin:23px 0 19px;font-size:clamp(36px,4vw,62px);line-height:1.14;letter-spacing:-.055em}.side-panel h1 em{font-style:normal;color:#79ebc9}.lead{color:#aec7ca;line-height:1.9;font-size:14px;max-width:44ch}
+.notice{margin-top:26px;border-left:3px solid #d9b37e;padding:13px 16px;background:#1d302f8a}.notice>strong{font-size:13px;color:#edd1a5}.notice p{margin:7px 0 0;font-size:12px;line-height:1.8;color:#bfcbca}.notice strong{color:#f4dfb9}
+.section-caption{margin:33px 0 18px;border-bottom:1px solid var(--line);padding-bottom:14px}
+.instruction{display:flex;gap:19px;margin:20px 0}.instruction>span{border:1px solid #367778;color:#71e2c9;padding:7px 10px;font:12px ui-monospace,Consolas,monospace;height:min-content}.instruction strong{display:block;font-size:14px}.instruction small{display:block;margin-top:6px;font-size:12px;line-height:1.7;color:#94b2b5}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin:34px 0 20px}.actions button,.actions a,.end-screen button{padding:13px 18px;text-decoration:none;border-radius:0;font-size:13px;font-weight:700}.primary-action,.end-screen button{background:#6aebc8;color:#072128;border:1px solid #a9ffe7}.primary-action:hover,.end-screen button:hover{background:#b2ffe9}.secondary-action{background:#112934;color:#b9e9e4;border:1px solid #3a6974}
+.footnote{color:#86a6a9;font-size:12px;line-height:1.6}.build-info{margin-top:31px;border-top:1px solid var(--line);padding-top:15px;font:11px/2 ui-monospace,Consolas,monospace;color:#6f9fa5}.build-info a{color:#8ddccf;text-decoration:none}.build-info code{color:#b4d4d1}
+.end-screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#07131de3}.end-screen[hidden]{display:none}.end-screen p{color:#f9b3a2;font:12px ui-monospace,Consolas,monospace;letter-spacing:.18em}.end-screen strong{font-size:35px}.end-screen span{color:#a8c8c8;font-size:13px}.site-footer{border-top:1px solid var(--line);padding-top:23px;padding-bottom:23px}
+@media (max-width:830px){.site-header,.site-footer{padding:13px 16px}.header-sub{font-size:9px}.workspace{grid-template-columns:minmax(0,540px);padding:12px;gap:18px}.game-wrap{margin:auto;width:100%}.canvas-shell{max-height:none}.side-panel{padding:12px 14px 30px}.site-footer{display:none}}
+@media (max-width:430px){.site-header{padding:10px 14px}.logo{font-size:12px}.header-sub{font-size:8px;max-width:140px;text-align:right}.workspace{padding:0;gap:0}.game-wrap{border-left:0;border-right:0}.battle-header,.battle-footer{height:30px;font-size:9px;padding:0 9px}.battle-footer{font-size:8px}.side-panel{padding:27px 20px}.bottom-tip{font-size:10px}.top-hud{top:15px;left:14px;right:14px}.hp-bar{width:120px}}
+
+/* Migrated battle progression HUD; safe on narrow portrait screens. */
+.progress-panel{position:absolute;top:83px;left:18px;right:18px;pointer-events:none;
+ display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+ font:11px ui-monospace,Consolas,monospace;letter-spacing:.07em;text-shadow:0 2px 6px #001}
+.progress-panel #wave-counter{color:#f5dcaa;font-weight:800;font-size:14px}
+.progress-panel #player-level{color:#d4e9df}
+.progress-panel #arc-unlock{color:#91a9aa;font-size:10px}
+.progress-panel #arc-unlock.unlocked{color:#9ddfff}
+@media(max-width:430px){.progress-panel{top:70px;left:14px;right:14px;gap:4px}}
+
+/* M6 migration hangar: deliberately separate from the battle canvas. */
+.ops-panel{margin-top:22px}
+.ops-panel .section-caption{margin-top:23px}
+.ops-hint{font-size:12px;line-height:1.75;color:#9ab9bc;margin:12px 0 15px}
+.zone-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.zone-choice{min-height:70px;padding:13px 11px;background:#101f27;color:#c9dedd;border:1px solid #37545c;text-align:left;font-size:13px;font-weight:700}
+.zone-choice small{display:block;margin-top:6px;font-size:11px;color:#86aeb2;font-weight:400}
+.zone-choice:hover,.zone-choice:focus-visible{border-color:#8becd6}
+.zone-choice.active{border-color:#73e9cc;background:linear-gradient(120deg,#173c3e,#122d34);color:#e8fff8}
+.ops-selected{font:11px ui-monospace,Consolas,monospace;color:#89dcca;letter-spacing:.02em;margin:12px 0 3px}
+.wallet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 15px}
+.wallet>div{border:1px solid var(--line);background:#0d242b;padding:9px 7px;font-size:11px;color:#a6c8c9}
+.wallet strong{display:block;margin-top:7px;font:700 20px ui-monospace,Consolas,monospace;color:#e5dcad}
+.workshop{display:grid;gap:7px}
+.workshop button{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:10px 11px;background:#173034;border:1px solid #3c6668;color:#e2f6e9;text-align:left;font-size:12px;font-weight:700}
+.workshop button small{font-size:10px;font-weight:400;color:#d4d2b4;text-align:right}
+.workshop button:not(:disabled):hover,.workshop button:not(:disabled):focus-visible{background:#23514c;border-color:#78e6cb}
+.workshop button:disabled{opacity:.5;cursor:not-allowed}
+.ops-message{min-height:37px;font-size:12px;line-height:1.6;color:#ded0a9;border-left:2px solid #c6a368;padding-left:11px;margin:13px 0}
+.creator-link{display:block;margin-top:17px;padding:11px;border:1px solid #397875;color:#9ff1da;font-size:12px;text-decoration:none}
+.creator-link:hover{background:#173a39}
+@media(max-width:400px){.zone-buttons{gap:6px}.zone-choice{padding:11px 8px;font-size:12px}.wallet{gap:5px}.wallet strong{font-size:18px}}
+
+/* Playable hero selection reuses the accessible zone card controls. */
+#hero-kane.active{border-color:#f0c37b;background:linear-gradient(115deg,#443521,#253238)}
+#hero-kane.active small{color:#f1d6a8}
+
+/* True safe-node choice UI. DOM-only in the Canvas harness; Creator uses Cocos Labels. */
+.decision-overlay{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;
+ justify-content:center;gap:16px;padding:25px 12px;background:linear-gradient(180deg,#081922ed,#08141afa);
+ touch-action:manipulation;user-select:text}
+.decision-overlay[hidden]{display:none}
+.decision-heading{text-align:center;font-size:15px;line-height:1.5;font-weight:800;color:#fff1c9;
+ text-shadow:0 2px 12px #000}
+.decision-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.decision-card{display:flex;flex-direction:column;gap:9px;align-items:flex-start;min-width:0;
+ min-height:148px;padding:13px 10px;border:1px solid #4c9f99;background:#173239f2;
+ color:#e5fdf6;text-align:left;touch-action:manipulation}
+.decision-card:hover,.decision-card:focus-visible{border-color:#ffeeaa;background:#26504d;outline:2px solid #89e5d4;outline-offset:1px}
+.decision-number{color:#ebc58a;font:12px ui-monospace,Consolas,monospace}
+.decision-card strong{font-size:clamp(11px,2.6vw,14px);line-height:1.35;overflow-wrap:anywhere}
+.decision-description{font-size:11px;line-height:1.55;color:#afced1;overflow-wrap:anywhere}
+.decision-hint{margin:0;text-align:center;color:#a6c4c5;font-size:11px;line-height:1.5}
+@media(max-width:390px){.decision-overlay{padding:19px 8px}.decision-options{gap:5px}
+.decision-card{padding:11px 7px;min-height:163px}.decision-description{font-size:10px}}
+
+/* M5.2 training controls appear at a safe node only, not on every XP level. */
+.training-panel{display:grid;gap:8px;border-top:1px solid #456567;padding-top:10px}
+.training-title{font-size:11px;line-height:1.5;color:#bee2d6;margin:0}
+.training-choices{display:flex;flex-wrap:wrap;gap:6px}
+.training-choice{border:1px solid #4b8584;background:#18343b;color:#d7ede8;
+  font-size:11px;padding:7px 8px;min-height:34px;flex:1;min-width:65px;touch-action:manipulation}
+.training-choice[aria-pressed="true"]{border-color:#ebc98a;background:#365443;color:#fff1c4}
+.training-choice:focus-visible{outline:2px solid #ffd68f;outline-offset:1px}

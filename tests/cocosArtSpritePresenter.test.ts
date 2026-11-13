@@ -1,0 +1,115 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const presenter=readFileSync('clients/cocos/assets/scripts/PocArtSprites.ts','utf8');
+const battle=readFileSync('clients/cocos/assets/scripts/PocBattle.ts','utf8');
+const preview=readFileSync('clients/cocos-preview/src/main.ts','utf8');
+test('real Creator uses SpriteFrame from exported main source, not Phaser renderer',()=>{
+ assert.match(presenter,/resources.load\('main-art\/'\+key\+'\/texture'/);
+ assert.match(presenter,/new SpriteFrame\(\)/);
+ assert.match(presenter,/frame.texture=texture/);
+ assert.match(presenter,/Sprite.Type.TILED/);
+ assert.match(presenter,/ENEMY_ART/);
+ assert.match(presenter,/visible|buildWeaponRig/);
+ assert.match(battle,/PocArtSprites/);
+ assert.match(preview,/main-art\/.*png/);
+});
+test('rendering-only texture migration cannot modify run state or saved gameplay',()=>{
+ assert.doesNotMatch(presenter,/registerKill|applyDamage|chooseCard|settleStoredRun/);
+ assert.match(presenter,/this.frames.has\(key\)/);
+ assert.match(battle,/this.art.ready/);
+});
+
+test('Creator sprite layering keeps enemy bodies behind the hero and guns in front',()=>{
+ const ordered=['MainEnemyLayer','MainPickupLayer','MainPlayerLayer','MainEvolutionLayer','MainWeaponLayer','MainProjectileLayer'];
+ const offsets=ordered.map(name=>presenter.indexOf("this.layer('"+name+"')"));
+ assert.ok(offsets.every(index=>index>=0),'all scene layers must exist');
+ assert.deepEqual([...offsets].sort((a,b)=>a-b),offsets,'render layers are created back-to-front');
+ assert.match(presenter,/this.create\(this.enemyLayer,'MainBug-'/);
+ assert.match(presenter,/this.create\(this.playerLayer,'MainMarineSprite'\)/);
+ assert.match(presenter,/this.create\(this.weaponLayer,'MainMount-'/);
+ assert.match(presenter,/this.syncTransient\(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer\)/);
+ assert.match(presenter,/this.syncTransient\(this.acid,s.acids,'acid',18,18,8,this.projectileLayer\)/);
+ assert.match(presenter,/this.evolutionLayer,this.weaponLayer,this.projectileLayer\]\)layer.destroy\(\)/);
+});
+
+test('muzzle flashes use combat shot events and fall back to Graphics only while loading',()=>{
+ assert.match(presenter,/this.syncMuzzleFlashes\(s.shots\)/);
+ assert.match(presenter,/this.create\(this.projectileLayer,'MainMuzzleFlash'\)/);
+ assert.match(presenter,/this.assign\(sprite,'muzzle-flash',size,size\*\.8\)/);
+ assert.match(presenter,/sprite.node.angle=shot.angle\*180\/Math.PI/);
+ assert.match(presenter,/shot.remainingMs\/95/);
+ assert.match(presenter,/this.muzzleFlashes.length=0/);
+ assert.match(battle,/if \(!this.art.ready\('muzzle-flash'\)\) for \(const shot of s.shots\)/);
+ assert.doesNotMatch(presenter,/emitBullet|weaponDamage|registerKill|chooseDecision/);
+});
+
+test('enemy hit flash is visual-only, and elite tint resets across runs',()=>{
+ assert.match(presenter,/private readonly enemyLastHp=new Map<number,number>\(\)/);
+ assert.match(presenter,/priorHp!==undefined&&e.hp<priorHp/);
+ assert.match(presenter,/this.enemyHitUntil.set\(e.id,s.elapsedMs\+130\)/);
+ assert.match(presenter,/new Color\(255,165,165,255\)/);
+ assert.match(presenter,/e.elite\?new Color/);
+ assert.match(presenter,/sprite.node.setScale\(damaged\?1\.09/);
+ assert.match(presenter,/if\(s.elapsedMs<this.lastFrameTimeMs\)/);
+ assert.match(presenter,/this.enemyLastHp.delete\(id\);this.enemyHitUntil.delete\(id\)/);
+ assert.match(presenter,/this.lastFrameTimeMs=-1/);
+ assert.doesNotMatch(presenter,/enemy\.hp\s*[-+*/]?=|e\.hp\s*[-+*/]?=/);
+});
+
+test('evolved weapons show a pooled energy sprite without modifying gameplay',()=>{
+ assert.match(presenter,/private readonly evolutionGlows=new Map<WeaponId,Sprite>\(\)/);
+ assert.match(presenter,/if\(mount.evolved\)/);
+ assert.match(presenter,/this.create\(this.evolutionLayer,'MainEvolution-'\+mount.id\)/);
+ assert.match(presenter,/this.assign\(glow,'muzzle-flash',size,size\)/);
+ assert.match(presenter,/const phase=\.5\+\.5\*Math.sin\(s.elapsedMs\/180\)/);
+ assert.match(presenter,/glow.node.setPosition\(mount.anchor.x,mount.anchor.y\+8,0\)/);
+ assert.match(presenter,/glow.node.angle=mount.angle\*180\/Math.PI/);
+ assert.match(presenter,/this.evolutionGlows.delete\(mount.id\)/);
+ assert.match(presenter,/this.evolutionGlows.delete\(id\)/);
+ assert.match(presenter,/this.evolutionGlows.clear\(\)/);
+ assert.doesNotMatch(presenter,/applyDamage|weaponDamage|settleStoredRun|chooseCard/);
+});
+
+test('Boss 900ms charge previews its 125-unit directional lunge, not a false AoE',()=>{
+ assert.match(battle,/enemy.kind === 'boss'\) \{/);
+ assert.match(battle,/const dx = s.player.x - enemy.x, dy = s.player.y - enemy.y/);
+ assert.match(battle,/1 - enemy.windupMs \/ 900/);
+ assert.match(battle,/const reach = 125, side = 18/);
+ assert.match(battle,/g.lineTo\(tipX, tipY\); g.stroke\(\)/);
+ assert.match(battle,/g.arc\(enemy.x, enemy.y, 43/);
+ assert.doesNotMatch(battle,/enemy.kind === 'boss' \? 65 : 26/);
+ assert.match(battle,/g.circle\(enemy.x, enemy.y, 26\); g.stroke\(\)/);
+});
+
+test('combat HUD has clamped independent health/XP bars and surge alert',()=>{
+ assert.match(battle,/private paintCombatHud\(ui: Graphics\): void/);
+ assert.match(battle,/const active = !s.over && !this.world.decision/);
+ assert.match(battle,/Number.isFinite\(ratio\) \? ratio : 0/);
+ assert.match(battle,/s.player.hp \/ Math.max\(1, s.player.maxHp\)/);
+ assert.match(battle,/s.xp \/ Math.max\(1, s.xpToNext\)/);
+ assert.match(battle,/if \(s.surgeWarningMs > 0\) \{/);
+ assert.match(battle,/this.paintCombatHud\(ui\)/);
+ assert.match(battle,/new Node\('CombatWeaponSlot' \+ i\)/);
+ assert.match(battle,/new Node\('CombatBossHealth'\)/);
+ assert.match(battle,/new Node\('CombatSurgeWarning'\)/);
+ assert.match(battle,/const boss = s.enemies.find\(enemy => enemy.kind === 'boss'\)/);
+ assert.match(battle,/boss.hp \/ Math.max\(1, boss.maxHp \?\? 1\)/);
+ assert.match(battle,/const cellWidth = barWidth \/ 4/);
+ assert.match(battle,/s.weapons.includes\(id\)/);
+ assert.match(battle,/s.evolved\[id\] \? '★' : ''/);
+ assert.match(battle,/this.surgeHud.string/);
+ assert.match(battle,/this.paintCombatHud\(ui\)/);
+});
+
+test('Creator HUD newlines and new portrait panels remain readable',()=>{
+ const hud=battle.slice(battle.indexOf('this.hud.string ='));
+ const escapedNewline=String.fromCharCode(92,92,110);
+ const realEscape=String.fromCharCode(92,110);
+ assert.ok(!hud.includes(escapedNewline),'Label must not render literal backslash-n');
+ assert.ok(hud.includes(realEscape),'HUD should use actual newline escapes');
+ assert.match(battle,/const cellWidth = barWidth \/ 4/);
+ assert.match(battle,/const weaponY = top - \(boss \? 96 : 48\)/);
+ assert.match(battle,/boss.hp \/ Math.max\(1, boss.maxHp \?\? 1\)/);
+ assert.match(battle,/this.surgeHud.node.active = true/);
+});
