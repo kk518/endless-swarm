@@ -3,7 +3,7 @@
  * Run in GitHub Actions after the real Creator artifact is deployed.
  * Fails if the scene did not initialize or if real input does not move the player.
  */
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -11,10 +11,12 @@ const url = process.env.COCOS_SMOKE_URL ?? 'https://kk518.top/swarm/cocos-previe
 const expectedCommit = process.env.PREVIEW_REVISION ?? '';
 const output = path.resolve('dist/cocos-browser-smoke');
 await fs.mkdir(output, { recursive: true });
-const browser = await chromium.launch({
-  headless: true,
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl'],
-});
+const engine = process.env.COCOS_BROWSER ?? 'chromium';
+if (!['chromium', 'webkit'].includes(engine)) throw Error('Unsupported browser ' + engine);
+const browser = engine === 'webkit'
+  ? await webkit.launch({ headless: true })
+  : await chromium.launch({ headless: true,
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl'] });
 let failed = false;
 const messages = [];
 const page = await browser.newPage({
@@ -65,7 +67,15 @@ try {
   if (!bounds || bounds.width < 150 || bounds.height < 200) {
     throw new Error('Cocos canvas is absent or unexpectedly small: ' + JSON.stringify(bounds));
   }
-  await page.screenshot({ path: path.join(output, 'creator-before.png'), fullPage: true });
+  await page.screenshot({ path: path.join(output, engine + '-creator-before.png'), fullPage: true });
+  if (engine === 'webkit') {
+    // Linux WebKit provides a Safari-family JS/WebGL startup check. CDP touch
+    // injection is Chromium-specific, so mobile movement remains tested there.
+    await page.waitForTimeout(1200);
+    if (messages.some(x => x.startsWith('PAGE ERROR ')))
+      throw new Error('WebKit runtime errors: ' + messages.join('\\n'));
+    console.log('SUCCESS: WebKit Cocos scene and original art initialized', { url, expectedCommit });
+  } else {
   // Mini-game controls are primarily touch, NOT keyboard. Use raw Chrome
   // touch events on the actual rendered canvas in a mobile viewport.
   const session = await page.context().newCDPSession(page);
@@ -91,14 +101,16 @@ try {
     throw new Error('Uncaught runtime errors: ' + messages.join('\n'));
   }
   console.log('SUCCESS: actual Cocos web scene rendered and responded to mobile touch', {url, commit:expectedCommit, before, during, after});
+  }
 } catch (error) {
   failed = true;
   console.error('COCOS BROWSER SMOKE FAILURE:', error);
-  await page.screenshot({ path: path.join(output, 'creator-failure.png'), fullPage: true }).catch(() => {});
+  await page.screenshot({ path: path.join(output, engine + '-creator-failure.png'), fullPage: true }).catch(() => {});
 } finally {
   await fs.writeFile(path.join(output, 'browser-log.txt'), [
     'URL: ' + url,
     'REVISION: ' + expectedCommit,
+    'BROWSER: ' + engine,
     'PASS: ' + (!failed),
     ...messages,
   ].join('\n') + '\n');
