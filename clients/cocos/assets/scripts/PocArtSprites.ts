@@ -119,7 +119,7 @@ export class PocArtSprites {
         sprite.node.setPosition(e.x,e.y+10,0);
         const damaged=(this.enemyHitUntil.get(e.id)??0)>s.elapsedMs;
         const elitePulse=.83+.17*Math.sin(s.elapsedMs/190);
-        sprite.color=damaged?new Color(255,255,255,255)
+        sprite.color=damaged?new Color(255,165,165,255)
           :e.elite?new Color(255,Math.round(170+46*elitePulse),
             Math.round(116+38*elitePulse),255):Color.WHITE;
         sprite.node.setScale(damaged?1.09:e.elite?1+.045*elitePulse:1,
