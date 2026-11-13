@@ -28,7 +28,7 @@ const guard=`<script id="swarm-startup-guard">
   });
   function loaded() {
     try {
-      return typeof window.__swarmCocosDebug?.state === 'function'
+      return window.__swarmCocosDebug && typeof window.__swarmCocosDebug.state === 'function'
         && window.__swarmCocosDebug.state().initialized === true;
     } catch (_) { return false; }
   }
@@ -57,7 +57,7 @@ const guard=`<script id="swarm-startup-guard">
       webgl=(canvas.getContext('webgl2') || canvas.getContext('webgl'))
         ? 'available' : 'unavailable';
     } catch (_) {webgl='error';}
-    detail.textContent='WebGL: '+webgl+'\n'+(errors.join('\n') || 'No JavaScript error captured');
+    detail.textContent='WebGL: '+webgl+String.fromCharCode(10)+(errors.join(String.fromCharCode(10)) || 'No JavaScript error captured');
     var retry=document.createElement('button');
     retry.textContent='重新加载游戏';
     retry.style.cssText='padding:12px 20px;background:#6aebc8;color:#092125;'+
