@@ -29,6 +29,7 @@ export class PocArtSprites {
   private readonly enemyHitUntil=new Map<number,number>();
   private lastFrameTimeMs=-1;
   private readonly weapons=new Map<WeaponId,Sprite>();
+  private readonly evolutionGlows=new Map<WeaponId,Sprite>();
   private readonly supplies: Sprite[]=[];
   private readonly acid: Sprite[]=[];
   private readonly muzzleFlashes: Sprite[]=[];
@@ -37,6 +38,7 @@ export class PocArtSprites {
   private readonly enemyLayer: Node;
   private readonly pickupLayer: Node;
   private readonly playerLayer: Node;
+  private readonly evolutionLayer: Node;
   private readonly weaponLayer: Node;
   private readonly projectileLayer: Node;
   constructor(private readonly root:Node, floorRoot:Node){
@@ -49,6 +51,7 @@ export class PocArtSprites {
     this.enemyLayer=this.layer('MainEnemyLayer');
     this.pickupLayer=this.layer('MainPickupLayer');
     this.playerLayer=this.layer('MainPlayerLayer');
+    this.evolutionLayer=this.layer('MainEvolutionLayer');
     this.weaponLayer=this.layer('MainWeaponLayer');
     this.projectileLayer=this.layer('MainProjectileLayer');
     this.player=this.create(this.playerLayer,'MainMarineSprite');
@@ -136,6 +139,29 @@ export class PocArtSprites {
       evolved:s.evolved,visualTier:s.visualTier,timeMs:s.elapsedMs});
     for(const mount of rig){
       mounted.add(mount.id);
+      // Evolution energy remains behind the weapon sprite, independent of
+      // Graphics drawing order and without changing any combat parameters.
+      let glow=this.evolutionGlows.get(mount.id);
+      if(mount.evolved){
+        if(!glow){
+          glow=this.create(this.evolutionLayer,'MainEvolution-'+mount.id);
+          this.evolutionGlows.set(mount.id,glow);
+        }
+        const size=35+mount.level*3;
+        if(this.assign(glow,'muzzle-flash',size,size)){
+          const phase=.5+.5*Math.sin(s.elapsedMs/180);
+          const alpha=Math.round(75+100*phase);
+          glow.color=new Color((mount.tint>>16)&255,(mount.tint>>8)&255,
+            mount.tint&255,alpha);
+          glow.node.setPosition(mount.anchor.x,mount.anchor.y+8,0);
+          glow.node.angle=mount.angle*180/Math.PI;
+          const pulse=.94+.12*phase;
+          glow.node.setScale(pulse,pulse,1);
+        }
+      }else if(glow){
+        glow.node.destroy();
+        this.evolutionGlows.delete(mount.id);
+      }
       let sprite=this.weapons.get(mount.id);
       if(!sprite){sprite=this.create(this.weaponLayer,'MainMount-'+mount.id);this.weapons.set(mount.id,sprite);}
       const key=mount.id==='rifle'?'rifle':'mount-'+mount.id;
@@ -149,6 +175,8 @@ export class PocArtSprites {
     }
     for(const [id,sprite]of this.weapons)if(!mounted.has(id)){
       sprite.node.destroy();this.weapons.delete(id);
+      const glow=this.evolutionGlows.get(id);
+      if(glow){glow.node.destroy();this.evolutionGlows.delete(id);}
     }
     this.syncTransient(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer);
     this.syncTransient(this.acid,s.acids,'acid',18,18,8,this.projectileLayer);
@@ -186,13 +214,14 @@ export class PocArtSprites {
     }
   }
   dispose():void{
-    for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid,...this.muzzleFlashes])
+    for(const sprite of [...this.enemies.values(),...this.weapons.values(),
+      ...this.evolutionGlows.values(),...this.supplies,...this.acid,...this.muzzleFlashes])
       sprite.node.destroy();
     this.enemies.clear();this.enemyLastHp.clear();this.enemyHitUntil.clear();
     this.lastFrameTimeMs=-1;
-    this.weapons.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
+    this.weapons.clear();this.evolutionGlows.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
-      this.weaponLayer,this.projectileLayer])layer.destroy();
+      this.evolutionLayer,this.weaponLayer,this.projectileLayer])layer.destroy();
     this.floor.node.destroy();
   }
 }
