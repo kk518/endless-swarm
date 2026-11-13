@@ -107,11 +107,13 @@ export class PocBattle extends Component {
     this.uiGraphic = uiNode.addComponent(Graphics);
     const hudNode = new Node('PocHUD');
     this.node.addChild(hudNode);
-    hudNode.addComponent(UITransform).setContentSize(size.width - 20, 90);
+    hudNode.addComponent(UITransform).setContentSize(size.width - 20, 60);
     this.hud = hudNode.addComponent(Label);
-    this.hud.fontSize = Math.max(12, 16 * this.viewport.hudScale);
-    this.hud.lineHeight = Math.max(17, 23 * this.viewport.hudScale);
-    hudNode.setPosition(0, size.height / 2 - 58, 0);
+    this.hud.fontSize = Math.max(11, 13 * this.viewport.hudScale);
+    this.hud.lineHeight = Math.max(15, 18 * this.viewport.hudScale);
+    this.hud.enableWrapText = true;
+    this.hud.overflow = Label.Overflow.SHRINK;
+    hudNode.setPosition(0, size.height / 2 - 36, 0);
     // Three genuine Creator UI Labels, not browser DOM nodes.
     for (let index = 0; index < 3; index++) {
       const labelNode = new Node('DecisionCardLabel' + index);
@@ -401,6 +403,34 @@ export class PocBattle extends Component {
     }
     this.paint();
   }
+  private paintCombatHud(ui: Graphics): void {
+    const s = this.world.state;
+    if (s.over || this.world.decision) return;
+    const left = -this.screenWidth / 2 + 12;
+    const right = this.screenWidth / 2 - 12;
+    const barWidth = right - left;
+    const top = this.screenHeight / 2 - 87;
+    const bar = (y: number, ratio: number, fill: Color): void => {
+      const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
+      ui.fillColor = new Color(7, 20, 29, 218);
+      ui.rect(left, y, barWidth, 9); ui.fill();
+      ui.fillColor = fill;
+      ui.rect(left, y, barWidth * clamped, 9); ui.fill();
+      ui.strokeColor = new Color(124, 166, 170, 220);
+      ui.lineWidth = 1; ui.rect(left, y, barWidth, 9); ui.stroke();
+    };
+    const hpRatio = s.player.hp / Math.max(1, s.player.maxHp);
+    bar(top, hpRatio, hpRatio <= .3
+      ? new Color(255, 111, 108, 255) : new Color(94, 214, 163, 255));
+    bar(top - 16, s.xp / Math.max(1, s.xpToNext), new Color(100, 182, 255, 255));
+    if (s.surgeWarningMs > 0) {
+      const warningY = top - 48;
+      ui.fillColor = new Color(127, 47, 35, 225);
+      ui.rect(left, warningY, barWidth, 25); ui.fill();
+      ui.strokeColor = new Color(255, 176, 112, 245);
+      ui.lineWidth = 2; ui.rect(left, warningY, barWidth, 25); ui.stroke();
+    }
+  }
   private paint(): void {
     const g = this.graphic;
     const ui = this.uiGraphic;
@@ -642,6 +672,7 @@ export class PocBattle extends Component {
         + '\n' + decision.options[i].description;
     }
     this.paintHangar(ui);
+    this.paintCombatHud(ui);
     this.hud.string = s.over
       ? (s.won ? '虫潮歼灭 · 远征结算' : '机甲损毁 · 战备结算')
         + ' · 击杀 ' + s.kills
@@ -655,18 +686,16 @@ export class PocBattle extends Component {
           + '\\n训练：' + s.training.weapon + '／' + TRAINING_LABELS[s.training.focus]
           + ' · 下方可更改专精后选卡'
         : '无尽虫潮 · ' + (s.mode === 'expedition' ? '三幕远征' : '五波封锁')
-          + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages + ' · Lv.' + s.level
-          + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp + ' · 击杀 ' + s.kills
+          + ' · ' + this.world.heroName + ' · ' + s.wave + '/' + s.totalStages
+          + ' · Lv.' + s.level
+          + '\\n装甲 ' + s.player.hp + '/' + s.player.maxHp
+          + ' · XP ' + s.xp + '/' + s.xpToNext
+          + ' · 击杀 ' + s.kills
           + (s.streak >= 2 ? ' · ' + s.streak + '连杀' : '')
-          + (s.suppliesCollected ? ' · 补给' + s.suppliesCollected : '')
-          + ' · 专精' + s.training.weapon + '/' + TRAINING_LABELS[s.training.focus]
-          + ' · ' + s.weapons.map(id => id + ' Lv.' + s.weaponLevels[id]
-            + (s.evolved[id] ? ' ★' : '')).join('/')
-          + ' · ' + (s.overclockMs > 0 ? '超频射击' :
-            s.player.deployed ? '火力展开' : '机动射击')
-          + (s.surgeWarningMs > 0 ? ' · ⚠虫潮集结 ' +
-              (s.surgeWarningMs / 1000).toFixed(1) + '秒' : '')
-          + (this.storageWarning ? ' · ⚠安全节点未保存' : '')
-          + ' · 上方中间恢复远征 · 左侧切模式 / M · 右侧换英雄 / H';
+          + '\\n' + s.weapons.map(id => id + ' ' + s.weaponLevels[id]
+            + (s.evolved[id] ? '★' : '')).join(' · ')
+          + (s.surgeWarningMs > 0 ? ' · ⚠虫潮 '
+            + (s.surgeWarningMs / 1000).toFixed(1) + '秒' : '')
+          + (this.storageWarning ? ' · ⚠存档失败' : '');
   }
 }
