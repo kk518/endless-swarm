@@ -247,9 +247,14 @@ jobs:
         shell: bash
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
 
       - name: Verify real Creator scene executes and input moves player
+        run: node scripts/smoke-cocos-web.mjs
+
+      - name: Verify Creator startup and Sprite resources in WebKit
+        env:
+          COCOS_BROWSER: webkit
         run: node scripts/smoke-cocos-web.mjs
 
       - name: Upload runtime screenshot and diagnostics
