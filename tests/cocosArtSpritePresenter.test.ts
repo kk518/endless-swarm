@@ -21,7 +21,7 @@ test('rendering-only texture migration cannot modify run state or saved gameplay
 });
 
 test('Creator sprite layering keeps enemy bodies behind the hero and guns in front',()=>{
- const ordered=['MainEnemyLayer','MainPickupLayer','MainPlayerLayer','MainWeaponLayer','MainProjectileLayer'];
+ const ordered=['MainEnemyLayer','MainPickupLayer','MainPlayerLayer','MainEvolutionLayer','MainWeaponLayer','MainProjectileLayer'];
  const offsets=ordered.map(name=>presenter.indexOf("this.layer('"+name+"')"));
  assert.ok(offsets.every(index=>index>=0),'all scene layers must exist');
  assert.deepEqual([...offsets].sort((a,b)=>a-b),offsets,'render layers are created back-to-front');
@@ -30,7 +30,7 @@ test('Creator sprite layering keeps enemy bodies behind the hero and guns in fro
  assert.match(presenter,/this.create\(this.weaponLayer,'MainMount-'/);
  assert.match(presenter,/this.syncTransient\(this.supplies,s.supplies,'supply',30,30,10,this.pickupLayer\)/);
  assert.match(presenter,/this.syncTransient\(this.acid,s.acids,'acid',18,18,8,this.projectileLayer\)/);
- assert.match(presenter,/this.weaponLayer,this.projectileLayer\]\)layer.destroy\(\)/);
+ assert.match(presenter,/this.evolutionLayer,this.weaponLayer,this.projectileLayer\]\)layer.destroy\(\)/);
 });
 
 test('muzzle flashes use combat shot events and fall back to Graphics only while loading',()=>{
@@ -55,4 +55,18 @@ test('enemy hit flash is visual-only, and elite tint resets across runs',()=>{
  assert.match(presenter,/this.enemyLastHp.delete\(id\);this.enemyHitUntil.delete\(id\)/);
  assert.match(presenter,/this.lastFrameTimeMs=-1/);
  assert.doesNotMatch(presenter,/enemy\.hp\s*[-+*/]?=|e\.hp\s*[-+*/]?=/);
+});
+
+test('evolved weapons show a pooled energy sprite without modifying gameplay',()=>{
+ assert.match(presenter,/private readonly evolutionGlows=new Map<WeaponId,Sprite>\(\)/);
+ assert.match(presenter,/if\(mount.evolved\)/);
+ assert.match(presenter,/this.create\(this.evolutionLayer,'MainEvolution-'\+mount.id\)/);
+ assert.match(presenter,/this.assign\(glow,'muzzle-flash',size,size\)/);
+ assert.match(presenter,/const phase=\.5\+\.5\*Math.sin\(s.elapsedMs\/180\)/);
+ assert.match(presenter,/glow.node.setPosition\(mount.anchor.x,mount.anchor.y\+8,0\)/);
+ assert.match(presenter,/glow.node.angle=mount.angle\*180\/Math.PI/);
+ assert.match(presenter,/this.evolutionGlows.delete\(mount.id\)/);
+ assert.match(presenter,/this.evolutionGlows.delete\(id\)/);
+ assert.match(presenter,/this.evolutionGlows.clear\(\)/);
+ assert.doesNotMatch(presenter,/applyDamage|weaponDamage|settleStoredRun|chooseCard/);
 });
