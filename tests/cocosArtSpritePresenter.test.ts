@@ -70,3 +70,14 @@ test('evolved weapons show a pooled energy sprite without modifying gameplay',()
  assert.match(presenter,/this.evolutionGlows.clear\(\)/);
  assert.doesNotMatch(presenter,/applyDamage|weaponDamage|settleStoredRun|chooseCard/);
 });
+
+test('Boss 900ms charge previews its 125-unit directional lunge, not a false AoE',()=>{
+ assert.match(battle,/enemy.kind === 'boss'\) \{/);
+ assert.match(battle,/const dx = s.player.x - enemy.x, dy = s.player.y - enemy.y/);
+ assert.match(battle,/1 - enemy.windupMs \/ 900/);
+ assert.match(battle,/const reach = 125, side = 18/);
+ assert.match(battle,/g.lineTo\(tipX, tipY\); g.stroke\(\)/);
+ assert.match(battle,/g.arc\(enemy.x, enemy.y, 43/);
+ assert.doesNotMatch(battle,/enemy.kind === 'boss' \? 65 : 26/);
+ assert.match(battle,/g.circle\(enemy.x, enemy.y, 26\); g.stroke\(\)/);
+});
