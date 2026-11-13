@@ -1,0 +1,126 @@
+/**
+ * Actual Creator Sprite presenter for the PNGs re-exported from main/Art.ts.
+ * Artwork is a pure render layer; gameplay state and hitboxes are unchanged.
+ * If an asset is still loading/missing, PocBattle's Graphics fallback remains.
+ */
+import { Node, Sprite, SpriteFrame, UITransform, resources, Color } from 'cc';
+import type { PocState, PocEnemyKind } from './PocWorld.ts';
+import type { PocHeroId } from './PocRoster.ts';
+import type { WeaponId } from './m6/progression.ts';
+import { buildWeaponRig } from './PocWeaponRig.ts';
+
+const ENEMY_ART: Record<PocEnemyKind,string> = {
+  grunt:'crawler', leaper:'leaper', armored:'armored',
+  spitter:'spitter', bomber:'bomber', boss:'broodlord',
+};
+const DIMENSIONS: Record<string, readonly [number, number]> = {
+  marine:[76,100],rifle:[66,22],crawler:[58,64],leaper:[68,74],
+  armored:[74,76],spitter:[70,76],bomber:[68,72],broodlord:[114,120],
+  supply:[54,54],'mount-scatter':[58,26],'mount-arc':[56,30],
+  'mount-flame':[62,26],'muzzle-flash':[64,52],bolt:[34,12],acid:[26,26],
+  dust:[128,128],
+};
+export class PocArtSprites {
+  private readonly frames=new Map<string,SpriteFrame>();
+  private readonly pending=new Set<string>();
+  private readonly enemies=new Map<number,Sprite>();
+  private readonly weapons=new Map<WeaponId,Sprite>();
+  private readonly supplies: Sprite[]=[];
+  private readonly acid: Sprite[]=[];
+  private readonly player: Sprite;
+  private readonly floor: Sprite;
+  constructor(private readonly root:Node, floorRoot:Node){
+    this.floor=this.create(floorRoot,'MainDustTiles');
+    this.floor.node.setPosition(0,0,0);
+    this.floor.type=Sprite.Type.TILED;
+    this.player=this.create(root,'MainMarineSprite');
+    for(const key of Object.keys(DIMENSIONS))this.load(key);
+  }
+  ready(key:string):boolean{return this.frames.has(key);}
+  enemyKey(kind:PocEnemyKind):string{return ENEMY_ART[kind];}
+  private create(parent:Node,name:string):Sprite{
+    const node=new Node(name);parent.addChild(node);
+    return node.addComponent(Sprite);
+  }
+  private load(key:string):void{
+    if(this.pending.has(key))return;
+    this.pending.add(key);
+    resources.load('main-art/'+key+'/spriteFrame',SpriteFrame,(err,frame)=>{
+      if(err||!frame){console.warn('Main art asset missing, using Graphics fallback:',key);return;}
+      this.frames.set(key,frame);
+    });
+  }
+  private assign(sprite:Sprite,key:string,width:number,height:number):boolean{
+    const frame=this.frames.get(key);
+    if(!frame){sprite.node.active=false;return false;}
+    if(sprite.spriteFrame!==frame)sprite.spriteFrame=frame;
+    sprite.sizeMode=Sprite.SizeMode.CUSTOM;
+    sprite.node.getComponent(UITransform)!.setContentSize(width,height);
+    sprite.node.active=true;
+    return true;
+  }
+  resizeFloor(w:number,h:number):void{
+    if(this.assign(this.floor,'dust',w,h))this.floor.node.setPosition(0,0,0);
+  }
+  sync(s:PocState,hero:PocHeroId,width:number,height:number):void{
+    this.resizeFloor(width,height);
+    if(this.assign(this.player,'marine',68,90)){
+      this.player.node.setPosition(s.player.x,s.player.y+11,0);
+      this.player.color=hero==='kane'?new Color(255,207,159,255):Color.WHITE;
+      this.player.node.angle=0;
+    }
+    const living=new Set<number>();
+    for(const e of s.enemies){
+      living.add(e.id);
+      let sprite=this.enemies.get(e.id);
+      if(!sprite){sprite=this.create(this.root,'MainBug-'+e.id);this.enemies.set(e.id,sprite);}
+      const key=this.enemyKey(e.kind??'grunt');
+      const scale=e.kind==='boss'?1.0:e.kind==='armored'?.85:e.kind==='leaper'?.8:.75;
+      const dims=DIMENSIONS[key];
+      if(this.assign(sprite,key,dims[0]*scale,dims[1]*scale)){
+        sprite.node.setPosition(e.x,e.y+10,0);
+        sprite.color=e.elite?new Color(255,211,171,255):Color.WHITE;
+      }
+    }
+    for(const [id,sprite]of this.enemies)if(!living.has(id)){
+      sprite.node.destroy();this.enemies.delete(id);
+    }
+    const mounted=new Set<WeaponId>();
+    const rig=buildWeaponRig({player:s.player,deployed:s.player.deployed,
+      weapons:s.weapons,weaponAim:s.weaponAim,weaponLevels:s.weaponLevels,
+      evolved:s.evolved,visualTier:s.visualTier,timeMs:s.elapsedMs});
+    for(const mount of rig){
+      mounted.add(mount.id);
+      let sprite=this.weapons.get(mount.id);
+      if(!sprite){sprite=this.create(this.root,'MainMount-'+mount.id);this.weapons.set(mount.id,sprite);}
+      const key=mount.id==='rifle'?'rifle':'mount-'+mount.id;
+      const dims=DIMENSIONS[key];
+      if(this.assign(sprite,key,dims[0]*.82,dims[1]*.82)){
+        const offset=mount.id==='rifle'?20:dims[0]*.33;
+        sprite.node.setPosition(mount.anchor.x+Math.cos(mount.angle)*offset,
+          mount.anchor.y+Math.sin(mount.angle)*offset+8,0);
+        sprite.node.angle=mount.angle*180/Math.PI;
+      }
+    }
+    for(const [id,sprite]of this.weapons)if(!mounted.has(id)){
+      sprite.node.destroy();this.weapons.delete(id);
+    }
+    this.syncTransient(this.supplies,s.supplies,'supply',30,30,10);
+    this.syncTransient(this.acid,s.acids,'acid',18,18,8);
+  }
+  private syncTransient(pool:Sprite[],items:readonly {x:number;y:number}[],
+    key:string,w:number,h:number,vertical:number):void{
+    while(pool.length<items.length)pool.push(this.create(this.root,'Main-'+key));
+    for(let i=0;i<pool.length;i++){
+      const sprite=pool[i];
+      sprite.node.active=i<items.length;
+      if(i<items.length&&this.assign(sprite,key,w,h))
+        sprite.node.setPosition(items[i].x,items[i].y+vertical,0);
+    }
+  }
+  dispose():void{
+    for(const sprite of [...this.enemies.values(),...this.weapons.values(),...this.supplies,...this.acid])
+      sprite.node.destroy();
+    this.enemies.clear();this.weapons.clear();this.supplies.length=0;this.acid.length=0;
+  }
+}

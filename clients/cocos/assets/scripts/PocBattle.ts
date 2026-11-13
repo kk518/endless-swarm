@@ -20,6 +20,7 @@ import {
 import { getStoragePort } from './m6/platformStorage.ts';
 import { preservePreviousCheckpoint } from './m6/safeNodePolicy.ts';
 import { CreatorHangar, type WorkshopItem } from './PocHangar.ts';
+import { PocArtSprites } from './PocArtSprites.ts';
 
 // Creator's preview and the original Phaser H5 must NEVER share save keys.
 const creatorStoragePrefix = 'cocos-creator-m6:';
@@ -65,6 +66,7 @@ export class PocBattle extends Component {
   private lastSavedFingerprint = '';
   private storageWarning = false;
   private graphic!: Graphics;
+  private art!: PocArtSprites;
   private uiGraphic!: Graphics;
   private viewport!: MobileViewport;
   private hud!: Label;
@@ -87,12 +89,18 @@ export class PocBattle extends Component {
       this.selectedHero, this.selectedMode);
     // M5.3: combat geometry is independently scaled to the 600-unit world.
     // HUD, safe-node cards and touch joystick stay in Canvas UI coordinates.
+    const floorNode = new Node('OriginalMainFloor');
+    this.node.addChild(floorNode);
+    floorNode.addComponent(UITransform).setContentSize(
+      this.viewport.worldWidth, this.viewport.worldHeight);
+    floorNode.setScale(this.viewport.worldScale, this.viewport.worldScale, 1);
     const worldNode = new Node('BattleWorldGraphics');
     this.node.addChild(worldNode);
     worldNode.addComponent(UITransform).setContentSize(
       this.viewport.worldWidth, this.viewport.worldHeight);
     worldNode.setScale(this.viewport.worldScale, this.viewport.worldScale, 1);
     this.graphic = worldNode.addComponent(Graphics);
+    this.art = new PocArtSprites(worldNode, floorNode);
     const uiNode = new Node('BattleUIOverlay');
     this.node.addChild(uiNode);
     uiNode.addComponent(UITransform).setContentSize(size.width, size.height);
@@ -394,18 +402,21 @@ export class PocBattle extends Component {
     const w = this.world.width, h = this.world.height;
     g.clear();
     ui.clear();
-
-    g.fillColor = COL.floor;
-    g.rect(-w / 2, -h / 2, w, h);
-    g.fill();
-    g.strokeColor = COL.grid; g.lineWidth = 1;
-    for (let x = -w / 2; x < w / 2; x += 55) { g.moveTo(x, -h / 2); g.lineTo(x, h / 2); g.stroke(); }
-    for (let y = -h / 2; y < h / 2; y += 55) { g.moveTo(-w / 2, y); g.lineTo(w / 2, y); g.stroke(); }
+    this.art.sync(s, this.world.heroId, w, h);
+    if (!this.art.ready('dust')) {
+      g.fillColor = COL.floor;
+      g.rect(-w / 2, -h / 2, w, h);
+      g.fill();
+      g.strokeColor = COL.grid; g.lineWidth = 1;
+      for (let x = -w / 2; x < w / 2; x += 55) { g.moveTo(x, -h / 2); g.lineTo(x, h / 2); g.stroke(); }
+      for (let y = -h / 2; y < h / 2; y += 55) { g.moveTo(-w / 2, y); g.lineTo(w / 2, y); g.stroke(); }
+    }
 
     for (const enemy of s.enemies) {
       const scale = enemy.kind === 'boss' ? 2.3 : enemy.kind === 'armored' ? 1.35 : enemy.kind === 'leaper' ? .85 : 1;
       const radius = 18 * scale;
       g.fillColor = COL.shadow; g.ellipse(enemy.x, enemy.y - 12, radius + 4, 8 * scale); g.fill();
+      if (!this.art.ready(this.art.enemyKey(enemy.kind ?? 'grunt'))) {
       g.fillColor = enemy.kind === 'boss' ? new Color(204, 92, 86, 255)
         : enemy.kind === 'armored' ? new Color(133, 103, 130, 255)
         : enemy.kind === 'spitter' ? new Color(156, 220, 113, 255)
@@ -413,6 +424,7 @@ export class PocBattle extends Component {
         : enemy.kind === 'leaper' ? new Color(180, 95, 107, 255)
         : COL.enemy;
       g.circle(enemy.x, enemy.y + 8 * scale, radius); g.fill();
+      }
       if (enemy.elite) {
         g.strokeColor = new Color(255, 204, 140, 245); g.lineWidth = 3;
         g.circle(enemy.x, enemy.y + 6, 28 * scale); g.stroke();
@@ -490,6 +502,7 @@ export class PocBattle extends Component {
       g.strokeColor = COL.deployed; g.lineWidth = 3;
       g.ellipse(p.x, p.y - 8, 37, 16); g.stroke();
     }
+    if (!this.art.ready('marine')) {
     g.fillColor = COL.marine; g.rect(p.x - 13, p.y - 2, 26, 36); g.fill();
     g.fillColor = this.world.heroId === 'kane' ? new Color(220, 177, 109, 255) : COL.chest;
     g.rect(p.x - 10, p.y + 10, 20, 14); g.fill();
@@ -501,6 +514,7 @@ export class PocBattle extends Component {
     g.moveTo(p.x + 5, p.y + 18);
     g.lineTo(p.x + 5 + Math.cos(heading) * 31, p.y + 18 + Math.sin(heading) * 31);
     g.stroke();
+    }
 
     // M4.1: only equipped hardpoints render; level and evolution improve
     // geometry/glow without modifying canonical combat damage.
@@ -512,6 +526,7 @@ export class PocBattle extends Component {
       if (mount.id === 'rifle') continue;
       const tint = new Color((mount.tint >> 16) & 255, (mount.tint >> 8) & 255,
         mount.tint & 255, 255);
+      if (!this.art.ready('mount-' + mount.id)) {
       g.strokeColor = tint; g.lineWidth = mount.evolved ? 7 : 5;
       g.moveTo(mount.anchor.x, mount.anchor.y + 8);
       g.lineTo(mount.muzzle.x, mount.muzzle.y + 8); g.stroke();
@@ -519,6 +534,7 @@ export class PocBattle extends Component {
         11 + mount.level * .6); g.fill();
       g.fillColor = tint; g.circle(mount.anchor.x, mount.anchor.y + 8,
         5 + mount.level * .5); g.fill();
+      }
       if (mount.evolved) {
         g.strokeColor = new Color(255, 242, 199, 255); g.lineWidth = 2;
         g.circle(mount.anchor.x, mount.anchor.y + 8, 14 + mount.level);g.stroke();

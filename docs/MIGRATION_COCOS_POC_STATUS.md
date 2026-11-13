@@ -57,3 +57,11 @@ Canvas 预览新增“继续远征”控制和独立的 `cocos-preview-m6:` 存�
 ### 刷新防误覆盖保护
 
 主线安全节点恢复不仅要求状态合法，还要求在用户尚未点击“继续远征”时保留原有存档。新建的第 0 段远征不得覆盖另一 runId 的历史安全节点，直到新远征真正推进至奖励节点；Creator/Canvas 共享 `safeNodePolicy.ts`，并有固定 Seed/存档替换策略测试。
+
+## M4 原版贴图资源迁移（2026-11-13）
+
+- main 并无静态 PNG：正式 M4 资源来自 `src/game/Art.ts` 的 16 个 Phaser Graphics 图案。
+- 新增 `scripts/export-main-art.mjs`，每次 CI 根据原始图案导出透明 PNG 到 Creator resources 和 Canvas public；不手工重画、不另起一套外观。
+- Creator 新增 `PocArtSprites.ts`：按需加载 SpriteFrame，角色、武器挂载、各虫种、补给、酸液由 Sprite 显示；`dust` 用平铺 Sprite。加载失败时保留 Graphics 回退。
+- Canvas 预览加载同一批 PNG（独立部署），仍共用 PocWorld 模拟；已有命中箱、随机流、经验卡牌、装备结算不修改。
+- 静态正式材质与高级动画、微信端包体仍需逐项验收；必须以本次 CI Creator Web Mobile 的真实结果为准。

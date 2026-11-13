@@ -6,3 +6,6 @@ profiles/
 node_modules/
 *.log
 .DS_Store
+
+# Original main Art.ts exported as PNG during Creator CI
+assets/resources/main-art/

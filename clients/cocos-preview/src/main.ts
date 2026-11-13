@@ -15,6 +15,28 @@ if (!canvas) throw new Error('Preview canvas missing');
 const context = canvas.getContext('2d');
 if (!context) throw new Error('Canvas 2D is unsupported');
 const g = context;
+// All 16 image files are rasterized from main/src/game/Art.ts at build time.
+const MAIN_ART_KEYS = ['marine','rifle','crawler','leaper','armored','spitter',
+  'bomber','broodlord','supply','mount-scatter','mount-arc','mount-flame',
+  'muzzle-flash','bolt','acid','dust'] as const;
+const mainArt = new Map<string, HTMLImageElement>();
+for (const key of MAIN_ART_KEYS) {
+  const image = new Image();
+  image.src = './main-art/' + key + '.png';
+  mainArt.set(key, image);
+}
+function originalArt(key: string): HTMLImageElement | null {
+  const image = mainArt.get(key);
+  return image && image.complete && image.naturalWidth > 0 ? image : null;
+}
+function drawOriginal(key: string, x: number, y: number, w?: number, h?: number): boolean {
+  const image = originalArt(key);
+  if (!image) return false;
+  const width = w ?? image.naturalWidth / 2;
+  const height = h ?? image.naturalHeight / 2;
+  g.drawImage(image, x - width / 2, y - height / 2, width, height);
+  return true;
+}
 let world: PocWorld;
 const ops = new PreviewOps(restart);
 world = ops.createWorld();
@@ -156,7 +178,11 @@ function paintBackground(elapsed: number): void {
   const grad = g.createLinearGradient(0, 0, W, H);
   grad.addColorStop(0, '#102b36'); grad.addColorStop(.6, '#142b33'); grad.addColorStop(1, '#071820');
   g.fillStyle = grad; g.fillRect(0, 0, W, H);
-
+  const tile = originalArt('dust');
+  if (tile) {
+    const pattern = g.createPattern(tile, 'repeat');
+    if (pattern) { g.fillStyle = pattern; g.fillRect(0, 0, W, H); }
+  }
   g.strokeStyle = '#3e63703d'; g.lineWidth = 1;
   for (let x = 0; x <= W; x += 57) {
     g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
@@ -187,7 +213,20 @@ function drawEnemy(x: number, y: number, time: number, kind: string, hp: number,
   const scale = kind === 'boss' ? 2.4 : kind === 'armored' ? 1.35 : kind === 'leaper' ? .86 : 1;
   g.scale(scale, scale);
   ellipse(0, 11, 21, 8, '#020d15ad');
-  // legs, spines and shell to imply depth without 3D models.
+  const enemyArt: Record<string,string> = {
+    grunt: 'crawler', leaper: 'leaper', armored: 'armored',
+    spitter: 'spitter', bomber: 'bomber', boss: 'broodlord',
+  };
+  if (drawOriginal(enemyArt[kind] ?? 'crawler', 0, -9)) {
+    if (kind === 'boss' || kind === 'armored') {
+      g.fillStyle='#081117'; g.fillRect(-22,-44,44,5);
+      g.fillStyle=kind === 'boss' ? '#ffab86' : '#a6e9d8';
+      g.fillRect(-22,-44,44 * Math.max(0,hp / maxHp),5);
+    }
+    g.restore();
+    return;
+  }
+  // Graphics fallback if raster textures are unavailable.
   for (const side of [-1, 1]) {
     for (const r of [-1, 0, 1]) {
       strokeLine([[side * 9, -1 + r * 5], [side * (19 + r * 2), 6 + r * 11], [side * 26, 5 + r * 12]], '#5a393d', 5);
@@ -221,6 +260,16 @@ function drawMarine(x: number, y: number, deployed: boolean, heading: number, ti
     }
   } else {
     g.strokeStyle = '#2bb59b5c'; g.lineWidth = 1; g.beginPath(); g.ellipse(0, 16, 30, 12, 0, 0, Math.PI*2); g.stroke();
+  }
+  if (drawOriginal('marine', 0, -24, 68, 90)) {
+    if (heroId === 'kane') {
+      g.strokeStyle = '#e2b77a';g.lineWidth = 2;
+      g.beginPath();g.arc(0,-24,35,0,Math.PI*2);g.stroke();
+    }
+    g.save();g.translate(10,-28);g.rotate(-heading);
+    drawOriginal('rifle', 20, 0, 58, 20);
+    g.restore();g.restore();
+    return;
   }
   polygon([[-14,5],[-9,-12],[-1,-13],[-1,16],[-11,17]], '#304b55');
   polygon([[3,-13],[11,-13],[15,4],[11,18],[3,16]], '#284955');
@@ -307,10 +356,17 @@ function paint(dt: number): void {
     const body = worldPoint(mount.anchor.x, mount.anchor.y);
     const muzzle = worldPoint(mount.muzzle.x, mount.muzzle.y);
     const rgb = '#' + mount.tint.toString(16).padStart(6, '0');
-    g.strokeStyle = rgb; g.lineWidth = mount.evolved ? 7 : 5;
-    g.beginPath();g.moveTo(body.x, body.y - 14);g.lineTo(muzzle.x, muzzle.y - 14);g.stroke();
-    ellipse(body.x, body.y - 14, 11 + mount.level * .6, 7, '#192a34');
-    ellipse(body.x, body.y - 14, 5 + mount.level * .5, 4, rgb);
+    const image = originalArt('mount-' + mount.id);
+    if (image) {
+      g.save(); g.translate(body.x,body.y - 14);g.rotate(-mount.angle);
+      drawOriginal('mount-' + mount.id, 20, 0, image.naturalWidth * .40, image.naturalHeight * .40);
+      g.restore();
+    } else {
+      g.strokeStyle = rgb; g.lineWidth = mount.evolved ? 7 : 5;
+      g.beginPath();g.moveTo(body.x, body.y - 14);g.lineTo(muzzle.x, muzzle.y - 14);g.stroke();
+      ellipse(body.x, body.y - 14, 11 + mount.level * .6, 7, '#192a34');
+      ellipse(body.x, body.y - 14, 5 + mount.level * .5, 4, rgb);
+    }
     if (mount.glow > .05) {
       g.globalAlpha = mount.glow;
       ellipse(muzzle.x, muzzle.y - 14, 9 + mount.level * 2, 6 + mount.level, rgb);
@@ -333,8 +389,10 @@ function paint(dt: number): void {
   }
   for (const acid of s.acids) {
     const spot = worldPoint(acid.x,acid.y);
-    ellipse(spot.x,spot.y-12,8,6,'#a8f47a');
-    ellipse(spot.x,spot.y-12,3,3,'#ecffd5');
+    if (!drawOriginal('acid',spot.x,spot.y-12,18,18)) {
+      ellipse(spot.x,spot.y-12,8,6,'#a8f47a');
+      ellipse(spot.x,spot.y-12,3,3,'#ecffd5');
+    }
   }
   for (const supply of s.supplies) {
     const pos = worldPoint(supply.x, supply.y);
@@ -342,7 +400,8 @@ function paint(dt: number): void {
       ? '#ffd47a' : '#8cb7ff';
     g.strokeStyle = tint; g.lineWidth = 2;
     g.beginPath();g.arc(pos.x,pos.y-12,18,0,Math.PI*2);g.stroke();
-    ellipse(pos.x,pos.y-12,10,10,tint);
+    if (!drawOriginal('supply',pos.x,pos.y-12,29,29))
+      ellipse(pos.x,pos.y-12,10,10,tint);
   }
   for (const pulse of s.pulses) {
     const pos = worldPoint(pulse.x,pulse.y);
@@ -357,7 +416,9 @@ function paint(dt: number): void {
     const tint = shot.source === 'scatter' ? '#ffb16e'
       : shot.source === 'arc' ? '#91b9ff'
       : shot.source === 'flame' ? '#ff7652' : '#69f5dd';
-    ellipse(muzzle.x, muzzle.y - 14, shot.source === 'scatter' ? 16 : 10, 6, tint);
+    if (!drawOriginal('muzzle-flash',muzzle.x,muzzle.y - 14,
+      shot.source === 'scatter' ? 28 : 21, 20))
+      ellipse(muzzle.x, muzzle.y - 14, shot.source === 'scatter' ? 16 : 10, 6, tint);
     g.globalAlpha = 1;
   }
   for (const bullet of s.bullets) {

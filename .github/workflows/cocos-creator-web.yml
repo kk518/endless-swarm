@@ -106,6 +106,14 @@ jobs:
           unzip -q "$RUNNER_TEMP/cocos/editor.zip" -d "$RUNNER_TEMP/cocos/unpacked"
           find "$RUNNER_TEMP/cocos/unpacked" -maxdepth 6 -name 'CocosCreator*.app' -type d | head -n 10
 
+      - name: Install original art PNG rasterizer
+        shell: bash
+        run: npm install --no-audit --no-fund
+
+      - name: Export original main Art.ts to Creator Sprite resources
+        shell: bash
+        run: node scripts/export-main-art.mjs
+
       - name: Locate editor and build actual Web Mobile
         shell: bash
         run: |
