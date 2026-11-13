@@ -5,6 +5,7 @@
 import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/PocWorld.ts';
 import { PreviewOps } from './m6Ui.ts';
 import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
+import { buildWeaponRig } from '../../cocos/assets/scripts/PocWeaponRig.ts';
 import { TRAINING_LABELS } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
 import type { WeaponId } from '../../cocos/assets/scripts/m6/progression.ts';
 import './style.css';
@@ -296,6 +297,30 @@ function paint(dt: number): void {
     }
   }
   if (!marineDrawn) drawMarine(p.x, p.y, s.player.deployed, heading, s.elapsedMs, s.heroId);
+  // Four separate physical hardpoints: exactly the currently owned M4.1 loadout.
+  for (const mount of buildWeaponRig({
+    player: s.player, deployed: s.player.deployed, weapons: s.weapons,
+    weaponAim: s.weaponAim, weaponLevels: s.weaponLevels, evolved: s.evolved,
+    visualTier: s.visualTier, timeMs: s.elapsedMs,
+  })) {
+    if (mount.id === 'rifle') continue; // already drawn by drawMarine()
+    const body = worldPoint(mount.anchor.x, mount.anchor.y);
+    const muzzle = worldPoint(mount.muzzle.x, mount.muzzle.y);
+    const rgb = '#' + mount.tint.toString(16).padStart(6, '0');
+    g.strokeStyle = rgb; g.lineWidth = mount.evolved ? 7 : 5;
+    g.beginPath();g.moveTo(body.x, body.y - 14);g.lineTo(muzzle.x, muzzle.y - 14);g.stroke();
+    ellipse(body.x, body.y - 14, 11 + mount.level * .6, 7, '#192a34');
+    ellipse(body.x, body.y - 14, 5 + mount.level * .5, 4, rgb);
+    if (mount.glow > .05) {
+      g.globalAlpha = mount.glow;
+      ellipse(muzzle.x, muzzle.y - 14, 9 + mount.level * 2, 6 + mount.level, rgb);
+      g.globalAlpha = 1;
+    }
+    if (mount.evolved) {
+      g.strokeStyle = '#fff2c7';g.lineWidth=2;
+      g.beginPath();g.arc(body.x,body.y-14,13+mount.level,0,Math.PI*2);g.stroke();
+    }
+  }
   // M5.3: visible 700ms arrival telegraph BEFORE a bug becomes targetable.
   for (const arrival of s.arrivals) {
     const spot = worldPoint(arrival.x,arrival.y);
@@ -324,6 +349,16 @@ function paint(dt: number): void {
     g.strokeStyle = pulse.kind === 'bomber' ? '#ff657d' : '#8ab7ff';
     g.lineWidth = 5 * Math.min(1,pulse.remainingMs/140);
     g.beginPath();g.arc(pos.x,pos.y,pulse.radius,0,Math.PI*2);g.stroke();
+  }
+  // Actual shot events from the engine-neutral attack drivers, not fake pulse timers.
+  for (const shot of s.shots) {
+    const muzzle = worldPoint(shot.x, shot.y);
+    g.globalAlpha = Math.min(1, shot.remainingMs / 70);
+    const tint = shot.source === 'scatter' ? '#ffb16e'
+      : shot.source === 'arc' ? '#91b9ff'
+      : shot.source === 'flame' ? '#ff7652' : '#69f5dd';
+    ellipse(muzzle.x, muzzle.y - 14, shot.source === 'scatter' ? 16 : 10, 6, tint);
+    g.globalAlpha = 1;
   }
   for (const bullet of s.bullets) {
     const b = worldPoint(bullet.x, bullet.y);

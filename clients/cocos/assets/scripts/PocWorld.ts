@@ -22,6 +22,8 @@ import {
   withinPickupReach, rollSupplyKind, overclockDurationMs, empStats, type SupplyKind,
 } from './m6/supplies.ts';
 import { CocosRunController, type CampaignMode, type RunDecision } from './m6/runController.ts';
+import { visualPowerTier } from './m6/weaponVisual.ts';
+import { weaponMuzzle } from './PocWeaponRig.ts';
 import { resolvePocHero, POC_WEAPON_RUNTIME, POC_HERO_RUNTIME,
   type PocHeroId, type PocAttackPort } from './PocRoster.ts';
 import type { HeroPassiveRuntime } from './m6/heroRuntime.ts';
@@ -47,6 +49,11 @@ export interface PocEnemy extends Vec2 {
   /** Optional only to keep old nearestEnemy callers source-compatible. */
   kind?: PocEnemyKind;
   maxHp?: number;
+}
+export interface PocShotFlash extends Vec2 {
+  source: WeaponId | 'kane-rail';
+  angle: number;
+  remainingMs: number;
 }
 export interface PocBullet extends Vec2 {
   vx: number; vy: number; remainingMs: number;
@@ -82,6 +89,9 @@ export interface PocState {
   training: TrainingPlan;
   weaponLevels: Record<WeaponId, number>;
   evolved: Record<WeaponId, boolean>;
+  weaponAim: Record<WeaponId, number>;
+  visualTier: number;
+  shots: PocShotFlash[];
   player: PocPlayer;
   enemies: PocEnemy[];
   arrivals: PocArrival[];
@@ -184,6 +194,8 @@ function emptyState(): PocState {
     weapons: ['rifle'], training: { weapon: 'rifle', focus: 'damage' },
     weaponLevels: { rifle: 1, scatter: 0, arc: 0, flame: 0 },
     evolved: { rifle: false, scatter: false, arc: false, flame: false },
+    weaponAim: { rifle: 0, scatter: 0, arc: 0, flame: 0 },
+    visualTier: 0, shots: [],
     player: { x: 0, y: 0, hp: 6, maxHp: 6, stationaryMs: 0, deployed: false },
     enemies: [], arrivals: [], acids: [], bullets: [], lightning: [], supplies: [], pulses: [],
     overclockMs: 0, suppliesCollected: 0,
@@ -336,6 +348,7 @@ export class PocWorld {
     this.state.acids.length = 0;
     this.state.bullets.length = 0;
     this.state.lightning.length = 0;
+    this.state.shots.length = 0;
     this.state.supplies.length = 0;
     this.state.pulses.length = 0;
     this.state.overclockMs = 0;
@@ -392,6 +405,7 @@ export class PocWorld {
     this.state.training = { ...run.training };
     this.state.weaponLevels = { ...run.growth.weaponLevels };
     this.state.evolved = { ...run.growth.evolved };
+    this.state.visualTier = visualPowerTier(run.build);
     this.state.arcUnlocked = run.build.weapons.includes('arc');
     this.state.streak = run.streak;
     this.state.bestStreak = run.bestStreak;
@@ -598,6 +612,10 @@ export class PocWorld {
       state.pulses[i].remainingMs -= ms;
       if (state.pulses[i].remainingMs <= 0) state.pulses.splice(i, 1);
     }
+    for (let i = state.shots.length - 1; i >= 0; i--) {
+      state.shots[i].remainingMs -= ms;
+      if (state.shots[i].remainingMs <= 0) state.shots.splice(i, 1);
+    }
     for (let i = state.lightning.length - 1; i >= 0; i--) {
       const segment = state.lightning[i];
       segment.remainingMs -= ms;
@@ -742,9 +760,12 @@ export class PocWorld {
       const tuning = weaponTuning(run.growth, id);
       const range = driver.baseRange * build.range * tuning.range;
       const target = readableNearestEnemy(player, state.enemies, range, this.combatView());
-      if (!target || this.weaponCooldownMs[id] > 0) continue;
+      if (!target) continue;
       const angle = Math.atan2(target.y - player.y, target.x - player.x);
+      state.weaponAim[id] = angle;
+      if (this.weaponCooldownMs[id] > 0) continue;
       driver.attack(target, angle, this.attackPort);
+      this.emitShotFlash(id, angle);
       this.weaponCooldownMs[id] = buildWeaponInterval(
         driver.baseIntervalMs, build, player.deployed, false, state.overclockMs > 0,
       ) * tuning.interval;
@@ -787,6 +808,7 @@ export class PocWorld {
       if (target && this.railCooldownMs <= 0) {
         const angle = Math.atan2(target.y - player.y, target.x - player.x);
         POC_WEAPON_RUNTIME.get('kane-rail')!.attack(target, angle, this.attackPort);
+        this.emitShotFlash('kane-rail', angle);
         this.railCooldownMs = 2050 / (player.deployed ? POC.deployRateMultiplier : 1);
       }
     }
@@ -800,6 +822,7 @@ export class PocWorld {
         state.acids.length = 0;
         state.bullets.length = 0;
         state.lightning.length = 0;
+        state.shots.length = 0;
       }
     }
   }
@@ -829,7 +852,8 @@ export class PocWorld {
     arc: (first) => {
       const run = this.runController.snapshot();
       const tuning = weaponTuning(run.growth, 'arc');
-      let from: Vec2 = this.state.player;
+      let from: Vec2 = weaponMuzzle(this.state.player.x, this.state.player.y,
+        'arc', this.state.weaponAim.arc);
       let current: PocEnemy | undefined = this.state.enemies.find(e => e.id === first.id);
       const chained = new Set<number>();
       for (let index = 0; index < tuning.chains && current; index++) {
@@ -871,8 +895,9 @@ export class PocWorld {
         }
         if (run.build.frost) enemy.slowMs = Math.max(enemy.slowMs ?? 0, 1000);
       }
-      this.state.lightning.push({ fromX: player.x, fromY: player.y,
-        toX: player.x + Math.cos(angle) * range, toY: player.y + Math.sin(angle) * range,
+      const muzzle = weaponMuzzle(player.x, player.y, 'flame', angle);
+      this.state.lightning.push({ fromX: muzzle.x, fromY: muzzle.y,
+        toX: muzzle.x + Math.cos(angle) * range, toY: muzzle.y + Math.sin(angle) * range,
         remainingMs: 135, kind: 'flame' });
     },
     rail: (_target, angle) => {
@@ -895,18 +920,28 @@ export class PocWorld {
         e.hp -= (95 + 5 * (state.level - 1)) * (1 + this.weaponFrameRank * .12)
           * this.deployDamageBonus();
       }
+      const origin = { x: player.x + 30 * direction.x, y: player.y + 22 + 30 * direction.y };
       state.lightning.push({
-        fromX: player.x, fromY: player.y,
-        toX: player.x + direction.x * range, toY: player.y + direction.y * range,
+        fromX: origin.x, fromY: origin.y,
+        toX: origin.x + direction.x * range, toY: origin.y + direction.y * range,
         remainingMs: 190, kind: 'rail',
       });
     },
   };
+  private emitShotFlash(source: WeaponId | 'kane-rail', angle: number): void {
+    const p = this.state.player;
+    const point = source === 'kane-rail'
+      ? { x: p.x + Math.cos(angle) * 30, y: p.y + 22 + Math.sin(angle) * 30 }
+      : weaponMuzzle(p.x, p.y, source, angle);
+    if (this.state.shots.length >= 32) this.state.shots.shift();
+    this.state.shots.push({ ...point, source, angle, remainingMs: 95 });
+  }
   private emitBullet(angle: number, source: WeaponId, damage: number,
     pierce: number, knockback = 0): void {
     const player = this.state.player;
+    const muzzle = weaponMuzzle(player.x, player.y, source, angle);
     this.state.bullets.push({
-      x: player.x, y: player.y,
+      x: muzzle.x, y: muzzle.y,
       vx: Math.cos(angle) * GAMEPLAY.projectileSpeed,
       vy: Math.sin(angle) * GAMEPLAY.projectileSpeed,
       remainingMs: GAMEPLAY.projectileLifetimeMs,

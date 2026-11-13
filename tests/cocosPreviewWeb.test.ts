@@ -126,3 +126,20 @@ test('M6 safe snapshots are validated, isolated and resumable in both runtime ad
   assert.match(creator, /private resumeSafeNode\(\)/);
   assert.match(world, /static fromSafeSnapshot\(/);
 });
+
+
+test('M4.1 actual equipped rig, evolution glow and shot events render in both clients', () => {
+  const rig = read('clients/cocos/assets/scripts/PocWeaponRig.ts');
+  const world = read('clients/cocos/assets/scripts/PocWorld.ts');
+  const browser = read('clients/cocos-preview/src/main.ts');
+  const creator = read('clients/cocos/assets/scripts/PocBattle.ts');
+  assert.match(rig, /WEAPON_MOUNTS/);
+  assert.match(rig, /visibleLoadout/);
+  assert.match(world, /visualPowerTier\(run\.build\)/);
+  assert.match(world, /this\.emitShotFlash\(id, angle\)/);
+  assert.match(world, /weaponMuzzle\(player\.x, player\.y, source, angle\)/);
+  assert.match(browser, /buildWeaponRig\(/);
+  assert.match(creator, /buildWeaponRig\(/);
+  assert.match(browser, /for \(const shot of s\.shots\)/);
+  assert.match(creator, /for \(const shot of s\.shots\)/);
+});

@@ -13,6 +13,7 @@ import type { CampaignMode } from './m6/runController.ts';
 import { TRAINING_LABELS, type TrainingFocus } from './m6/autoGrowth.ts';
 import type { WeaponId } from './m6/progression.ts';
 import { mobileViewport, type MobileViewport } from './PocViewport.ts';
+import { buildWeaponRig } from './PocWeaponRig.ts';
 import {
   readRunSafeSave, writeRunSafeSave, type SafeRunStorage,
 } from './m6/runSafeSave.ts';
@@ -500,6 +501,42 @@ export class PocBattle extends Component {
     g.moveTo(p.x + 5, p.y + 18);
     g.lineTo(p.x + 5 + Math.cos(heading) * 31, p.y + 18 + Math.sin(heading) * 31);
     g.stroke();
+
+    // M4.1: only equipped hardpoints render; level and evolution improve
+    // geometry/glow without modifying canonical combat damage.
+    for (const mount of buildWeaponRig({
+      player: p, deployed: p.deployed, weapons: s.weapons, weaponAim: s.weaponAim,
+      weaponLevels: s.weaponLevels, evolved: s.evolved,
+      visualTier: s.visualTier, timeMs: s.elapsedMs,
+    })) {
+      if (mount.id === 'rifle') continue;
+      const tint = new Color((mount.tint >> 16) & 255, (mount.tint >> 8) & 255,
+        mount.tint & 255, 255);
+      g.strokeColor = tint; g.lineWidth = mount.evolved ? 7 : 5;
+      g.moveTo(mount.anchor.x, mount.anchor.y + 8);
+      g.lineTo(mount.muzzle.x, mount.muzzle.y + 8); g.stroke();
+      g.fillColor = COL.shadow; g.circle(mount.anchor.x, mount.anchor.y + 8,
+        11 + mount.level * .6); g.fill();
+      g.fillColor = tint; g.circle(mount.anchor.x, mount.anchor.y + 8,
+        5 + mount.level * .5); g.fill();
+      if (mount.evolved) {
+        g.strokeColor = new Color(255, 242, 199, 255); g.lineWidth = 2;
+        g.circle(mount.anchor.x, mount.anchor.y + 8, 14 + mount.level);g.stroke();
+      }
+      if (mount.glow > 0.1) {
+        g.fillColor = new Color((mount.tint >> 16) & 255, (mount.tint >> 8) & 255,
+          mount.tint & 255, Math.round(mount.glow * 120));
+        g.circle(mount.muzzle.x, mount.muzzle.y + 8, 8 + mount.level * 2);g.fill();
+      }
+    }
+    for (const shot of s.shots) {
+      const c = shot.source === 'scatter' ? 0xffb16e
+        : shot.source === 'arc' ? 0x91b9ff
+        : shot.source === 'flame' ? 0xff7652 : 0x69f5dd;
+      g.fillColor = new Color((c >> 16) & 255, (c >> 8) & 255, c & 255,
+        Math.round(245 * Math.min(1, shot.remainingMs / 80)));
+      g.circle(shot.x, shot.y + 8, shot.source === 'scatter' ? 15 : 10);g.fill();
+    }
 
     if (this.activeTouch !== null) {
       const x = this.touchOrigin.x - this.screenWidth / 2;
