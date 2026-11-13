@@ -45,6 +45,9 @@ jobs:
       - name: Export original main M4 art as transparent PNGs
         run: node scripts/export-main-art.mjs
 
+      - name: Generate original vanguard mech and alien sprites
+        run: node scripts/export-vanguard-art.mjs
+
       - name: Build isolated migration preview
         run: npx vite build --config clients/cocos-preview/vite.config.ts
 
