@@ -20,9 +20,19 @@ const MAIN_ART_KEYS = ['marine','rifle','crawler','leaper','armored','spitter',
   'bomber','broodlord','supply','mount-scatter','mount-arc','mount-flame',
   'muzzle-flash','bolt','acid','dust'] as const;
 const mainArt = new Map<string, HTMLImageElement>();
+const VANGUARD_KEYS = new Set<string>([
+  'marine','crawler','leaper','armored','spitter','bomber','broodlord',
+]);
 for (const key of MAIN_ART_KEYS) {
   const image = new Image();
-  image.src = './main-art/' + key + '.png';
+  if (VANGUARD_KEYS.has(key)) {
+    // Same generated portrait art as Creator, with old PNG as safe fallback.
+    image.onerror = () => {
+      image.onerror = null;
+      image.src = './main-art/' + key + '.png';
+    };
+    image.src = './vanguard-art/' + key + '.png';
+  } else image.src = './main-art/' + key + '.png';
   mainArt.set(key, image);
 }
 function originalArt(key: string): HTMLImageElement | null {
