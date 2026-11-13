@@ -3,7 +3,7 @@
  * Artwork is a pure render layer; gameplay state and hitboxes are unchanged.
  * If an asset is still loading/missing, PocBattle's Graphics fallback remains.
  */
-import { Node, Sprite, SpriteFrame, UITransform, resources, Color } from 'cc';
+import { Node, Sprite, SpriteFrame, Texture2D, UITransform, resources, Color } from 'cc';
 import type { PocState, PocEnemyKind } from './PocWorld.ts';
 import type { PocHeroId } from './PocRoster.ts';
 import type { WeaponId } from './m6/progression.ts';
@@ -45,8 +45,13 @@ export class PocArtSprites {
   private load(key:string):void{
     if(this.pending.has(key))return;
     this.pending.add(key);
-    resources.load('main-art/'+key+'/spriteFrame',SpriteFrame,(err,frame)=>{
-      if(err||!frame){console.warn('Main art asset missing, using Graphics fallback:',key);return;}
+    // Creator 3.8.8 imports a dynamically generated PNG into resources as
+    // ImageAsset + Texture2D (not as a SpriteFrame sub-asset). Fetch the
+    // generated texture and create the SpriteFrame explicitly.
+    resources.load('main-art/'+key+'/texture',Texture2D,(err,texture)=>{
+      if(err||!texture){console.warn('Main art texture unavailable:',key,err);return;}
+      const frame=new SpriteFrame();
+      frame.texture=texture;
       this.frames.set(key,frame);
     });
   }

@@ -5,7 +5,9 @@ const presenter=readFileSync('clients/cocos/assets/scripts/PocArtSprites.ts','ut
 const battle=readFileSync('clients/cocos/assets/scripts/PocBattle.ts','utf8');
 const preview=readFileSync('clients/cocos-preview/src/main.ts','utf8');
 test('real Creator uses SpriteFrame from exported main source, not Phaser renderer',()=>{
- assert.match(presenter,/resources.load\('main-art\/'\+key\+'\/spriteFrame'/);
+ assert.match(presenter,/resources.load\('main-art\/'\+key\+'\/texture'/);
+ assert.match(presenter,/new SpriteFrame\(\)/);
+ assert.match(presenter,/frame.texture=texture/);
  assert.match(presenter,/Sprite.Type.TILED/);
  assert.match(presenter,/ENEMY_ART/);
  assert.match(presenter,/visible|buildWeaponRig/);
