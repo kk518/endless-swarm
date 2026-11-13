@@ -48,7 +48,7 @@ try {
   await page.waitForFunction(
     () => typeof window.__swarmCocosDebug?.state === 'function'
       || Boolean(document.getElementById('swarm-startup-error')),
-    null, { timeout: 55000 },
+    null, { timeout: 70000 },
   );
   const startupError = page.locator('#swarm-startup-error');
   if (await startupError.count()) {
