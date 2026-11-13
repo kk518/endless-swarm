@@ -68,6 +68,12 @@ try {
       diagnostic, messages, originalError: String(error),
     }));
   }
+  // Enforce that the seven replacement silhouettes actually shipped with
+  // this Creator build, instead of silently displaying the old main sprites.
+  await page.waitForFunction(() => {
+    const art = window.__swarmCocosDebug?.state?.().vanguardArt;
+    return art && Object.values(art).every(Boolean);
+  }, null, { timeout: 25000 });
   const before = await page.evaluate(() => window.__swarmCocosDebug.state());
   if (!before.initialized || before.enemies < 1 || before.hp <= 0) {
     throw new Error('Cocos scene initialized but Core state invalid: ' + JSON.stringify(before));
