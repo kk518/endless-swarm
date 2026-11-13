@@ -43,3 +43,16 @@ test('muzzle flashes use combat shot events and fall back to Graphics only while
  assert.match(battle,/if \(!this.art.ready\('muzzle-flash'\)\) for \(const shot of s.shots\)/);
  assert.doesNotMatch(presenter,/emitBullet|weaponDamage|registerKill|chooseDecision/);
 });
+
+test('enemy hit flash is visual-only, and elite tint resets across runs',()=>{
+ assert.match(presenter,/private readonly enemyLastHp=new Map<number,number>\(\)/);
+ assert.match(presenter,/priorHp!==undefined&&e.hp<priorHp/);
+ assert.match(presenter,/this.enemyHitUntil.set\(e.id,s.elapsedMs\+130\)/);
+ assert.match(presenter,/new Color\(255,165,165,255\)/);
+ assert.match(presenter,/e.elite\?new Color/);
+ assert.match(presenter,/sprite.node.setScale\(damaged\?1\.09/);
+ assert.match(presenter,/if\(s.elapsedMs<this.lastFrameTimeMs\)/);
+ assert.match(presenter,/this.enemyLastHp.delete\(id\);this.enemyHitUntil.delete\(id\)/);
+ assert.match(presenter,/this.lastFrameTimeMs=-1/);
+ assert.doesNotMatch(presenter,/enemy\.hp\s*[-+*/]?=|e\.hp\s*[-+*/]?=/);
+});
