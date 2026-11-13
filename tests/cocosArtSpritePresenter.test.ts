@@ -84,12 +84,20 @@ test('Boss 900ms charge previews its 125-unit directional lunge, not a false AoE
 
 test('combat HUD has clamped independent health/XP bars and surge alert',()=>{
  assert.match(battle,/private paintCombatHud\(ui: Graphics\): void/);
- assert.match(battle,/if \(s.over \|\| this.world.decision\) return/);
+ assert.match(battle,/const active = !s.over && !this.world.decision/);
  assert.match(battle,/Number.isFinite\(ratio\) \? ratio : 0/);
  assert.match(battle,/s.player.hp \/ Math.max\(1, s.player.maxHp\)/);
  assert.match(battle,/s.xp \/ Math.max\(1, s.xpToNext\)/);
  assert.match(battle,/if \(s.surgeWarningMs > 0\) \{/);
  assert.match(battle,/this.paintCombatHud\(ui\)/);
- assert.match(battle,/s.weapons.map\(id => id \+ ' ' \+ s.weaponLevels\[id\]/);
+ assert.match(battle,/new Node\('CombatWeaponSlot' \+ i\)/);
+ assert.match(battle,/new Node\('CombatBossHealth'\)/);
+ assert.match(battle,/new Node\('CombatSurgeWarning'\)/);
+ assert.match(battle,/const boss = s.enemies.find\(enemy => enemy.kind === 'boss'\)/);
+ assert.match(battle,/boss.hp \/ Math.max\(1, boss.maxHp \?\? 1\)/);
+ assert.match(battle,/const cellWidth = barWidth \/ 4/);
+ assert.match(battle,/s.weapons.includes\(id\)/);
  assert.match(battle,/s.evolved\[id\] \? '★' : ''/);
+ assert.match(battle,/this.surgeHud.string/);
+ assert.match(battle,/this.paintCombatHud\(ui\)/);
 });
