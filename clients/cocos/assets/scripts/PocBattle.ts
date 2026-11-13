@@ -551,7 +551,8 @@ export class PocBattle extends Component {
         g.circle(mount.muzzle.x, mount.muzzle.y + 8, 8 + mount.level * 2);g.fill();
       }
     }
-    for (const shot of s.shots) {
+    // The graphics flash is strictly a fallback while the Creator texture loads.
+    if (!this.art.ready('muzzle-flash')) for (const shot of s.shots) {
       const c = shot.source === 'scatter' ? 0xffb16e
         : shot.source === 'arc' ? 0x91b9ff
         : shot.source === 'flame' ? 0xff7652 : 0x69f5dd;
