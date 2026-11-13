@@ -47,7 +47,8 @@ test('M4.1 no ghost mounts after reset, only authentic firing events', () => {
   const shot=world.state.shots.find(v=>v.source==='rifle')!;
   assert.ok(Math.abs(shot.x-weaponMuzzle(0,0,'rifle',world.state.weaponAim.rifle).x)<1e-6);
   for(let i=0;i<20;i++)world.advance(POC.fixedStepMs,{x:0,y:0});
-  assert.equal(world.state.shots.length,0,'short muzzle flash auto-expires');
+  assert.equal(world.state.shots.includes(shot),false,
+    'the original 95ms flash expires even when auto-fire produces newer flashes');
   world.reset();
   assert.equal(world.state.visualTier,0);
   assert.deepEqual(world.state.shots,[]);
