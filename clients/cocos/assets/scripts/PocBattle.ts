@@ -437,10 +437,38 @@ export class PocBattle extends Component {
       }
       if ((enemy.windupMs ?? 0) > 0
         && (enemy.kind === 'leaper' || enemy.kind === 'spitter' || enemy.kind === 'boss')) {
-        g.strokeColor = enemy.kind === 'spitter'
-          ? new Color(173, 235, 123, 242) : new Color(255, 166, 119, 242);
-        g.lineWidth = 2.5;
-        g.circle(enemy.x, enemy.y, enemy.kind === 'boss' ? 65 : 26); g.stroke();
+        if (enemy.kind === 'boss') {
+          // Boss is a 900ms directional lunge (125 world units), NOT an AoE.
+          // Recompute this preview toward the current player position because
+          // the actual combat rule aims only when the windup reaches zero.
+          const dx = s.player.x - enemy.x, dy = s.player.y - enemy.y;
+          const len = Math.max(.1, Math.hypot(dx, dy));
+          const ux = dx / len, uy = dy / len;
+          const progress = Math.max(0, Math.min(1, 1 - enemy.windupMs / 900));
+          const reach = 125, side = 18;
+          const tipX = enemy.x + ux * reach, tipY = enemy.y + uy * reach;
+          const px = -uy * side, py = ux * side;
+          g.fillColor = new Color(255, 103, 75, Math.round(32 + 65 * progress));
+          g.moveTo(enemy.x + px, enemy.y + py);
+          g.lineTo(tipX + px, tipY + py);
+          g.lineTo(tipX - px, tipY - py);
+          g.lineTo(enemy.x - px, enemy.y - py);
+          g.close(); g.fill();
+          g.strokeColor = new Color(255, 188, 97, 235);
+          g.lineWidth = 2 + progress * 2;
+          g.moveTo(enemy.x, enemy.y);
+          g.lineTo(tipX, tipY); g.stroke();
+          // The ring measures charging progress, not an explosion radius.
+          g.strokeColor = new Color(255, 214, 127, 255);
+          g.lineWidth = 3;
+          g.arc(enemy.x, enemy.y, 43, -Math.PI / 2,
+            -Math.PI / 2 + Math.PI * 2 * progress, false); g.stroke();
+        } else {
+          g.strokeColor = enemy.kind === 'spitter'
+            ? new Color(173, 235, 123, 242) : new Color(255, 166, 119, 242);
+          g.lineWidth = 2.5;
+          g.circle(enemy.x, enemy.y, 26); g.stroke();
+        }
       }
       if (enemy.kind === 'bomber' && (enemy.windupMs ?? 0) > 0) {
         g.fillColor = new Color(255, 63, 102, 30);
