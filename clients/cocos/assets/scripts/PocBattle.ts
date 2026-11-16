@@ -194,6 +194,7 @@ export class PocBattle extends Component {
           dust: this.art.ready('dust'),
         },
         aiMotionReady: this.art.motionReady(),
+        aiMotionFrame: this.art.motionFrame(),
         vanguardArt: {
           marine: this.art.enhanced('marine'),
           crawler: this.art.enhanced('crawler'),
