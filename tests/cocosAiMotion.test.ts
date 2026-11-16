@@ -27,7 +27,7 @@ test('AI idle/run sprites are sampled from fixed atlas cells without changing co
   assert.match(presenter,/ai-motion\/mech-motion\/texture/);
   assert.match(presenter,/frame.rect=new Rect\(/);
   assert.match(presenter,/this.marineMotionFrames.length===8/);
-  assert.match(presenter,/this.marineMotion.frame\(s.player,s.elapsedMs,!s.over\)/);
+  assert.match(presenter,/this.marineMotion.frame\(s.player,s.elapsedMs,!s.over&&animating\)/);
   assert.match(presenter,/this.player.spriteFrame=this.marineMotionFrames\[marineFrame\]/);
   assert.match(presenter,/for\(const frame of this.marineMotionFrames\)frame.destroy\(\)/);
   assert.match(battle,/aiMotionReady: this.art.motionReady\(\)/);
