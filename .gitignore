@@ -1,5 +1,6 @@
 node_modules/
 dist/
+clients/cocos-preview/public/main-art/
 .vite/
 .DS_Store
 *.log
