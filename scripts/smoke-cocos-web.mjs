@@ -114,6 +114,10 @@ try {
   await page.waitForTimeout(120);
   const after = await page.evaluate(() => window.__swarmCocosDebug.state());
   await page.screenshot({ path: path.join(output, 'creator-after.png'), fullPage: true });
+  if (during.aiMotionFrame < 4 || during.aiMotionFrame > 7) {
+    throw new Error('AI mech did not switch to running animation on touch: '
+      + JSON.stringify({before,during,after}));
+  }
   if (during.x <= before.x + 10) {
     throw new Error('Cocos mobile-touch movement failed: ' + JSON.stringify({before,during,after,bounds}));
   }
