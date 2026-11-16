@@ -120,6 +120,9 @@ jobs:
       - name: Generate original vanguard mech and alien sprites
         run: node scripts/export-vanguard-art.mjs
 
+      - name: Install AI mech idle and locomotion atlas
+        run: node scripts/export-ai-motion.mjs
+
       - name: Locate editor and build actual Web Mobile
         shell: bash
         run: |
