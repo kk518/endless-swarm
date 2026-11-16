@@ -46,12 +46,12 @@ function drawOriginal(key: string, x: number, y: number, w?: number, h?: number)
   if (!image) return false;
   const width = w ?? image.naturalWidth / 2;
   const height = h ?? image.naturalHeight / 2;
-  if (key === 'marine' && mechMotion.complete && mechMotion.naturalWidth === 288
-    && mechMotion.naturalHeight === 144) {
+  if (key === 'marine' && mechMotion.complete && mechMotion.naturalWidth === 192
+    && mechMotion.naturalHeight === 96) {
     const moving = Math.hypot(stick.x,stick.y) > .08 || keyboard.size > 0;
     const time = world.state.elapsedMs;
     const index = Math.floor(time / (moving ? 110 : 380)) % 4;
-    g.drawImage(mechMotion, index * 72, (moving ? 1 : 0) * 72, 72, 72,
+    g.drawImage(mechMotion, index * 48, (moving ? 1 : 0) * 48, 48, 48,
       x - width / 2, y - height / 2, width, height);
   } else g.drawImage(image, x - width / 2, y - height / 2, width, height);
   return true;
