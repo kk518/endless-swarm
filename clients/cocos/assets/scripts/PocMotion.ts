@@ -89,6 +89,8 @@ export function sampleMechRecoil(shots:readonly MechShotSample[], active=true):M
     y-=Math.sin(shot.angle)*force;
     total+=force;
   }
+  // Return canonical positive-zero transforms for expired or invalid events.
+  if(total<=0)return NO_RECOIL;
   const magnitude=Math.hypot(x,y);
   if(magnitude>4.5){const scale=4.5/magnitude;x*=scale;y*=scale;}
   return {
