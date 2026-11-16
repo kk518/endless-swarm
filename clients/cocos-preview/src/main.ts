@@ -6,6 +6,7 @@ import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/
 import { PreviewOps } from './m6Ui.ts';
 import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import { buildWeaponRig } from '../../cocos/assets/scripts/PocWeaponRig.ts';
+import { MechMotionSampler } from '../../cocos/assets/scripts/PocMotion.ts';
 import { TRAINING_LABELS } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
 import type { WeaponId } from '../../cocos/assets/scripts/m6/progression.ts';
 import './style.css';
@@ -21,6 +22,7 @@ const MAIN_ART_KEYS = ['marine','rifle','crawler','leaper','armored','spitter',
   'muzzle-flash','bolt','acid','dust'] as const;
 const mechMotion = new Image();
 mechMotion.src = './ai-motion/mech-motion.png';
+const mechMotionState = new MechMotionSampler();
 const mainArt = new Map<string, HTMLImageElement>();
 const VANGUARD_KEYS = new Set<string>([
   'marine','crawler','leaper','armored','spitter','bomber','broodlord',
@@ -48,10 +50,9 @@ function drawOriginal(key: string, x: number, y: number, w?: number, h?: number)
   const height = h ?? image.naturalHeight / 2;
   if (key === 'marine' && mechMotion.complete && mechMotion.naturalWidth === 192
     && mechMotion.naturalHeight === 96) {
-    const moving = Math.hypot(stick.x,stick.y) > .08 || keyboard.size > 0;
-    const time = world.state.elapsedMs;
-    const index = Math.floor(time / (moving ? 110 : 380)) % 4;
-    g.drawImage(mechMotion, index * 48, (moving ? 1 : 0) * 48, 48, 48,
+    const index = mechMotionState.frame(
+      world.state.player, world.state.elapsedMs, !world.state.over);
+    g.drawImage(mechMotion, (index % 4) * 48, Math.floor(index / 4) * 48, 48, 48,
       x - width / 2, y - height / 2, width, height);
   } else g.drawImage(image, x - width / 2, y - height / 2, width, height);
   return true;
@@ -94,6 +95,7 @@ function releaseInput(): void {
 }
 function restart(): void {
   releaseInput();
+  mechMotionState.reset();
   world = ops.createWorld();
   endScreen.hidden = true;
   decisionOverlay.hidden = true;

@@ -8,6 +8,7 @@ import type { PocState, PocEnemyKind } from './PocWorld.ts';
 import type { PocHeroId } from './PocRoster.ts';
 import type { WeaponId } from './m6/progression.ts';
 import { buildWeaponRig } from './PocWeaponRig.ts';
+import { MechMotionSampler } from './PocMotion.ts';
 
 const VANGUARD_KEYS=new Set(['marine','crawler','leaper','armored','spitter','bomber','broodlord']);
 const ENEMY_ART: Record<PocEnemyKind,string> = {
@@ -27,8 +28,7 @@ export class PocArtSprites {
   private readonly vanguardReady=new Set<string>();
   // An eight-frame AI-generated 2D animation, separate from 3D rigging.
   private readonly marineMotionFrames: SpriteFrame[]=[];
-  private previousMarinePosition: {x:number;y:number}|null=null;
-  private marineMovingUntilMs=0;
+  private readonly marineMotion=new MechMotionSampler();
   private currentMarineMotionIndex=-1;
   private readonly enemies=new Map<number,Sprite>();
   // Renderer-only health sampling: no damage, hitbox or RNG changes.
@@ -140,22 +140,16 @@ export class PocArtSprites {
     if(s.elapsedMs<this.lastFrameTimeMs){
       this.enemyLastHp.clear();
       this.enemyHitUntil.clear();
-      this.previousMarinePosition=null;
-      this.marineMovingUntilMs=0;
+      this.marineMotion.reset();
       this.currentMarineMotionIndex=-1;
     }
     this.lastFrameTimeMs=s.elapsedMs;
     this.resizeFloor(width,height);
+    const marineFrame=this.marineMotion.frame(s.player,s.elapsedMs,!s.over);
     if(this.assign(this.player,'marine',68,90)){
-      const last=this.previousMarinePosition;
-      if(last&&Math.hypot(last.x-s.player.x,last.y-s.player.y)>.05)
-        this.marineMovingUntilMs=s.elapsedMs+115;
-      this.previousMarinePosition={x:s.player.x,y:s.player.y};
       if(this.motionReady()){
-        const moving=!s.over&&s.elapsedMs<this.marineMovingUntilMs;
-        const index=(moving?4:0)+Math.floor(s.elapsedMs/(moving?110:380))%4;
-        this.player.spriteFrame=this.marineMotionFrames[index];
-        this.currentMarineMotionIndex=index;
+        this.player.spriteFrame=this.marineMotionFrames[marineFrame];
+        this.currentMarineMotionIndex=marineFrame;
       }
       this.player.node.setPosition(s.player.x,s.player.y+11,0);
       this.player.color=hero==='kane'?new Color(255,207,159,255):Color.WHITE;
@@ -277,8 +271,7 @@ export class PocArtSprites {
     for(const frame of this.marineMotionFrames)frame.destroy();
     this.marineMotionFrames.length=0;
     this.currentMarineMotionIndex=-1;
-    this.previousMarinePosition=null;
-    this.marineMovingUntilMs=0;
+    this.marineMotion.reset();
     this.lastFrameTimeMs=-1;
     this.weapons.clear();this.evolutionGlows.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
