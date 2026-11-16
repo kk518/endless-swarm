@@ -74,6 +74,12 @@ try {
     const art = window.__swarmCocosDebug?.state?.().vanguardArt;
     return art && Object.values(art).every(Boolean);
   }, null, { timeout: 25000 });
+  // A successful scene bootstrap is not enough: the AI animation must be
+  // imported as a real Creator Texture2D and sliced into eight frames.
+  await page.waitForFunction(
+    () => window.__swarmCocosDebug?.state?.().aiMotionReady === true,
+    null, { timeout: 25000 },
+  );
   const before = await page.evaluate(() => window.__swarmCocosDebug.state());
   if (!before.initialized || before.enemies < 1 || before.hp <= 0) {
     throw new Error('Cocos scene initialized but Core state invalid: ' + JSON.stringify(before));
