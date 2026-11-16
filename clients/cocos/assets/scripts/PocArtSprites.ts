@@ -135,7 +135,7 @@ export class PocArtSprites {
   resizeFloor(w:number,h:number):void{
     if(this.assign(this.floor,'dust',w,h))this.floor.node.setPosition(0,0,0);
   }
-  sync(s:PocState,hero:PocHeroId,width:number,height:number):void{
+  sync(s:PocState,hero:PocHeroId,width:number,height:number,animating=true):void{
     // A fresh run may restart the clock while reusing enemy numeric IDs.
     if(s.elapsedMs<this.lastFrameTimeMs){
       this.enemyLastHp.clear();
@@ -145,13 +145,17 @@ export class PocArtSprites {
     }
     this.lastFrameTimeMs=s.elapsedMs;
     this.resizeFloor(width,height);
-    const marineFrame=this.marineMotion.frame(s.player,s.elapsedMs,!s.over);
+    const marineFrame=this.marineMotion.frame(s.player,s.elapsedMs,!s.over&&animating);
     if(this.assign(this.player,'marine',68,90)){
       if(this.motionReady()){
         this.player.spriteFrame=this.marineMotionFrames[marineFrame];
         this.currentMarineMotionIndex=marineFrame;
       }
-      this.player.node.setPosition(s.player.x,s.player.y+11,0);
+      // The AI atlas faces right. Flip body art only, preserving aim transforms
+      // on separately mounted weapon sprites and existing hitbox geometry.
+      this.player.node.setScale(this.marineMotion.facing(),1,1);
+      const stride=this.marineMotion.running() ? Math.sin(s.elapsedMs/55)*1.5 : 0;
+      this.player.node.setPosition(s.player.x,s.player.y+11+stride,0);
       this.player.color=hero==='kane'?new Color(255,207,159,255):Color.WHITE;
       this.player.node.angle=0;
     }

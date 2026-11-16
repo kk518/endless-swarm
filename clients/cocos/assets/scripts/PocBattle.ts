@@ -521,7 +521,7 @@ export class PocBattle extends Component {
     const w = this.world.width, h = this.world.height;
     g.clear();
     ui.clear();
-    this.art.sync(s, this.world.heroId, w, h);
+    this.art.sync(s, this.world.heroId, w, h, !s.over && !this.world.decision);
     if (!this.art.ready('dust')) {
       g.fillColor = COL.floor;
       g.rect(-w / 2, -h / 2, w, h);

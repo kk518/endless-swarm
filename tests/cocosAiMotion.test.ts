@@ -85,3 +85,37 @@ test('AI motion cells are visibly distinct, transparent and nonempty',async()=>{
     assert.ok(different>150,'successive AI frames '+(i-1)+'/'+i+' must be visually distinct');
   }
 });
+
+test('AI mech faces its direction of travel without rotating weapon aim',()=>{
+  const motion=new MechMotionSampler();
+  assert.equal(motion.facing(),1);
+  assert.equal(motion.running(),false);
+  motion.frame({x:0,y:0},10);
+  assert.ok(motion.frame({x:-2,y:0},120)>=4);
+  assert.equal(motion.facing(),-1);
+  assert.equal(motion.running(),true);
+  motion.frame({x:-2,y:2},240);
+  assert.equal(motion.facing(),-1,'vertical travel preserves horizontal heading');
+  motion.frame({x:-2,y:2},400);
+  assert.equal(motion.running(),false,'rest should not retain motion');
+  assert.equal(motion.facing(),-1,'rest keeps last heading');
+  motion.frame({x:2,y:2},500);
+  assert.equal(motion.facing(),1,'moving right restores default facing');
+  motion.frame({x:2,y:2},510,false);
+  assert.equal(motion.running(),false,'pause disables run');
+  assert.ok(motion.frame({x:2,y:2},510,false)<4);
+  motion.reset();
+  assert.equal(motion.facing(),1,'new runs reset facing');
+});
+
+test('both renderers mirror mech only, never attached weapons',()=>{
+  const presenter=readFileSync('clients/cocos/assets/scripts/PocArtSprites.ts','utf8');
+  const battle=readFileSync('clients/cocos/assets/scripts/PocBattle.ts','utf8');
+  const preview=readFileSync('clients/cocos-preview/src/main.ts','utf8');
+  assert.match(presenter,/this.player.node.setScale\(this.marineMotion.facing\(\),1,1\)/);
+  assert.match(preview,/g.scale\(mechMotionState.facing\(\),1\)/);
+  assert.match(preview,/g.restore\(\)/);
+  assert.match(battle,/this.art.sync\(s, this.world.heroId, w, h, !s.over && !this.world.decision\)/);
+  assert.match(presenter,/this.marineMotion.frame\(s.player,s.elapsedMs,!s.over&&animating\)/);
+  assert.match(presenter,/sprite.node.angle=mount.angle\*180\/Math.PI/);
+});

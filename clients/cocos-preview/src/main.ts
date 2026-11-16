@@ -51,9 +51,16 @@ function drawOriginal(key: string, x: number, y: number, w?: number, h?: number)
   if (key === 'marine' && mechMotion.complete && mechMotion.naturalWidth === 192
     && mechMotion.naturalHeight === 96) {
     const index = mechMotionState.frame(
-      world.state.player, world.state.elapsedMs, !world.state.over);
+      world.state.player, world.state.elapsedMs, !world.state.over && !world.decision);
+    // Keep hardpoint aim and attachments unchanged: flip the body draw only.
+    g.save();
+    g.translate(x,y);
+    g.scale(mechMotionState.facing(),1);
+    const stride=mechMotionState.running()
+      ? Math.sin(world.state.elapsedMs/55)*1.5 : 0;
     g.drawImage(mechMotion, (index % 4) * 48, Math.floor(index / 4) * 48, 48, 48,
-      x - width / 2, y - height / 2, width, height);
+      -width / 2, -height / 2 - stride, width, height);
+    g.restore();
   } else g.drawImage(image, x - width / 2, y - height / 2, width, height);
   return true;
 }
