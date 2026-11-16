@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { MechMotionSampler } from '../clients/cocos/assets/scripts/PocMotion.ts';
+import sharp from 'sharp';
 
 test('AI-generated mech animation atlas is reproducible and shared by Creator and Canvas',()=>{
   const source=readFileSync('art/ai/mech-motion.png.base64','utf8').trim();
@@ -53,4 +54,34 @@ test('mech motion sampling follows movement, coast, pause and run restart',()=>{
   motion.reset();
   assert.equal(motion.frame(p,10),0);
   assert.equal(motion.frame({x:Number.NaN,y:0},30),0,'bad render input resets safely');
+});
+
+test('AI motion cells are visibly distinct, transparent and nonempty',async()=>{
+  const bytes=Buffer.from(readFileSync('art/ai/mech-motion.png.base64','utf8').trim(),'base64');
+  const {data,info}=await sharp(bytes).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  assert.equal(info.width,192);
+  assert.equal(info.height,96);
+  assert.equal(info.channels,4);
+  const frames=[];
+  for(let i=0;i<8;i++){
+    const ox=(i%4)*48,oy=Math.floor(i/4)*48;
+    let visible=0;
+    const frame=Buffer.alloc(48*48*4);
+    for(let y=0;y<48;y++){
+      const from=((oy+y)*192+ox)*4;
+      data.copy(frame,y*48*4,from,from+48*4);
+    }
+    for(let p=3;p<frame.length;p+=4)if(frame[p]>8)visible++;
+    assert.ok(visible>400&&visible<1900,'frame '+i+' must show a character with clear transparency');
+    frames.push(frame);
+  }
+  for(let i=1;i<8;i++){
+    let different=0;
+    const a=frames[i-1],b=frames[i];
+    for(let p=0;p<a.length;p+=4){
+      if(a[p]!==b[p]||a[p+1]!==b[p+1]||a[p+2]!==b[p+2]
+        ||a[p+3]!==b[p+3])different++;
+    }
+    assert.ok(different>150,'successive AI frames '+(i-1)+'/'+i+' must be visually distinct');
+  }
 });
