@@ -19,6 +19,8 @@ const g = context;
 const MAIN_ART_KEYS = ['marine','rifle','crawler','leaper','armored','spitter',
   'bomber','broodlord','supply','mount-scatter','mount-arc','mount-flame',
   'muzzle-flash','bolt','acid','dust'] as const;
+const mechMotion = new Image();
+mechMotion.src = './ai-motion/mech-motion.png';
 const mainArt = new Map<string, HTMLImageElement>();
 const VANGUARD_KEYS = new Set<string>([
   'marine','crawler','leaper','armored','spitter','bomber','broodlord',
@@ -44,7 +46,14 @@ function drawOriginal(key: string, x: number, y: number, w?: number, h?: number)
   if (!image) return false;
   const width = w ?? image.naturalWidth / 2;
   const height = h ?? image.naturalHeight / 2;
-  g.drawImage(image, x - width / 2, y - height / 2, width, height);
+  if (key === 'marine' && mechMotion.complete && mechMotion.naturalWidth === 288
+    && mechMotion.naturalHeight === 144) {
+    const moving = Math.hypot(stick.x,stick.y) > .08 || keyboard.size > 0;
+    const time = world.state.elapsedMs;
+    const index = Math.floor(time / (moving ? 110 : 380)) % 4;
+    g.drawImage(mechMotion, index * 72, (moving ? 1 : 0) * 72, 72, 72,
+      x - width / 2, y - height / 2, width, height);
+  } else g.drawImage(image, x - width / 2, y - height / 2, width, height);
   return true;
 }
 let world: PocWorld;
