@@ -3,7 +3,7 @@
  * Artwork is a pure render layer; gameplay state and hitboxes are unchanged.
  * If an asset is still loading/missing, PocBattle's Graphics fallback remains.
  */
-import { Node, Sprite, SpriteFrame, Texture2D, UITransform, resources, Color } from 'cc';
+import { Node, Sprite, SpriteFrame, Texture2D, UITransform, resources, Color, Rect } from 'cc';
 import type { PocState, PocEnemyKind } from './PocWorld.ts';
 import type { PocHeroId } from './PocRoster.ts';
 import type { WeaponId } from './m6/progression.ts';
@@ -25,6 +25,10 @@ export class PocArtSprites {
   private readonly frames=new Map<string,SpriteFrame>();
   private readonly pending=new Set<string>();
   private readonly vanguardReady=new Set<string>();
+  // An eight-frame AI-generated 2D animation, separate from 3D rigging.
+  private readonly marineMotionFrames: SpriteFrame[]=[];
+  private previousMarinePosition: {x:number;y:number}|null=null;
+  private marineMovingUntilMs=0;
   private readonly enemies=new Map<number,Sprite>();
   // Renderer-only health sampling: no damage, hitbox or RNG changes.
   private readonly enemyLastHp=new Map<number,number>();
@@ -58,6 +62,7 @@ export class PocArtSprites {
     this.projectileLayer=this.layer('MainProjectileLayer');
     this.player=this.create(this.playerLayer,'MainMarineSprite');
     for(const key of Object.keys(DIMENSIONS))this.load(key);
+    this.loadMarineMotion();
   }
   private layer(name:string):Node{
     const node=new Node(name);
@@ -66,6 +71,23 @@ export class PocArtSprites {
   }
   ready(key:string):boolean{return this.frames.has(key);}
   enhanced(key:string):boolean{return this.vanguardReady.has(key);}
+  motionReady():boolean{return this.marineMotionFrames.length===8;}
+  private loadMarineMotion():void{
+    resources.load('ai-motion/mech-motion/texture',Texture2D,(err,texture)=>{
+      if(err||!texture){console.warn('AI mech motion unavailable; using static art:',err);return;}
+      if(texture.width%4!==0||texture.height%2!==0){
+        console.warn('AI mech motion grid is invalid:',texture.width,texture.height);
+        return;
+      }
+      const cellW=texture.width/4,cellH=texture.height/2;
+      for(let i=0;i<8;i++){
+        const frame=new SpriteFrame();
+        frame.texture=texture;
+        frame.rect=new Rect((i%4)*cellW,Math.floor(i/4)*cellH,cellW,cellH);
+        this.marineMotionFrames.push(frame);
+      }
+    });
+  }
   enemyKey(kind:PocEnemyKind):string{return ENEMY_ART[kind];}
   private create(parent:Node,name:string):Sprite{
     const node=new Node(name);parent.addChild(node);
@@ -114,10 +136,21 @@ export class PocArtSprites {
     if(s.elapsedMs<this.lastFrameTimeMs){
       this.enemyLastHp.clear();
       this.enemyHitUntil.clear();
+      this.previousMarinePosition=null;
+      this.marineMovingUntilMs=0;
     }
     this.lastFrameTimeMs=s.elapsedMs;
     this.resizeFloor(width,height);
     if(this.assign(this.player,'marine',68,90)){
+      const last=this.previousMarinePosition;
+      if(last&&Math.hypot(last.x-s.player.x,last.y-s.player.y)>.05)
+        this.marineMovingUntilMs=s.elapsedMs+115;
+      this.previousMarinePosition={x:s.player.x,y:s.player.y};
+      if(this.motionReady()){
+        const moving=!s.over&&s.elapsedMs<this.marineMovingUntilMs;
+        const index=(moving?4:0)+Math.floor(s.elapsedMs/(moving?110:380))%4;
+        this.player.spriteFrame=this.marineMotionFrames[index];
+      }
       this.player.node.setPosition(s.player.x,s.player.y+11,0);
       this.player.color=hero==='kane'?new Color(255,207,159,255):Color.WHITE;
       this.player.node.angle=0;
@@ -235,6 +268,10 @@ export class PocArtSprites {
       sprite.node.destroy();
     this.enemies.clear();this.enemyLastHp.clear();this.enemyHitUntil.clear();
     this.vanguardReady.clear();
+    for(const frame of this.marineMotionFrames)frame.destroy();
+    this.marineMotionFrames.length=0;
+    this.previousMarinePosition=null;
+    this.marineMovingUntilMs=0;
     this.lastFrameTimeMs=-1;
     this.weapons.clear();this.evolutionGlows.clear();this.supplies.length=0;this.acid.length=0;this.muzzleFlashes.length=0;
     for(const layer of [this.enemyLayer,this.pickupLayer,this.playerLayer,
