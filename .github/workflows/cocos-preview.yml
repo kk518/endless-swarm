@@ -48,6 +48,9 @@ jobs:
       - name: Generate original vanguard mech and alien sprites
         run: node scripts/export-vanguard-art.mjs
 
+      - name: Install AI mech idle and locomotion atlas
+        run: node scripts/export-ai-motion.mjs
+
       - name: Build isolated migration preview
         run: npx vite build --config clients/cocos-preview/vite.config.ts
 
