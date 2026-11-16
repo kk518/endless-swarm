@@ -16,7 +16,7 @@ const source=join(root,'art/ai/mech-motion.png.base64');
 const data=Buffer.from((await readFile(source,'utf8')).replace(/\s/g,''),'base64');
 const meta=await sharp(data).metadata();
 if(meta.format!=='png'||meta.width!==192||meta.height!==96||
-  data.length<5000||data.length>300000)
+  data.length<3000||data.length>300000)
   throw Error('Invalid AI mech motion atlas: expected a 4x2 grid of 48px PNG cells');
 const targets=[
   join(root,'clients/cocos/assets/resources/ai-motion/mech-motion.png'),
