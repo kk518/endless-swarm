@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { MechMotionSampler } from '../clients/cocos/assets/scripts/PocMotion.ts';
+import { MechMotionSampler, sampleMechRecoil } from '../clients/cocos/assets/scripts/PocMotion.ts';
 import sharp from 'sharp';
 
 test('AI-generated mech animation atlas is reproducible and shared by Creator and Canvas',()=>{
@@ -118,4 +118,41 @@ test('both renderers mirror mech only, never attached weapons',()=>{
   assert.match(battle,/this.art.sync\(s, this.world.heroId, w, h, !s.over && !this.world.decision\)/);
   assert.match(presenter,/this.marineMotion.frame\(s.player,s.elapsedMs,!s.over&&animating\)/);
   assert.match(presenter,/sprite.node.angle=mount.angle\*180\/Math.PI/);
+});
+
+test('weapon recoil samples actual shot lifetimes with no gameplay writes',()=>{
+  const rifle=sampleMechRecoil([{source:'rifle',angle:0,remainingMs:48}]);
+  assert.ok(rifle.x<-2,'fresh rifle attack nudges body away from muzzle');
+  assert.ok(Math.abs(rifle.y)<1e-9,'horizontal aim should not move vertically');
+  assert.ok(rifle.tiltDeg>0&&rifle.tiltDeg<=3,'body tilts slightly, not weapon');
+  const vertical=sampleMechRecoil([{source:'rifle',angle:Math.PI/2,remainingMs:48}]);
+  assert.ok(vertical.y < -2,'aim direction controls body recoil');
+  assert.ok(Math.abs(vertical.x)<1e-9);
+  const half=sampleMechRecoil([{source:'scatter',angle:0,remainingMs:48}]);
+  assert.ok(half.intensity>rifle.intensity,'scatter has more kick than rifle');
+  const expired=sampleMechRecoil([{source:'rifle',angle:0,remainingMs:0}]);
+  assert.deepEqual(expired,{x:0,y:0,tiltDeg:0,intensity:0});
+  assert.ok(Math.abs(sampleMechRecoil([{source:'rifle',angle:0,remainingMs:95}]).x)<1e-8);
+  assert.deepEqual(sampleMechRecoil([{source:'rifle',angle:0,remainingMs:48}],false),expired,
+    'pause/death cannot continue recoil');
+  assert.deepEqual(sampleMechRecoil([{source:'rifle',angle:NaN,remainingMs:48}]),expired,
+    'invalid events do not poison transforms');
+  const burst=Array.from({length:100},()=>({source:'scatter',angle:0,remainingMs:48}));
+  assert.ok(Math.hypot(sampleMechRecoil(burst).x,sampleMechRecoil(burst).y)<=4.500001,
+    'simultaneous attacks cannot throw the mech across the arena');
+  assert.ok(sampleMechRecoil(burst).intensity<=1);
+});
+
+test('Creator and Canvas drive recoil only from real shots, keeping hardpoints stable',()=>{
+  const presenter=readFileSync('clients/cocos/assets/scripts/PocArtSprites.ts','utf8');
+  const preview=readFileSync('clients/cocos-preview/src/main.ts','utf8');
+  assert.match(presenter,/sampleMechRecoil\(s.shots,!s.over&&animating\)/);
+  assert.match(presenter,/this.player.node.angle=recoil.tiltDeg/);
+  assert.match(presenter,/this.player.node.setPosition\(s.player.x\+recoil.x/);
+  assert.match(preview,/sampleMechRecoil\(/);
+  assert.match(preview,/world.state.shots,!world.state.over && !world.decision/);
+  assert.match(preview,/g.rotate\(-recoil.tiltDeg\*Math.PI\/180\)/);
+  assert.match(presenter,/sprite.node.angle=mount.angle\*180\/Math.PI/);
+  assert.doesNotMatch(presenter,/shot.remainingMs\s*[-+*/]?=/,
+    'sprite presenter must never mutate actual combat events');
 });

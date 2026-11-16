@@ -6,7 +6,7 @@ import { PocWorld, normalizedMove, type Vec2 } from '../../cocos/assets/scripts/
 import { PreviewOps } from './m6Ui.ts';
 import { mobileViewport, type MobileViewport } from '../../cocos/assets/scripts/PocViewport.ts';
 import { buildWeaponRig } from '../../cocos/assets/scripts/PocWeaponRig.ts';
-import { MechMotionSampler } from '../../cocos/assets/scripts/PocMotion.ts';
+import { MechMotionSampler, sampleMechRecoil } from '../../cocos/assets/scripts/PocMotion.ts';
 import { TRAINING_LABELS } from '../../cocos/assets/scripts/m6/autoGrowth.ts';
 import type { WeaponId } from '../../cocos/assets/scripts/m6/progression.ts';
 import './style.css';
@@ -54,7 +54,10 @@ function drawOriginal(key: string, x: number, y: number, w?: number, h?: number)
       world.state.player, world.state.elapsedMs, !world.state.over && !world.decision);
     // Keep hardpoint aim and attachments unchanged: flip the body draw only.
     g.save();
-    g.translate(x,y);
+    const recoil=sampleMechRecoil(
+      world.state.shots,!world.state.over && !world.decision);
+    g.translate(x+recoil.x,y-recoil.y);
+    g.rotate(-recoil.tiltDeg*Math.PI/180);
     g.scale(mechMotionState.facing(),1);
     const stride=mechMotionState.running()
       ? Math.sin(world.state.elapsedMs/55)*1.5 : 0;

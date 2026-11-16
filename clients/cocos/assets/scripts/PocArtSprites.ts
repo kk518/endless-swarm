@@ -8,7 +8,7 @@ import type { PocState, PocEnemyKind } from './PocWorld.ts';
 import type { PocHeroId } from './PocRoster.ts';
 import type { WeaponId } from './m6/progression.ts';
 import { buildWeaponRig } from './PocWeaponRig.ts';
-import { MechMotionSampler } from './PocMotion.ts';
+import { MechMotionSampler, sampleMechRecoil } from './PocMotion.ts';
 
 const VANGUARD_KEYS=new Set(['marine','crawler','leaper','armored','spitter','bomber','broodlord']);
 const ENEMY_ART: Record<PocEnemyKind,string> = {
@@ -155,9 +155,11 @@ export class PocArtSprites {
       // on separately mounted weapon sprites and existing hitbox geometry.
       this.player.node.setScale(this.marineMotion.facing(),1,1);
       const stride=this.marineMotion.running() ? Math.sin(s.elapsedMs/55)*1.5 : 0;
-      this.player.node.setPosition(s.player.x,s.player.y+11+stride,0);
+      const recoil=sampleMechRecoil(s.shots,!s.over&&animating);
+      this.player.node.setPosition(s.player.x+recoil.x,
+        s.player.y+11+stride+recoil.y,0);
       this.player.color=hero==='kane'?new Color(255,207,159,255):Color.WHITE;
-      this.player.node.angle=0;
+      this.player.node.angle=recoil.tiltDeg;
     }
     const living=new Set<number>();
     for(const e of s.enemies){

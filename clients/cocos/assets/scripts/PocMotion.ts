@@ -50,3 +50,50 @@ export class MechMotionSampler {
     return (this.locomoting ? 4 : 0) + (Math.floor(time / frameTime) % 4);
   }
 }
+
+/** Attack event comes from the simulation; animation never spawns shots. */
+export interface MechShotSample {
+  readonly source: string;
+  readonly angle: number;
+  readonly remainingMs: number;
+}
+export interface MechRecoilPose {
+  readonly x: number;
+  readonly y: number;
+  readonly tiltDeg: number;
+  readonly intensity: number;
+}
+const NO_RECOIL: MechRecoilPose = {x:0,y:0,tiltDeg:0,intensity:0};
+
+/**
+ * Sample a short-lived (95ms) mech-body reaction from real shot flashes.
+ * World axes are +Y up; only the character art uses these offsets.
+ * Physical colliders, weapon anchors and projectile positions stay fixed.
+ */
+export function sampleMechRecoil(shots:readonly MechShotSample[], active=true):MechRecoilPose{
+  if(!active||shots.length===0)return NO_RECOIL;
+  let x=0,y=0,total=0;
+  // Bounded iteration and displacement even during a high-rate evolved build.
+  for(let i=Math.max(0,shots.length-32);i<shots.length;i++){
+    const shot=shots[i];
+    if(!Number.isFinite(shot.angle)||!Number.isFinite(shot.remainingMs))continue;
+    if(shot.remainingMs<=0||shot.remainingMs>95)continue;
+    const phase=shot.remainingMs/95;
+    const pulse=Math.sin(Math.PI*phase);
+    const weight=shot.source==='scatter'?3.3
+      :shot.source==='kane-rail'?3.8
+      :shot.source==='flame'?1.6
+      :shot.source==='arc'?1.4:2.5;
+    const force=weight*pulse;
+    x-=Math.cos(shot.angle)*force;
+    y-=Math.sin(shot.angle)*force;
+    total+=force;
+  }
+  const magnitude=Math.hypot(x,y);
+  if(magnitude>4.5){const scale=4.5/magnitude;x*=scale;y*=scale;}
+  return {
+    x,y,
+    tiltDeg:Math.max(-3,Math.min(3,-x*.65)),
+    intensity:Math.min(1,total/6),
+  };
+}
